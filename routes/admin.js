@@ -627,6 +627,29 @@ router.post('/documents/:id/verify', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/documents/:docId/download-url
+ * Admin pre-signed 5-minute download URL for confidential documents in Cloudflare R2
+ */
+router.get('/documents/:docId/download-url', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const doc = await d1.get(`SELECT * FROM documents WHERE id = ?`, docId);
+    if (!doc) return res.status(404).json({ success: false, error: 'Document not found' });
+
+    const signedUrl = await getSignedDownloadUrl({
+      bucket: DOCUMENTS_BUCKET,
+      key: doc.file_path,
+      expiresIn: 300 // 5 minutes TTL
+    });
+
+    await logAdminAudit(req, 'Inspect Document', 'Document', docId, `Admin inspected document ${doc.title} (${doc.file_path})`);
+    res.json({ success: true, download_url: signedUrl, expires_in_seconds: 300 });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/admin/settings
  */
 router.get('/settings', async (req, res) => {

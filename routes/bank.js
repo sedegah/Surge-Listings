@@ -313,6 +313,60 @@ router.post('/assets/:id/submit', async (req, res) => {
 });
 
 /**
+ * POST /api/bank/assets/:id/photos/upload
+ * Upload listing photo to Cloudflare R2 surge-assets bucket (Publicly visible on marketplace)
+ */
+router.post('/assets/:id/photos/upload', upload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { caption, is_primary, is_exterior } = req.body;
+    const file = req.file;
+
+    const asset = await d1.get(`SELECT id, public_ref FROM assets WHERE id = ? AND bank_id = ?`, id, req.bankId);
+    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found or unauthorized' });
+    if (!file) return res.status(400).json({ success: false, error: 'Photo file is required' });
+
+    const key = `photos/${asset.public_ref}/${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+    // Upload to Cloudflare R2 surge-assets bucket
+    const r2Result = await uploadToObjectStorage({
+      bucket: ASSETS_BUCKET,
+      key,
+      body: file.buffer,
+      contentType: file.mimetype
+    });
+
+    const imgId = 'img-' + Math.random().toString(36).substring(2, 11);
+    const existingCount = await d1.get(`SELECT COUNT(*) as c FROM asset_images WHERE asset_id = ?`, asset.id);
+    const sortOrder = (existingCount?.c || 0) + 1;
+    const primaryFlag = is_primary === '1' || is_primary === true || sortOrder === 1 ? 1 : 0;
+
+    if (primaryFlag) {
+      await d1.run(`UPDATE asset_images SET is_primary = 0 WHERE asset_id = ?`, asset.id);
+    }
+
+    const publicUrl = r2Result.url;
+
+    await d1.run(`
+      INSERT INTO asset_images (id, asset_id, url, caption, is_primary, is_exterior, sort_order, watermark_applied)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `, imgId, asset.id, publicUrl, caption || 'Listing photo', primaryFlag, is_exterior ? 1 : 0, sortOrder);
+
+    await logBankAudit(req, 'Upload Photo', 'AssetImage', imgId, `Uploaded photo for ${asset.public_ref} to Cloudflare R2 (${key})`);
+
+    res.json({
+      success: true,
+      message: 'Photo uploaded to Cloudflare R2 and attached to listing.',
+      image_id: imgId,
+      url: publicUrl,
+      r2_key: key
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/bank/assets/:id/documents/upload
  * Upload legal document to Cloudflare R2 object storage
  */
