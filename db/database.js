@@ -2,15 +2,47 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import os from 'node:os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+
+function initializeDatabaseInstance() {
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+  
+  if (isServerless) {
+    const tmpDir = path.join(os.tmpdir(), 'surge-data');
+    try {
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      return new DatabaseSync(path.join(tmpDir, 'surge.db'));
+    } catch (err) {
+      console.warn('Failed to initialize SQLite on /tmp disk, falling back to :memory:', err.message);
+      return new DatabaseSync(':memory:');
+    }
+  }
+
+  const localDbDir = path.join(__dirname, '..', 'data');
+  try {
+    if (!fs.existsSync(localDbDir)) {
+      fs.mkdirSync(localDbDir, { recursive: true });
+    }
+    return new DatabaseSync(path.join(localDbDir, 'surge.db'));
+  } catch (err) {
+    console.warn('Local data dir unwritable, falling back to tmp:', err.message);
+    const fallbackDir = path.join(os.tmpdir(), 'surge-data');
+    try {
+      if (!fs.existsSync(fallbackDir)) {
+        fs.mkdirSync(fallbackDir, { recursive: true });
+      }
+      return new DatabaseSync(path.join(fallbackDir, 'surge.db'));
+    } catch {
+      return new DatabaseSync(':memory:');
+    }
+  }
 }
 
-const dbPath = path.join(dbDir, 'surge.db');
-export const db = new DatabaseSync(dbPath);
+export const db = initializeDatabaseInstance();
 
 // Enable foreign keys and WAL mode if applicable
 db.exec('PRAGMA foreign_keys = ON;');

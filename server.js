@@ -1379,7 +1379,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.listen(PORT, () => {
-  console.log(`Surge Solutions Platform API and UI running on http://localhost:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Surge Solutions Platform API and UI running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
 

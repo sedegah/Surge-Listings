@@ -1,0 +1,42 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/public/:match*",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/api/bank/:match*",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/api/admin/:match*",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/api/v1/:match*",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/marketplace",
+      "destination": "/marketplace.html"
+    },
+    {
+      "source": "/bank",
+      "destination": "/bank.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/",
+      "destination": "/marketplace.html"
+    }
+  ]
+}
