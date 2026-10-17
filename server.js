@@ -1354,10 +1354,27 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString(), platform: 'Surge Solutions Engine' });
 });
 
-// Catch-all route to serve the main HTML application
+// Dedicated 3 Portal Page Routes
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'marketplace.html'));
+});
+
+app.get('/marketplace', (req, res) => {
+  res.sendFile(path.join(__dirname, 'marketplace.html'));
+});
+
+app.get('/bank', (req, res) => {
+  res.sendFile(path.join(__dirname, 'bank.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+// Catch-all route to serve the public marketplace
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api')) {
-    return res.sendFile(path.join(__dirname, 'index.html'));
+    return res.sendFile(path.join(__dirname, 'marketplace.html'));
   }
   next();
 });

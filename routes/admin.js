@@ -496,4 +496,165 @@ router.get('/audit-logs', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/dashboard
+ */
+router.get('/dashboard', async (req, res) => {
+  try {
+    const [counts, legalQueue, approvalQueue, valuationQueue, kycQueue] = await Promise.all([
+      d1.get(`
+        SELECT 
+          (SELECT COUNT(*) FROM assets) as totalAssets,
+          (SELECT COUNT(*) FROM assets WHERE status = 'Live') as liveListings,
+          (SELECT COUNT(*) FROM assets WHERE status = 'Submitted by Bank') as pendingReview,
+          (SELECT COUNT(*) FROM assets WHERE legal_hold_active = 1) as legalHolds,
+          (SELECT COUNT(*) FROM offers WHERE status = 'Under Bank Review') as activeOffers,
+          (SELECT COUNT(*) FROM kyc_applications WHERE status = 'Pending Review') as pendingKYC,
+          (SELECT COUNT(*) FROM legal_instruments WHERE injunction_active = 1) as activeInjunctions
+      `),
+      d1.all(`
+        SELECT li.*, ec.case_number, a.public_ref, a.title as asset_title, b.short_code as bank_code
+        FROM legal_instruments li
+        JOIN enforcement_cases ec ON li.case_id = ec.id
+        JOIN assets a ON ec.asset_id = a.id
+        JOIN banks b ON a.bank_id = b.id
+        WHERE li.verification_status != 'Verified' OR li.injunction_active = 1
+        ORDER BY li.filing_date DESC
+      `),
+      d1.all(`
+        SELECT a.*, b.short_code as bank_code
+        FROM assets a
+        JOIN banks b ON a.bank_id = b.id
+        WHERE a.status = 'Submitted by Bank' OR a.review_required = 1
+        ORDER BY a.updated_at DESC
+      `),
+      d1.all(`
+        SELECT v.*, a.public_ref, a.title as asset_title, a.reserve_price, b.short_code as bank_code
+        FROM valuations v
+        JOIN assets a ON v.asset_id = a.id
+        JOIN banks b ON a.bank_id = b.id
+        ORDER BY v.review_required DESC, v.expiry_date ASC
+      `),
+      d1.all(`
+        SELECT * FROM kyc_applications WHERE status = 'Pending Review' ORDER BY created_at ASC
+      `)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        stats: counts,
+        legalQueue,
+        approvalQueue,
+        valuationQueue,
+        kycQueue
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/viewings
+ */
+router.get('/viewings', async (req, res) => {
+  try {
+    const viewings = await d1.all(`
+      SELECT v.*, a.public_ref, a.title as asset_title, a.occupancy_status, b.short_code as bank_code
+      FROM viewings v
+      JOIN assets a ON v.asset_id = a.id
+      JOIN banks b ON a.bank_id = b.id
+      ORDER BY v.viewing_date DESC
+    `);
+    res.json({ success: true, count: viewings.length, data: viewings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/leads
+ */
+router.get('/leads', async (req, res) => {
+  try {
+    const leads = await d1.all(`
+      SELECT l.*, a.public_ref, a.title as asset_title
+      FROM leads l
+      JOIN assets a ON l.asset_id = a.id
+      ORDER BY l.created_at DESC
+    `);
+    res.json({ success: true, count: leads.length, data: leads });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/documents
+ */
+router.get('/documents', async (req, res) => {
+  try {
+    const docs = await d1.all(`
+      SELECT d.*, a.public_ref, a.title as asset_title, b.short_code as bank_code
+      FROM documents d
+      JOIN assets a ON d.asset_id = a.id
+      JOIN banks b ON a.bank_id = b.id
+      ORDER BY d.uploaded_at DESC
+    `);
+    res.json({ success: true, count: docs.length, data: docs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/documents/:id/verify
+ */
+router.post('/documents/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await d1.run(`
+      UPDATE documents
+      SET verification_status = 'Verified', verified_by = ?, verified_at = datetime('now')
+      WHERE id = ?
+    `, req.adminActor.name, id);
+    await logAdminAudit(req, 'Verify Document', 'Document', id, `Document verified by ${req.adminActor.name}`);
+    res.json({ success: true, message: 'Document verified.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/settings
+ */
+router.get('/settings', async (req, res) => {
+  try {
+    const settings = await d1.all(`SELECT * FROM system_settings`);
+    res.json({ success: true, data: settings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PUT /api/admin/settings
+ */
+router.put('/settings', async (req, res) => {
+  try {
+    const { settings } = req.body;
+    if (Array.isArray(settings)) {
+      for (const s of settings) {
+        await d1.run(`INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)`, s.key, String(s.value));
+      }
+    }
+    await logAdminAudit(req, 'Update Settings', 'SystemSettings', 'global', `Platform settings updated`);
+    res.json({ success: true, message: 'Settings updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;
+

@@ -102,16 +102,39 @@ function closeModal() {
 window.closeModal = closeModal;
 window.Surge.closeModal = closeModal;
 
-// Generic API caller with fallback
+// Generic API caller routed to 3 separate backend endpoints
 async function apiCall(endpoint, method = 'GET', body = null) {
   try {
+    let url = endpoint;
+    if (endpoint.startsWith('/bank/')) {
+      url = '/api/bank' + endpoint.substring(5);
+    } else if (endpoint.startsWith('/admin/')) {
+      url = '/api/admin' + endpoint.substring(6);
+    } else if (endpoint.startsWith('/public/')) {
+      url = '/api/public' + endpoint.substring(7);
+    } else if (endpoint === '/stats') {
+      url = '/api/admin/dashboard';
+    } else if (!endpoint.startsWith('/api')) {
+      url = '/api' + endpoint;
+    }
+
     const opts = {
       method,
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Bank-ID': window.Surge?.currentUser?.bankId || 'bank-mtb',
+        'X-Actor-Name': window.Surge?.currentUser?.name || 'Bank User',
+        'X-Actor-Role': window.Surge?.currentUser?.role || 'Asset Officer'
+      }
     };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(`${API_BASE}${endpoint}`, opts);
+
+    let res = await fetch(url, opts);
     if (!res.ok) {
+      // Fallback try with /api/v1 legacy prefix if needed
+      const legacyRes = await fetch(`/api/v1${endpoint}`, opts).catch(() => null);
+      if (legacyRes && legacyRes.ok) return await legacyRes.json();
+
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `HTTP ${res.status}: ${res.statusText}`);
     }
@@ -232,11 +255,21 @@ function initApp() {
   // Listen to hash changes for deep linking
   window.addEventListener('hashchange', handleHashRouting);
 
-  // Initialize from hash or default to Bank Portal
-  if (window.location.hash) {
+  // Detect active standalone portal if on individual page
+  const pagePortal = document.body.dataset.portal || 
+    (document.getElementById('app-bank') && !document.getElementById('app-admin') ? 'bank' : null) ||
+    (document.getElementById('app-admin') && !document.getElementById('app-bank') ? 'admin' : null) ||
+    (document.getElementById('app-public') && !document.getElementById('app-bank') ? 'public' : null) ||
+    (window.location.pathname.includes('/bank') ? 'bank' : null) ||
+    (window.location.pathname.includes('/admin') ? 'admin' : null) ||
+    (window.location.pathname.includes('/marketplace') ? 'public' : null);
+
+  if (pagePortal) {
+    switchApp(pagePortal);
+  } else if (window.location.hash) {
     handleHashRouting();
   } else {
-    switchApp('bank', 'assets');
+    switchApp('public', 'home');
   }
 
   // Bind global keyboard shortcuts (Ctrl+S, Ctrl+N, Ctrl+F, Esc)

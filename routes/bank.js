@@ -457,18 +457,157 @@ router.post('/offers/:id/decision', async (req, res) => {
 });
 
 /**
- * GET /api/bank/invoices
- * Invoices issued to this bank
+ * GET /api/bank/dashboard
  */
-router.get('/invoices', async (req, res) => {
+router.get('/dashboard', async (req, res) => {
   try {
-    const invoices = await d1.all(`
-      SELECT * FROM invoices WHERE bank_id = ? ORDER BY issue_date DESC
+    const [totalAssets, liveAssets, reviewAssets, holdAssets, soldAssets, activeOffers, valuationExpired] = await Promise.all([
+      d1.get(`SELECT COUNT(*) as c, COALESCE(SUM(reserve_price), 0) as val FROM assets WHERE bank_id = ?`, req.bankId),
+      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND status = 'Live'`, req.bankId),
+      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND status = 'Submitted by Bank'`, req.bankId),
+      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND legal_hold_active = 1`, req.bankId),
+      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND status = 'Sold'`, req.bankId),
+      d1.get(`SELECT COUNT(*) as c FROM offers o JOIN assets a ON o.asset_id = a.id WHERE a.bank_id = ? AND o.status = 'Under Bank Review'`, req.bankId),
+      d1.get(`SELECT COUNT(*) as c FROM valuations v JOIN assets a ON v.asset_id = a.id WHERE a.bank_id = ? AND (v.status = 'Expired' OR v.review_required = 1)`, req.bankId)
+    ]);
+
+    const recentActivity = await d1.all(`
+      SELECT * FROM audit_logs 
+      WHERE organization LIKE '%Meridian%' OR organization LIKE '%Coastal%' OR organization LIKE '%Bank%'
+      ORDER BY created_at DESC LIMIT 8
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        totalAssets: totalAssets?.c || 0,
+        totalPortfolioValue: totalAssets?.val || 0,
+        liveListings: liveAssets?.c || 0,
+        pendingSurgeReview: reviewAssets?.c || 0,
+        legalHolds: holdAssets?.c || 0,
+        completedSales: soldAssets?.c || 0,
+        activeOffers: activeOffers?.c || 0,
+        valuationReviewRequired: valuationExpired?.c || 0,
+        recentActivity
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/bank/legal/matters
+ */
+router.get('/legal/matters', async (req, res) => {
+  try {
+    const matters = await d1.all(`
+      SELECT ec.*, 
+        a.public_ref, a.title as asset_title, a.occupancy_status, a.land_guard_risk, a.legal_hold_active,
+        (SELECT COUNT(*) FROM legal_instruments WHERE case_id = ec.id) as instruments_count,
+        (SELECT COUNT(*) FROM legal_instruments WHERE case_id = ec.id AND injunction_active = 1) as active_injunctions
+      FROM enforcement_cases ec
+      JOIN assets a ON ec.asset_id = a.id
+      WHERE a.bank_id = ?
     `, req.bankId);
-    res.json({ success: true, count: invoices.length, data: invoices });
+    res.json({ success: true, count: matters.length, data: matters });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/bank/title-documents
+ */
+router.get('/title-documents', async (req, res) => {
+  try {
+    const titles = await d1.all(`
+      SELECT tr.*, a.public_ref, a.title as asset_title
+      FROM title_records tr
+      JOIN assets a ON tr.asset_id = a.id
+      WHERE a.bank_id = ?
+    `, req.bankId);
+    res.json({ success: true, count: titles.length, data: titles });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/bank/viewings
+ */
+router.get('/viewings', async (req, res) => {
+  try {
+    const viewings = await d1.all(`
+      SELECT v.*, a.public_ref, a.title as asset_title, a.occupancy_status
+      FROM viewings v
+      JOIN assets a ON v.asset_id = a.id
+      WHERE a.bank_id = ?
+      ORDER BY v.viewing_date DESC
+    `, req.bankId);
+    res.json({ success: true, count: viewings.length, data: viewings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/bank/billing
+ */
+router.get('/billing', async (req, res) => {
+  try {
+    const [invoices, agreement, bank] = await Promise.all([
+      d1.all(`SELECT * FROM invoices WHERE bank_id = ? ORDER BY issue_date DESC`, req.bankId),
+      d1.get(`SELECT * FROM bank_agreements WHERE bank_id = ? AND status = 'Active'`, req.bankId),
+      d1.get(`SELECT legal_name, default_commission_rate FROM banks WHERE id = ?`, req.bankId)
+    ]);
+    res.json({
+      success: true,
+      data: {
+        bankName: bank?.legal_name,
+        commissionRate: agreement?.commission_rate || bank?.default_commission_rate || 4.0,
+        agreementRef: agreement?.agreement_ref || 'SURGE-AGR-STD-2026',
+        invoices
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/bank/users
+ */
+router.get('/users', async (req, res) => {
+  try {
+    const users = await d1.all(`
+      SELECT u.id, u.username, u.full_name, u.email, u.role_code, u.status, u.mfa_enabled,
+        r.name as role_name, b.name as branch_name
+      FROM users u
+      LEFT JOIN roles r ON u.role_code = r.code
+      LEFT JOIN bank_branches b ON u.branch_id = b.id
+      WHERE u.bank_id = ?
+    `, req.bankId);
+    res.json({ success: true, count: users.length, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/bank/notifications
+ */
+router.get('/notifications', async (req, res) => {
+  try {
+    const notifications = await d1.all(`
+      SELECT * FROM notifications 
+      ORDER BY created_at DESC LIMIT 20
+    `);
+    res.json({ success: true, count: notifications.length, data: notifications });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 export default router;
+
