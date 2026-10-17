@@ -19,6 +19,7 @@ import bankRouter from './routes/bank.js';
 import adminRouter from './routes/admin.js';
 
 // Serve static directory (mockup HTML, client assets)
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
 // Mount 3 Isolated Security Endpoints
