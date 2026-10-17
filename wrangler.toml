@@ -1,0 +1,36 @@
+name = "surge-solutions-api"
+main = "worker/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Account credentials
+account_id = "065fc200f5c2cb1f51dd59426f19012c"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "surge-solutions-db"
+database_id = "62b0bf0f-803b-4a09-8cbb-78f948bb6d02"
+
+# R2 Bucket binding for asset images
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "surge-assets"
+
+# R2 Bucket binding for legal documents and KYC files
+[[r2_buckets]]
+binding = "DOCUMENTS_BUCKET"
+bucket_name = "surge-documents"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+PLATFORM_NAME = "Surge Solutions"
+DEFAULT_COMMISSION_RATE = "4.0"
+SIGNED_URL_TTL_MINUTES = "5"
+WATERMARK_TEXT = "SURGE SOLUTIONS GHANA — CONFIDENTIAL & VERIFIED"
+MAX_IMAGES_PER_ASSET = "20"
+
+# Static assets (serve index.html, app.js, etc.)
+[site]
+bucket = "./public"
