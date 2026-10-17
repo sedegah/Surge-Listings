@@ -461,33 +461,36 @@ router.post('/offers/:id/decision', async (req, res) => {
  */
 router.get('/dashboard', async (req, res) => {
   try {
-    const [totalAssets, liveAssets, reviewAssets, holdAssets, soldAssets, activeOffers, valuationExpired] = await Promise.all([
-      d1.get(`SELECT COUNT(*) as c, COALESCE(SUM(reserve_price), 0) as val FROM assets WHERE bank_id = ?`, req.bankId),
-      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND status = 'Live'`, req.bankId),
-      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND status = 'Submitted by Bank'`, req.bankId),
-      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND legal_hold_active = 1`, req.bankId),
-      d1.get(`SELECT COUNT(*) as c FROM assets WHERE bank_id = ? AND status = 'Sold'`, req.bankId),
-      d1.get(`SELECT COUNT(*) as c FROM offers o JOIN assets a ON o.asset_id = a.id WHERE a.bank_id = ? AND o.status = 'Under Bank Review'`, req.bankId),
-      d1.get(`SELECT COUNT(*) as c FROM valuations v JOIN assets a ON v.asset_id = a.id WHERE a.bank_id = ? AND (v.status = 'Expired' OR v.review_required = 1)`, req.bankId)
+    const [stats, recentActivity] = await Promise.all([
+      d1.get(`
+        SELECT 
+          (SELECT COUNT(*) FROM assets WHERE bank_id = ?) as totalAssets,
+          (SELECT COALESCE(SUM(reserve_price), 0) FROM assets WHERE bank_id = ?) as totalPortfolioValue,
+          (SELECT COUNT(*) FROM assets WHERE bank_id = ? AND status = 'Live') as liveListings,
+          (SELECT COUNT(*) FROM assets WHERE bank_id = ? AND status = 'Submitted by Bank') as pendingSurgeReview,
+          (SELECT COUNT(*) FROM assets WHERE bank_id = ? AND legal_hold_active = 1) as legalHolds,
+          (SELECT COUNT(*) FROM assets WHERE bank_id = ? AND status = 'Sold') as completedSales,
+          (SELECT COUNT(*) FROM offers o JOIN assets a ON o.asset_id = a.id WHERE a.bank_id = ? AND o.status = 'Under Bank Review') as activeOffers,
+          (SELECT COUNT(*) FROM valuations v JOIN assets a ON v.asset_id = a.id WHERE a.bank_id = ? AND (v.status = 'Expired' OR v.review_required = 1)) as valuationReviewRequired
+      `, req.bankId, req.bankId, req.bankId, req.bankId, req.bankId, req.bankId, req.bankId, req.bankId),
+      d1.all(`
+        SELECT * FROM audit_logs 
+        WHERE organization LIKE '%Meridian%' OR organization LIKE '%Coastal%' OR organization LIKE '%Bank%'
+        ORDER BY created_at DESC LIMIT 8
+      `)
     ]);
-
-    const recentActivity = await d1.all(`
-      SELECT * FROM audit_logs 
-      WHERE organization LIKE '%Meridian%' OR organization LIKE '%Coastal%' OR organization LIKE '%Bank%'
-      ORDER BY created_at DESC LIMIT 8
-    `);
 
     res.json({
       success: true,
       data: {
-        totalAssets: totalAssets?.c || 0,
-        totalPortfolioValue: totalAssets?.val || 0,
-        liveListings: liveAssets?.c || 0,
-        pendingSurgeReview: reviewAssets?.c || 0,
-        legalHolds: holdAssets?.c || 0,
-        completedSales: soldAssets?.c || 0,
-        activeOffers: activeOffers?.c || 0,
-        valuationReviewRequired: valuationExpired?.c || 0,
+        totalAssets: stats?.totalAssets || 0,
+        totalPortfolioValue: stats?.totalPortfolioValue || 0,
+        liveListings: stats?.liveListings || 0,
+        pendingSurgeReview: stats?.pendingSurgeReview || 0,
+        legalHolds: stats?.legalHolds || 0,
+        completedSales: stats?.completedSales || 0,
+        activeOffers: stats?.activeOffers || 0,
+        valuationReviewRequired: stats?.valuationReviewRequired || 0,
         recentActivity
       }
     });

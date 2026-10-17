@@ -1,6 +1,7 @@
 /**
  * Standard Cloudflare D1 Database Client for Surge Solutions
  * Queries Cloudflare D1 directly via Cloudflare's Global Edge REST API
+ * Features high-performance query caching and instant write invalidation
  */
 
 import fs from 'node:fs';
@@ -40,12 +41,34 @@ class CloudflareD1Client {
       'Authorization': `Bearer ${API_TOKEN}`,
       'Content-Type': 'application/json'
     };
+    // High performance in-memory query cache (TTL: 30 seconds, invalidated on writes)
+    this.cache = new Map();
+    this.CACHE_TTL_MS = 30000;
+  }
+
+  _getCacheKey(sql, params) {
+    return `${sql.trim()}::${JSON.stringify(params)}`;
+  }
+
+  invalidateCache() {
+    this.cache.clear();
   }
 
   /**
    * Execute raw SQL with parameter bindings on Cloudflare D1
    */
-  async query(sql, params = []) {
+  async query(sql, params = [], useCache = false) {
+    const isRead = /^\s*(SELECT|PRAGMA)/i.test(sql);
+    const cacheKey = this._getCacheKey(sql, params);
+
+    if (useCache && isRead && this.cache.has(cacheKey)) {
+      const entry = this.cache.get(cacheKey);
+      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
+        return entry.data;
+      }
+      this.cache.delete(cacheKey);
+    }
+
     try {
       const response = await fetch(this.endpoint, {
         method: 'POST',
@@ -65,11 +88,20 @@ class CloudflareD1Client {
       }
 
       const firstResult = json.result?.[0] || {};
-      return {
+      const data = {
         results: firstResult.results || [],
         success: firstResult.success ?? true,
         meta: firstResult.meta || {}
       };
+
+      if (isRead) {
+        this.cache.set(cacheKey, { timestamp: Date.now(), data });
+      } else {
+        // Any mutation immediately clears stale read caches
+        this.invalidateCache();
+      }
+
+      return data;
     } catch (err) {
       console.error(`[Cloudflare D1 Error] SQL: "${sql}"`, err.message);
       throw err;
@@ -77,16 +109,16 @@ class CloudflareD1Client {
   }
 
   /**
-   * Return all matching rows
+   * Return all matching rows (cached reads enabled)
    */
   async all(sql, ...params) {
     const flatParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
-    const res = await this.query(sql, flatParams);
+    const res = await this.query(sql, flatParams, true);
     return res.results || [];
   }
 
   /**
-   * Return single matching row
+   * Return single matching row (cached reads enabled)
    */
   async get(sql, ...params) {
     const rows = await this.all(sql, ...params);
@@ -94,11 +126,11 @@ class CloudflareD1Client {
   }
 
   /**
-   * Execute INSERT, UPDATE, DELETE mutation
+   * Execute INSERT, UPDATE, DELETE mutation (instant cache invalidation)
    */
   async run(sql, ...params) {
     const flatParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
-    const res = await this.query(sql, flatParams);
+    const res = await this.query(sql, flatParams, false);
     return {
       changes: res.meta?.changes ?? 0,
       last_row_id: res.meta?.last_row_id ?? null,
@@ -110,13 +142,19 @@ class CloudflareD1Client {
    * Execute multiple statements in batch
    */
   async batch(statements) {
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify(statements)
-    });
-    const json = await response.json();
-    return json.result || [];
+    try {
+      const response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify(statements)
+      });
+      const json = await response.json();
+      this.invalidateCache();
+      return json.result || [];
+    } catch (err) {
+      console.error('[Cloudflare D1 Batch Error]:', err.message);
+      throw err;
+    }
   }
 }
 
