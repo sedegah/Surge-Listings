@@ -819,5 +819,1981 @@ Asset lifecycle ambiguity: Sold and Completed both exist; confirm Completed is t
 
 Data model cleanup: Bank duplicates Organization; recommend a single table with a Bank profile 1:1. Enquiry, OfferRevision and BuyerAccessGrant need Spec owner approval.
 
+
+# Surge Solutions — Complete workflow and rigorous testing plan
+
+Your platform should work as one connected asset-disposition system with three interfaces, not three separate mockups.
+An asset created in the Bank Portal must progress through legal checks, document verification, approval and publication
+in Surge Admin, then appear in the Public Marketplace only when all publication requirements are satisfied.
+
+The critical requirement is that every action changes the same underlying record. If an administrator places an asset on
+legal hold, for example, the marketplace must stop displaying it as available, the bank must see the updated status, and
+the audit log must record who made the change.
+
+## 1. The complete end-to-end workflow
+
+### 1. Bank Portal
+
+Create asset → enter title information → upload supporting documents → save draft
+
+### 2. Legal and document checks
+
+Enforcement basis → title verification → valuation → injunction and legal-hold checks
+
+### 3. Surge Admin
+
+Review submission → request corrections if needed → approve or reject → publish
+
+### 4. Public Marketplace
+
+Search published assets → inspect details → submit an enquiry without buyer login
+
+### 5. Lead and viewing management
+
+Create lead → assign officer → qualify buyer → schedule viewing → complete KYC when required
+
+### 6. Offers, sale and settlement
+
+Submit offer → bank decision → negotiate → approve sale → invoice → payment confirmation → close asset
+
+The workflow must also support exceptions: rejected submissions, missing documents, title disputes, injunctions, legal
+holds, expired listings, withdrawn offers, failed payments and cancelled viewings.
+
+## 2. Shared data and status rules
+
+Every interface must read and update the same asset, lead, viewing, offer, document and payment records.
+
+| Record | Example lifecycle |
+| ------------ |
+----------------------------------------------------------------------------------------------------------- |
+| Asset | Draft → Submitted → Under Review → Changes Required / Approved → Published → Under Offer → Sold / Withdrawn |
+| Legal review | Not Started → In Progress → Cleared / Disputed / On Hold |
+| Documents | Missing → Uploaded → Pending Verification → Verified / Rejected / Expired |
+| Lead | New → Assigned → Contacted → Qualified / Unqualified → Converted / Closed |
+| Viewing | Requested → Scheduled → Confirmed → Completed / Cancelled / No-Show |
+| KYC | Not Required Yet → Pending → In Review → Verified / Rejected / Expired |
+| Offer | Submitted → Under Review → Counteroffer / Accepted / Rejected / Withdrawn / Expired |
+| Payment | Uninvoiced → Invoiced → Pending → Confirmed / Failed / Refunded |
+| Listing | Unpublished → Pending Approval → Published → Suspended / Withdrawn / Sold |
+
+These are related but separate state machines. For example, verifying documents must not automatically publish an asset,
+and accepting an offer must not automatically mark payment as received.
+
+### Mandatory business rules
+
+- Injunctions and active legal holds: block publication and new sale progression. Existing enquiries and offers must be
+handled according to the relevant legal and operational rules.
+- Title and ownership: require the necessary title information and supporting evidence before approval.
+- Enforcement basis: support a memorandum, borrower–lender settlement, and court judgment, with the appropriate evidence
+for each.
+- Confidentiality: do not reveal the bank's identity to public buyers where anonymous bank listings are required.
+- Buyer access: allow public browsing and initial enquiries without creating a buyer account. Collect KYC information
+securely when required by the process.
+- Contact routing: buyer enquiries must go to Surge Solutions, not directly to the bank or borrower.
+- Fees: support bank-side and buyer-side fee configurations, with the applicable terms, calculations, invoices and
+payment status recorded.
+- Auditability: record the actor, timestamp, action, affected record and relevant before-and-after values for
+consequential changes.
+
+## 3. All pages that need to be built or refined
+
+I would treat the following as the full page inventory for your prototype. Some pages may be tabs or detail views rather
+than separate URLs, but each needs its own working state, controls, validation and navigation.
+
+### A. Bank Portal
+
+Primary objective: enable bank officers to manage assets and make sale decisions without accessing Surge's global
+administrative controls.
+
+B01
+
+Dashboard
+
+Live counts for assets, submissions, offers, viewings, pending decisions and overdue tasks.
+
+B02
+
+My Assets / Asset Register
+
+Search, filter, sort, create, edit, archive and open individual assets.
+
+B03
+
+Create / Edit Asset
+
+Asset category, location, description, ownership, title details, valuation, pricing and sale terms.
+
+B04
+
+Legal & Enforcement
+
+Enforcement basis, case references, borrower–lender settlement, court judgment, injunctions and legal status.
+
+B05
+
+Title & Documents
+
+Upload, preview, classify, replace and track title documents and verification outcomes.
+
+B06
+
+Valuation Details
+
+Valuation amount, currency, valuation date, valuer, supporting report and expiry.
+
+B07
+
+Submission & Listing Status
+
+Submit for review, view review findings, respond to corrections and track approval.
+
+B08
+
+Viewings
+
+View requests, availability, scheduling, attendance, cancellations and viewing outcomes.
+
+B09
+
+Offers & Decisions
+
+Offer comparison, proposed terms, accept/reject/counteroffer decisions and decision history.
+
+B10
+
+Billing
+
+Bank fees, invoices, payment status, receipts, disputes and downloadable records.
+
+B11
+
+Reports
+
+Asset pipeline, sales, offer conversion, ageing, fees and exportable reports.
+
+B12
+
+Users & Permissions
+
+Bank users, roles, access restrictions, invitations and account status.
+
+B13
+
+Notifications
+
+Real events such as review results, new offers, viewing requests, holds and payment updates.
+
+B14
+
+Asset Detail / Activity History
+
+Consolidated record, linked documents, status history, notes and permitted actions.
+
+### B. Surge Admin
+
+Primary objective: centrally govern the platform, verify records, control publication and manage the transaction
+pipeline.
+
+A01
+
+Admin Dashboard
+
+Live operational KPIs, review backlog, overdue tasks, active holds and sales pipeline.
+
+A02
+
+Banks
+
+Bank onboarding, verification, organisation details, fee terms and bank activation.
+
+A03
+
+Users & Roles
+
+Role assignment, access scopes, account suspension and permission checks.
+
+A04
+
+Asset Register
+
+All-bank asset search, filters, asset detail, duplicate detection and record history.
+
+A05
+
+Legal & Enforcement Review
+
+Check enforcement evidence, injunction status, disputes and legal holds.
+
+A06
+
+Title & Land Search
+
+Title particulars, search outcomes, ownership discrepancies and supporting evidence.
+
+A07
+
+Valuations
+
+Review valuation reports, identify expired valuations and request corrections.
+
+A08
+
+Document Verification
+
+Secure document review, approve/reject, rejection reasons, re-upload and version history.
+
+A09
+
+Listings Approval
+
+Readiness checklist, approve/reject, request changes, publication and withdrawal.
+
+A10
+
+Leads
+
+Enquiry inbox, assignment, qualification, contact history and follow-up tasks.
+
+A11
+
+KYC Queue
+
+Secure identity verification, restricted access, review decisions and expiry handling.
+
+A12
+
+Viewings
+
+Scheduling, conflicts, assignment, confirmation, attendance and cancellation management.
+
+A13
+
+Offers
+
+Offer comparison, bank decision tracking, counteroffers, expiry and transaction progression.
+
+A14
+
+Invoices & Payments
+
+Fee calculations, invoice generation, payment references, reconciliation and refunds.
+
+A15
+
+Reports
+
+Cross-bank operational, commercial, financial and compliance reporting.
+
+A16
+
+Fee & Agreement Settings
+
+Bank and buyer fee rules, agreement versions, effective dates and calculation previews.
+
+A17
+
+Audit Log
+
+Searchable, timestamped, attributable record of consequential changes.
+
+A18
+
+Notifications & Tasks
+
+Actionable event inbox, assignment, delivery status and overdue follow-ups.
+
+A19
+
+Legal Hold & Listing Suspension
+
+Place/release holds, record reasons and evidence, block restricted actions and track resolution.
+
+A20
+
+Sale Completion & Closure
+
+Completion checklist, confirmed payment, transaction documents, final status and listing removal.
+
+### C. Public Marketplace
+
+Primary objective: help buyers discover assets, understand the purchase process and contact Surge without exposing
+restricted bank or legal information.
+
+P01
+
+Buy Assets / Search Results
+
+Search by category, location, price range and availability; functional filters and sorting.
+
+P02
+
+Asset Details
+
+Images, description, location, price or price-on-application, public reference, documents summary and status.
+
+P03
+
+Enquiry Form
+
+Buyer details, interest, consent, validation, submission confirmation and Surge contact information.
+
+P04
+
+How It Works
+
+Accurate explanation of enquiry, viewing, KYC, offer, approval and completion.
+
+P05
+
+KYC & Verification Information
+
+Explain requirements, timing, data use and secure submission channels.
+
+P06
+
+FAQ
+
+Working answers and links for pricing, eligibility, viewings, offers and legal disclosures.
+
+P07
+
+Contact Surge
+
+Functional contact channels and enquiry routing.
+
+P08
+
+Viewing Request / Confirmation
+
+Request a viewing, receive a reference and see scheduling confirmation without buyer login.
+
+P09
+
+Offer Process / Offer Acknowledgement
+
+Explain offer requirements and show a reference or next steps when an offer is submitted through the authorised process.
+
+P10
+
+Privacy, Terms & Disclaimers
+
+Published legal terms, privacy information and asset-specific sale conditions.
+
+### D. Cross-platform and system pages
+
+These are easy to overlook, but they matter for a rigorous test.
+
+- Authentication, session expiry and access-denied screens for bank and admin users.
+- Not-found and error pages.
+- Empty states, loading states and failed-save states.
+- Confirmation dialogs for destructive or irreversible actions.
+- File upload errors, invalid formats, excessive sizes and interrupted uploads.
+- Duplicate submission handling and retry behaviour.
+- Record-lock and concurrent-edit conflict handling.
+- Audit history and record-level activity views.
+- Export and print output.
+- Responsive layouts for smaller screens.
+- Data reset and test-environment controls, kept separate from production.
+
+Highest-priority refinements: Asset creation, legal review, document verification, listing approval, marketplace
+visibility, enquiries, lead management, offers, fee calculation and sale completion. These are the pages where a broken
+transition can corrupt the entire workflow.
+
+## 4. Rigorous testing plan
+
+Use a controlled test environment and a unique test reference for every scenario. Do not use real buyer identity
+documents or production financial information during prototype testing.
+
+## Interactive QA test tracker
+
+64 test cases across seven suites. Mark each case as passed, failed or blocked as you test. This tracker is for
+organising your test session; results are not automatically connected to your application.
+
+Overall progress
+
+1 / 64 completed
+
+Passed: 0
+
+Failed: 1
+
+Blocked: 0
+
+Suite 1 — Asset creation and validation
+
+T001
+
+Create a complete property asset
+
+Asset saves as Draft with a unique reference.
+
+PassFailBlocked
+
+T002
+
+Save an incomplete draft
+
+Draft saves only where permitted; missing fields remain visible.
+
+PassFailBlocked
+
+T003
+
+Submit without required title information
+
+Submission is blocked with field-level errors.
+
+PassFailBlocked
+
+T004
+
+Submit without enforcement evidence
+
+Submission is blocked or routed to the configured exception queue.
+
+PassFailBlocked
+
+T005
+
+Enter negative price or invalid valuation
+
+Invalid monetary values are rejected.
+
+PassFailBlocked
+
+T006
+
+Create duplicate asset reference or duplicate record
+
+Unique identifiers are enforced and likely duplicates flagged.
+
+PassFailBlocked
+
+T007
+
+Edit an existing asset
+
+Changes persist and appear on its detail page.
+
+PassFailBlocked
+
+T008
+
+Refresh or reopen the page
+
+Saved records remain intact.
+
+PassFailBlocked
+
+Copy full test reportReset tracker
+
+## 5. What constitutes a successful test?
+
+Do not mark a page as complete simply because it looks correct. A test passes only when all applicable criteria hold:
+
+1. Behaviour: the action works and the user receives accurate feedback.
+2. Persistence: the saved result survives refresh and reopening.
+3. Cross-interface consistency: all permitted interfaces show the correct state.
+4. Permissions: unauthorised roles cannot read or change protected information.
+5. Validation: invalid inputs and prohibited state transitions are rejected.
+6. Audit: consequential changes are traceable.
+7. Recovery: failed requests, retries and conflicting edits do not corrupt records.
+
+For the critical business rules, test both the normal path and attempts to bypass the interface using direct requests. A
+disabled button alone is not a security control.
+
+## 6. Important implementation distinction
+
+The HTML you supplied contains the application shell and loads `app.js`, but it does not itself establish a production
+backend. A browser-only prototype can demonstrate shared records using local storage, but that is not genuine multi-user
+synchronisation: other devices, users and browsers will not share those records reliably.
+
+For production, use a shared backend database and server-enforced permissions, validation and workflow transitions.
+Document storage must also be access-controlled, particularly for title documents and KYC records. Payment confirmation
+should come from a trusted reconciliation or payment-provider process, not a client-side status toggle.
+
+My recommended order of work: first complete asset creation and legal controls, then the approval-to-publication
+lifecycle, then enquiries and viewings, then offers and financial settlement, and finally permissions, audit logging and
+resilience. This order tests the system's core data integrity before adding more interface polish.
+
+
+# Surge Solutions — Detailed implementation specification and QA blueprint
+
+The next step is to turn the initial workflow into an executable product specification: define exactly what each page displays, what each button does, which records it changes, what prevents an action, and how to prove that the change propagated to the other two interfaces.
+
+For Surge Solutions, I would use a shared asset record, explicit workflow transitions, role-based access control, and an immutable audit trail as the foundation. Everything else — dashboards, listings, notifications, reports and transaction screens — should derive from that underlying system rather than maintain separate copies of the same data.
+
+## 1. System architecture and source of truth
+
+### Three user interfaces
+
+Bank Portal · Surge Admin · Public Marketplace
+
+Authenticated requests, public requests and validated responses
+
+### Shared application API
+
+Authentication · Permissions · Validation · Workflow rules · Audit events
+
+Relational database
+
+Assets, organisations, documents, leads, offers, payments and status history.
+
+Private file storage
+
+Title evidence, valuation reports, KYC files and controlled document access.
+
+Event and notification service
+
+Status-change events, user notifications, retries and delivery tracking.
+
+Audit and reporting
+
+Traceable changes, permission checks, financial summaries and exports.
+
+### Data consistency rules
+
+1. An asset has one stable ID for its entire lifetime, regardless of its publication status.
+2. Each bank owns its own records; Surge's authorised operators can access cross-bank records according to assigned permissions.
+3. Public pages receive only explicitly approved public fields. They should not retrieve confidential bank or buyer records and hide them with CSS.
+4. Every state change is validated on the server, not merely by enabling or disabling a button.
+5. Related changes that must succeed together — such as accepting an offer and recording the corresponding transaction decision — should be handled atomically.
+6. Notifications and reports must derive from saved events and authoritative records. They must not invent activity to make the interface look populated.
+7. A failed save must never display a false success message or silently discard user input.
+
+For a working prototype, a single shared database and a documented API are sufficient. You do not need to introduce microservices merely to demonstrate these workflows.
+
+## 2. Detailed Bank Portal specifications
+
+Each page below should have a defined layout, actions, validation rules and expected result.
+
+B01 — Dashboard
+
+Purpose: give bank officers an accurate view of their asset pipeline.
+
+- KPI cards: total assets, drafts, submitted for review, published, on hold, active offers and completed sales.
+- Work queues: missing documents, correction requests, pending decisions and upcoming viewings.
+- Recent activity: real actions with timestamps and actor names.
+- Filters: date range, asset category, location and status.
+
+Actions: open asset, continue draft, review corrections, open offer, export report.
+
+Acceptance: each count must match the corresponding filtered records. Clicking a KPI opens that exact subset.
+
+B02–B03 — Asset register and create/edit form
+
+- Search by asset reference, title, location and permitted identifiers.
+- Filters for category, status, assigned officer and date created.
+- Asset form sections: classification, address, description, ownership, title particulars, valuation, asking price, sale terms and media.
+- Save Draft, Validate, Submit for Review and Cancel.
+
+Validation: require the fields applicable to the asset type. Validate currency and monetary precision, positive area where applicable, plausible dates, required documents and permitted state transitions.
+
+Acceptance: saving and reopening preserves every field. Creating an asset produces one unique reference, not a duplicate every time the Save button is clicked.
+
+B04–B06 — Legal, title, documents and valuation
+
+- Separate enforcement basis from legal clearance.
+- Capture relevant case references, title particulars, search outcomes, injunctions, disputes and supporting evidence.
+- Classify uploaded files and show verification status, rejection reason, version and reviewer.
+- Record valuation amount, currency, date, valuer and report.
+- Display outstanding requirements prominently.
+
+Actions: upload, replace, preview if authorised, submit for verification, respond to corrections and view history.
+
+Acceptance: uploading a file does not automatically verify it. Replacing evidence triggers reassessment where required. An unresolved legal hold prevents publication.
+
+B07 and B14 — Submission, listing status and asset detail
+
+- Show a timeline of every workflow transition.
+- Present outstanding checks and actionable correction requests.
+- Distinguish administrative approval from public publication.
+- Show the public listing reference and link only when published.
+- Show suspension reasons and the role permitted to resolve them.
+
+Actions: submit, resubmit, view decision, open public listing, request permitted withdrawal.
+
+Acceptance: a bank cannot use a client-side shortcut to bypass review or publish directly.
+
+B08–B10 — Viewings, offers and billing
+
+- Viewings: requests, assigned officer, confirmed date, attendance and outcome.
+- Offers: buyer reference, amount, terms, expiry, decision, counteroffers and decision history.
+- Billing: fee basis, applicable rate, invoice number, payment status and receipts.
+
+Actions: confirm or cancel a viewing, make an authorised offer decision, review invoice and export a statement.
+
+Acceptance: the bank only sees the records associated with its organisation. An accepted offer is not the same as a completed sale or confirmed payment.
+
+B11–B13 — Reports, users and notifications
+
+- Reports use defined metrics and consistent date filters.
+- User management supports invitations, role changes and deactivation.
+- Notifications are tied to actual events and link to the relevant record.
+
+Acceptance: revoked users lose access immediately or within the documented session policy; exports respect the same access restrictions as the pages they represent.
+
+## 3. Detailed Surge Admin specifications
+
+The admin portal is the control centre. It needs to do more than display all bank records: it must enforce review independence, keep the decision history intact, and prevent an operator from advancing an asset through an unsafe state.
+
+A01
+
+Admin Dashboard
+
+Show review backlog, aged submissions, document failures, legal holds, unassigned leads, expiring offers, outstanding invoices and completed sales. Every KPI must link to its underlying filtered records.
+
+A02–A03
+
+Banks, users and roles
+
+Onboard a bank, verify its organisation profile, assign authorised users, configure role scopes and deactivate access. Enforce organisation-level access and separation of duties.
+
+A04
+
+Global asset register
+
+Search across authorised tenants, inspect the complete record, identify duplicate assets, view linked documents and transactions, and inspect the current status and history.
+
+A05–A07
+
+Legal review, land search and valuation
+
+Capture review findings, source and date of evidence, outstanding checks, discrepancies and the responsible reviewer. Support escalation and prevent clearance where mandatory checks remain unresolved.
+
+A08
+
+Document verification
+
+Display document type, asset link, uploader, upload time, version, review status and reviewer. Approve or reject individual documents with reasons. Prevent a rejected or superseded version from satisfying a mandatory requirement.
+
+A09
+
+Listing approval
+
+Provide a readiness checklist with explicit pass/fail results for ownership, enforcement basis, legal status, documents, valuation, sale terms and public listing content. Request changes, reject, approve and publish through distinct actions.
+
+A10–A12
+
+Leads, KYC and viewings
+
+Assign enquiries, record contact attempts, qualify leads, restrict identity records, manage verification decisions, resolve scheduling conflicts and record attendance or cancellation.
+
+A13
+
+Offers
+
+Display offers in comparable terms and currencies, enforce expiry, support counteroffers and withdrawal, capture the authorised bank decision and preserve every decision version.
+
+A14
+
+Invoices and payments
+
+Calculate charges using versioned fee rules, generate invoice references, track payment attempts, reconcile verified receipts and handle failed payments or authorised refunds.
+
+A15–A16
+
+Reports and configuration
+
+Provide documented metric definitions, date and organisation filters, controlled exports, fee previews, agreement versions and effective dates. Configuration changes must not silently rewrite historical invoices.
+
+A17–A18
+
+Audit log, notifications and tasks
+
+Search events by asset, actor, action and date. Track notification delivery and retries. Assign operational tasks, due dates and escalation status.
+
+A19–A20
+
+Legal holds, suspension and sale closure
+
+Record hold authority, reason, supporting evidence and release conditions. Suspend publication and restrict prohibited progression. Close a sale only after the configured completion evidence and financial requirements are satisfied.
+
+### Approval checklist: exact expected behaviour
+
+An asset must not be publishable just because its status says `Approved`. The system should evaluate the actual current record.
+
+| Gate               | Required check                                                                   | Failure outcome                     |
+| ------------------ | -------------------------------------------------------------------------------- | ----------------------------------- |
+| Ownership          | Required ownership/title evidence is present and verified                        | Block approval                      |
+| Enforcement        | Applicable enforcement basis and evidence are recorded                           | Block approval                      |
+| Legal status       | No unresolved blocking injunction, dispute or hold                               | Block publication                   |
+| Documents          | All mandatory document types are verified and current                            | Return for correction               |
+| Valuation          | Required valuation is valid under the configured policy                          | Return for correction               |
+| Sale terms         | Price or POA, conditions and relevant fee disclosures are complete               | Block publication                   |
+| Listing content    | Public description, category and permitted images are valid                      | Return for correction               |
+| Approval authority | Reviewer has permission and any required separation-of-duties conditions are met | Deny action                         |
+| Final publication  | All gates still pass at the moment of publishing                                 | Deny action if any gate has changed |
+
+These are proposed operational controls, not a substitute for legal advice on the applicable Ghanaian asset-disposition requirements. The actual mandatory evidence and approval authorities should be configurable and formally agreed before production use.
+
+## 4. Detailed Public Marketplace specifications
+
+The marketplace must be functional without exposing internal operations.
+
+P01
+
+Search and browse
+
+Provide category, region/location, price range, availability and keyword filters. Include clear-filter, sort-by-price, sort-by-date and pagination controls. Counts must reflect the active filters.
+
+P02
+
+Asset detail
+
+Show the public reference, description, permitted location detail, photographs, price or POA, sale conditions, viewing availability and enquiry CTA. Do not expose internal bank IDs, borrower identities, private documents, legal correspondence or reviewer notes.
+
+P03
+
+Buyer enquiry
+
+Collect only necessary contact information, enquiry type and consent where required. Validate the input, prevent duplicate submissions, rate-limit abuse and return a real enquiry reference.
+
+P04
+
+How it works
+
+Explain the sequence from enquiry to viewing, applicable buyer checks, offer submission, bank decision, payment and completion. Avoid promising that an enquiry guarantees a purchase.
+
+P05
+
+KYC information
+
+Explain when verification is required, why information is collected, how it is handled and how the buyer can proceed securely. Never request sensitive identity documents through an unprotected generic form.
+
+P06–P07
+
+FAQ and Contact
+
+Provide real, maintained answers and working contact channels. Route enquiries to the correct Surge team and preserve the resulting contact history.
+
+P08
+
+Viewing request
+
+Collect preferred dates or slots, create a request reference and show whether it is pending, confirmed or declined. Never display a confirmed appointment before it has actually been confirmed.
+
+P09
+
+Offer process and acknowledgement
+
+Explain eligibility and submission requirements. If online offers are enabled, use a proper form with clear terms, acknowledgement and authoritative server-side validation. Otherwise, direct buyers to the authorised offer channel.
+
+P10
+
+Privacy, terms and disclaimers
+
+Provide accessible policy pages, applicable terms, consent records where required and accurate explanations of the intermediary's role and the status of each listing.
+
+### Public status behaviour
+
+The public interface should not mirror every internal status.
+
+- `Draft`, `Under Review`, `Rejected` and `Changes Required`: not publicly discoverable.
+- `Published`: publicly discoverable and available for enquiries, subject to configured restrictions.
+- `Under Offer`: display the configured availability message; do not automatically assume the asset is unavailable unless that is the sale policy.
+- `Suspended` or `On Hold`: remove from active search results and prevent new prohibited actions.
+- `Sold` or `Withdrawn`: remove from active listings; an appropriate unavailable page may remain accessible if the business requires it.
+
+Direct URL access must follow the same rules as search results. Hiding a card is not enough.
+
+## 5. Workflow state transitions and edge cases
+
+The following transitions should be implemented explicitly. An action not listed as valid should be denied by default.
+
+| Entity      | Current state           | Action                         | Expected next state             |
+| ----------- | ----------------------- | ------------------------------ | ------------------------------- |
+| Asset       | Draft                   | Submit with valid requirements | Submitted                       |
+| Asset       | Submitted               | Begin review                   | Under Review                    |
+| Asset       | Under Review            | Request corrections            | Changes Required                |
+| Asset       | Changes Required        | Resubmit                       | Submitted                       |
+| Asset       | Under Review            | Approve                        | Approved                        |
+| Asset       | Approved                | Publish after revalidation     | Published                       |
+| Asset       | Published               | Place authorised legal hold    | Suspended / On Hold             |
+| Asset       | Published               | Withdraw with authority        | Withdrawn                       |
+| Lead        | New                     | Assign officer                 | Assigned                        |
+| Lead        | Assigned                | Record contact                 | Contacted                       |
+| Viewing     | Requested               | Confirm valid slot             | Confirmed                       |
+| Viewing     | Confirmed               | Record attendance              | Completed                       |
+| Offer       | Submitted               | Bank requests revision         | Counteroffer / Revision Pending |
+| Offer       | Submitted               | Bank accepts                   | Accepted                        |
+| Offer       | Submitted               | Bank rejects                   | Rejected                        |
+| Offer       | Submitted               | Buyer withdraws                | Withdrawn                       |
+| Invoice     | Issued                  | Verify successful settlement   | Paid                            |
+| Transaction | Eligible for completion | Complete required checks       | Completed                       |
+
+Important: the labels above are a suggested model. Your implementation can use separate status fields for the asset's lifecycle, legal state, publication state and transaction state. That is often safer than forcing all concepts into one giant status field.
+
+### Edge cases that require explicit decisions
+
+1. Legal hold during an accepted offer: freeze prohibited transaction steps, preserve the offer history and notify authorised parties.
+2. Title document rejected after publication: invalidate the affected verification, suspend the listing if the document is mandatory and create a review task.
+3. Bank changes price while offers exist: preserve previous offer terms; decide whether the buyer must reaffirm the offer.
+4. Two officers accept different offers: use a concurrency check so only a valid decision is committed.
+5. Payment callback arrives twice: process it idempotently and never double-count the payment.
+6. Notification delivery fails: retain the business action and retry delivery without repeating the underlying action.
+7. A user loses permission mid-session: recheck permissions on every sensitive server request.
+8. An asset is withdrawn with scheduled viewings: notify affected parties and update appointments according to policy.
+9. A valuation expires after approval: reassess whether the listing can remain active under the configured valuation rules.
+10. A fee schedule changes mid-transaction: use the applicable agreed fee version; never silently recalculate an existing invoice.
+
+## 6. Database design required to support the workflows
+
+The following is a recommended logical schema. It is not a claim about tables already implemented in your `app.js`.
+
+| Table / entity          | Important fields                                                    | Purpose                           |
+| ----------------------- | ------------------------------------------------------------------- | --------------------------------- |
+| `organisations`         | `id`, `name`, `type`, `status`                                      | Banks and platform organisations  |
+| `users`                 | `id`, `organisation_id`, `email`, `status`                          | User identities                   |
+| `roles` / `permissions` | `role_id`, `permission_key`, `scope`                                | Access control                    |
+| `assets`                | `id`, `reference`, `organisation_id`, `category`, `status`, `price` | Authoritative asset record        |
+| `asset_locations`       | `asset_id`, address fields, coordinates if needed                   | Asset location                    |
+| `asset_legal_records`   | `asset_id`, enforcement basis, case reference, legal status         | Legal and enforcement information |
+| `documents`             | `id`, `asset_id`, type, storage key, version, status                | Document metadata                 |
+| `document_reviews`      | `document_id`, reviewer, decision, reason, timestamp                | Verification history              |
+| `valuations`            | `asset_id`, amount, currency, date, report reference                | Valuation history                 |
+| `listings`              | `asset_id`, publication status, published date                      | Public availability               |
+| `leads`                 | `id`, `asset_id`, buyer contact reference, status, assigned user    | Buyer enquiries                   |
+| `viewings`              | `id`, `lead_id`, `asset_id`, slot, status                           | Viewing workflow                  |
+| `kyc_cases`             | `id`, buyer reference, status, review metadata                      | Restricted buyer verification     |
+| `offers`                | `id`, `asset_id`, buyer reference, amount, currency, status, expiry | Offers                            |
+| `offer_events`          | `offer_id`, event, actor, timestamp, terms version                  | Offer decision history            |
+| `fee_rules`             | `id`, payer, calculation method, rate, effective dates              | Versioned fees                    |
+| `invoices`              | `id`, transaction reference, amount, currency, status               | Billing                           |
+| `payments`              | `id`, invoice reference, provider reference, amount, status         | Payment reconciliation            |
+| `transactions`          | `id`, asset, accepted offer, completion status                      | Sale completion                   |
+| `audit_events`          | actor, action, entity, timestamp, change details                    | Traceability                      |
+| `notifications`         | recipient, event reference, delivery status                         | Real user notifications           |
+
+### Data integrity rules
+
+- Use immutable IDs and unique constraints for asset references, invoice numbers and external payment references.
+- Store money as exact decimal values or integer minor units, with an explicit currency. Never use floating-point arithmetic for financial calculations.
+- Store timestamps consistently and display them in the configured local timezone.
+- Keep document contents in private storage and store their metadata in the database.
+- Use foreign keys and transactions to prevent orphaned offers, documents, invoices and payments.
+- Use an event or transactional-outbox pattern if a committed state change must reliably trigger a notification.
+- Restrict access to KYC and legal records independently of ordinary asset permissions.
+- Never treat a user-supplied `organisation_id`, `role`, `payment_status` or `verified` flag as authoritative without server-side checks.
+
+For the current prototype, you can use a simpler schema initially. The important thing is to avoid storing a different asset status inside each interface.
+
+## 7. Expanded testing matrix
+
+Use these scenarios to go beyond clicking every button. They test whether the system remains correct when users make mistakes, act concurrently or try to bypass intended workflows.
+
+## Additional high-value tests
+
+Security and controlsData integrityUX and resilience
+
+Q001 — Publication gate
+
+Attempt to publish with one mandatory document missing
+
+Expected: Publication denied; missing document identified.
+
+Q002 — Publication gate
+
+Verify all documents, then add a legal hold before publishing
+
+Expected: Fresh validation blocks publication.
+
+Q003 — Tenant isolation
+
+Bank A requests Bank B's asset using its ID
+
+Expected: No restricted data is disclosed.
+
+Q004 — Payment integrity
+
+Submit a forged browser request setting an invoice to paid
+
+Expected: Payment remains unconfirmed.
+
+Q005 — Offer concurrency
+
+Two authorised users accept competing offers simultaneously
+
+Expected: Only a permitted, consistent decision is committed.
+
+Q006 — Audit integrity
+
+Attempt to edit or delete a previous audit event
+
+Expected: Unauthorised alteration is denied.
+
+Q007 — KYC privacy
+
+Attempt to retrieve another buyer's identity files
+
+Expected: Access is denied and the attempt is recorded as appropriate.
+
+Q008 — Server validation
+
+Call a prohibited transition directly through the API
+
+Expected: Server rejects the transition.
+
+0 of 24 additional tests marked complete
+
+Copy test cases
+
+### Performance and reliability tests
+
+For a more serious test run, also check:
+
+- 100, 1,000 and 10,000 asset records to identify slow queries and broken pagination.
+- Simultaneous users creating assets and submitting offers.
+- Large result sets, long text fields and multiple document versions.
+- Repeated requests after timeouts.
+- Database outages, storage failures and expired authentication sessions.
+- Search results immediately after publication, withdrawal and suspension.
+- Dashboard totals against independently calculated database totals.
+- Backup restoration and recovery of asset, document and transaction relationships.
+
+The numbers above are proposed test volumes, not performance guarantees. Define response-time and throughput targets based on the expected production workload, then measure them under realistic conditions.
+
+## 8. Page-by-page refinement backlog
+
+This is the order I would use to decide what to fix first in your existing HTML and `app.js`.
+
+P0
+
+Critical — must work before end-to-end testing
+
+- Shared asset records across all three applications.
+- Asset creation, editing, saving and resubmission.
+- Legal holds and document verification gates.
+- Approval and publication rules.
+- Public visibility and direct URL access control.
+- Offer decisions and payment verification.
+- Tenant isolation, role enforcement and audit records.
+
+P1
+
+High — required for a credible operational workflow
+
+- Leads, assignments and contact history.
+- Viewing schedules and conflict detection.
+- KYC review and document restrictions.
+- Counteroffers, offer expiry and transaction closure.
+- Fee calculation, invoices and reconciliation.
+- Real notifications, reports and exports.
+
+&#x20;P2&#x20;
+
+Polish — improve usability and maintainability
+
+- Menu navigation and keyboard shortcuts.
+- Document tabs and breadcrumb behaviour.
+- Search filters, sorting and pagination.
+- Responsive layouts and accessibility.
+- Loading, empty, error and confirmation states.
+- Print formatting and report presentation.
+
+## 9. How to run a complete acceptance test
+
+Use the same test asset throughout the run, rather than creating unrelated records for every screen.
+
+1. Create: create a property asset in the Bank Portal. Save it, refresh, reopen it and verify its reference and fields.
+2. Submit: attach the required documents and enforcement evidence. Submit the asset and confirm that it appears in Surge Admin's review queue.
+3. Challenge the controls: attempt publication with missing documents and with a legal hold. Both attempts must fail.
+4. Correct and approve: resolve the outstanding issues, complete verification, approve the listing and publish it.
+5. Verify the public experience: find the asset through search, open its details and submit a buyer enquiry. Check that private information remains hidden.
+6. Process the lead: assign an officer, record contact, schedule a viewing and verify that the appropriate bank and admin views reflect the changes.
+7. Process an offer: submit an offer, record the authorised bank decision and test rejection, counteroffer and withdrawal paths separately.
+8. Complete the transaction: generate the applicable invoice, test a failed payment, reconcile a verified payment and complete the sale.
+9. Verify closure: confirm that the listing is no longer active, financial records are consistent, notifications correspond to real events and the audit trail contains the complete sequence.
+10. Repeat with an attacker mindset: use the wrong account, stale browser tabs, invalid IDs and direct requests to test whether the backend enforces every restriction.
+
+## 10. What I would require before calling the platform complete
+
+- All three interfaces use the same authoritative records.
+- Every visible button performs its stated action or is clearly disabled with a reason.
+- Every form has appropriate validation and error handling.
+- Every workflow has a defined set of permitted transitions.
+- Legal holds and other blocking conditions are enforced server-side.
+- Public pages never expose internal or confidential records.
+- Financial statuses cannot be changed through unauthorised browser actions.
+- All important changes are auditable.
+- No fabricated notifications, KPI values or transaction history are presented as real activity.
+- The end-to-end test passes, including the exception paths.
+- The system recovers safely from duplicate requests, concurrent edits and service failures.
+
+One important limitation: the HTML in your message loads `app.js`, but that JavaScript implementation and the backend were not included in the supplied code. I can define the expected workflows and test criteria from this shell, but I cannot honestly certify which existing pages already work or identify the exact broken functions without examining the implementation.
+
+The most useful next step is to provide your current `app.js` and, if available, the backend/API code. I can then turn this specification into a concrete gap-by-gap implementation plan that identifies the actual broken pages, missing actions, disconnected records, invalid transitions and precise tests needed for each fix.
+That makes sense. For Surge Solutions, I would use Cloudflare D1 as the authoritative database for all structured data, and Cloudflare R2 as object storage for files and documents. All three interfaces — Bank Portal, Surge Admin and Public Marketplace — should communicate with the same backend.
+Recommended Cloudflare architecture
+Three Surge interfaces
+Bank Portal · Surge Admin · Public Marketplace
+
+Cloudflare Workers API
+Authentication · Permissions · Validation · Workflow rules · Audit events
+
+Cloudflare D1
+Assets, users, organisations, legal records, document metadata, offers, KYC status, invoices, payments and audit events.
+
+
+Cloudflare R2
+Property photos, title documents, valuations, signed agreements, KYC files and other uploaded objects.
+
+
+
+Optional supporting services: Cloudflare Queues for reliable background work, Turnstile for abuse prevention, and email/SMS providers for notifications.
+
+1. Where every type of data belongs
+Data	Storage	Important rule
+Asset details and prices	D1	One authoritative record
+Legal and enforcement records	D1	Restrict by role and organisation
+Document metadata and review status	D1	Track versions and decisions
+Actual PDFs, images and scans	R2	Private by default
+User and role records	D1	Enforce permissions in the Worker
+KYC status and review history	D1	Restrict sensitive records
+KYC identity documents	R2	Never expose through public asset URLs
+Offers and counteroffers	D1	Preserve decision history
+Invoices and payment records	D1	Verify payments server-side
+Audit history	D1	Append-only application behaviour
+Notification records	D1	Track queued, sent and failed delivery
+Public listing information	D1	Return only explicitly permitted fields
+R2 stores the actual files; D1 stores their metadata and references. Do not put file contents or large Base64-encoded images into D1.
+2. How the three interfaces must stay synchronised
+For example, when a bank updates a property's price:
+1. The Bank Portal sends the update to the Worker API.
+2. The Worker authenticates the user and checks that they can edit that asset.
+3. D1 saves the new price and records the change.
+4. Surge Admin reads the updated price from D1.
+5. The Marketplace reads the updated public price from D1, subject to publication rules.
+No interface should have its own separate asset database, and browser-local storage must not be treated as the source of truth.
+3. Cloudflare-specific issues to account for
+- D1 transactions: related changes, such as an approval and its audit event, should be committed atomically where possible.
+- Concurrency: use conditional updates or version numbers to prevent simultaneous reviewers from overwriting each other's decisions.
+- R2 access: serve private files through authenticated Worker endpoints or short-lived signed URLs. Never expose unrestricted private-bucket access.
+- File uploads: enforce file size and type limits, validate uploads, and consider malware scanning before documents can be approved.
+- D1 limits: design pagination, indexes and queries around your expected workload. Avoid loading entire tables into the browser.
+- Background work: use a queue for notifications and other retryable tasks rather than making a successful asset update depend on email delivery.
+- Payments: use provider-confirmed server-side events, idempotency and reconciliation; never trust a browser's claim that payment succeeded.
+4. What I would change in your implementation plan
+The next implementation pass should establish the shared data layer before polishing individual pages.
+1. Database migrations: create the D1 schema, indexes, foreign keys and seed only explicitly identified development fixtures.
+2. Worker API: centralise authentication, organisation scoping, validation, status transitions and audit logging.
+3. R2 integration: implement private uploads, file metadata, versioning, authorised downloads and deletion/retention rules.
+4. Bank Portal: wire asset creation, editing, document uploads and submission to the API.
+5. Surge Admin: wire review queues, legal holds, verification, approvals and publication to the same API.
+6. Marketplace: query only published listings and implement enquiry, viewing and offer workflows.
+7. Integration tests: verify that changes made in one interface immediately produce the correct results in the other two, including permissions and failed operations.
+One distinction matters: D1 and R2 provide the storage layer, but they do not automatically make the platform secure or keep workflow rules consistent. Those guarantees must be implemented in the Worker API.
+For Surge Solutions, the Worker should be the central business logic and security layer between the Bank Portal, Surge Admin, Public Marketplace, Cloudflare D1 and Cloudflare R2. You don't need to rewrite your 3,000+ lines of frontend JavaScript to plan this properly. We can define the Worker contract first, then connect your existing frontend to it progressively.
+
+# Surge Solutions — Cloudflare Worker specification
+
+## 1. Core architecture
+
+Existing frontend
+
+Bank Portal · Surge Admin · Public Marketplace
+
+## Surge API Worker
+
+Routing · Authentication · Authorisation · Validation · Workflow engine · Audit logging
+
+D1
+
+Structured data and business records
+
+R2
+
+Documents, images and uploaded files
+
+## 2. Worker responsibilities
+
+The Worker should provide the following modules. These are provisions for the backend to implement, not a claim that the existing frontend already supports them.
+
+| Module                | Worker responsibilities                                                               |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| Authentication        | Login/session validation, logout, expiry, account status and password-reset workflow  |
+| Authorisation         | Role-based permissions, organisation isolation and record-level access                |
+| Asset management      | Create, read, update, archive and retrieve assets                                     |
+| Legal and enforcement | Store case details, track clearance and enforce legal holds                           |
+| Documents             | Issue upload authorisations, validate metadata, version files and manage access       |
+| Valuation             | Record valuation amounts, dates, evidence and expiry                                  |
+| Listing workflow      | Submit, review, request changes, approve, publish, suspend and withdraw               |
+| Marketplace           | Return only public-safe, published asset information                                  |
+| Leads and enquiries   | Create enquiries, prevent abuse, assign staff and track follow-ups                    |
+| KYC                   | Manage verification cases and restrict sensitive records                              |
+| Viewings              | Request, schedule, confirm, cancel and complete appointments                          |
+| Offers                | Submit, negotiate, accept, reject, withdraw and expire offers                         |
+| Invoicing             | Generate invoice records, apply fee rules and track outstanding balances              |
+| Payments              | Verify provider callbacks, reconcile payment status and prevent duplicate processing  |
+| Sale completion       | Validate prerequisites, record completion and remove sold assets from active listings |
+| Notifications         | Queue messages, track delivery outcomes and retry failures                            |
+| Reporting             | Return filtered, permission-checked totals and exports                                |
+| Audit                 | Record sensitive actions, actor, target, timestamp and outcome                        |
+| Administration        | Manage organisations, users, roles, platform settings and permitted configuration     |
+
+## 3. Suggested API contract
+
+Use a versioned API such as `/api/v1`. The paths below are a proposed contract; the Worker should expose the operations the frontend actually needs.
+
+### Authentication and current user
+
+POST
+
+`/api/v1/auth/login`
+
+Authenticate and establish a secure session.
+
+GET
+
+`/api/v1/auth/me`
+
+Return the current user's identity, organisation and permitted capabilities.
+
+POST
+
+`/api/v1/auth/logout`
+
+Invalidate the current session.
+
+### Assets and listings
+
+GET
+
+`/api/v1/assets` — Search and filter assets accessible to the caller.
+
+POST
+
+`/api/v1/assets` — Create a draft asset.
+
+PATCH
+
+`/api/v1/assets/:id` — Update permitted fields with conflict detection.
+
+POST
+
+`/api/v1/assets/:id/submit` — Validate and submit for review.
+
+POST
+
+`/api/v1/assets/:id/approve` — Approve only if the reviewer has permission and requirements pass.
+
+POST
+
+`/api/v1/assets/:id/publish` — Revalidate all publication gates before making an asset public.
+
+POST
+
+`/api/v1/assets/:id/hold` and `/api/v1/assets/:id/withdraw` — Apply authorised restrictions or withdraw a listing.
+
+### Documents and private storage
+
+POST
+
+`/api/v1/assets/:id/documents/upload-url` — Authorise a limited upload to R2.
+
+GET
+
+`/api/v1/documents/:id/download` — Authorise access before serving a file or issuing a short-lived URL.
+
+POST
+
+`/api/v1/documents/:id/review` — Record approval or rejection, reviewer and reason.
+
+### Sales workflow
+
+POST
+
+`/api/v1/enquiries` — Submit a public enquiry.
+
+POST
+
+`/api/v1/viewings` — Request a viewing.
+
+POST
+
+`/api/v1/offers` — Submit an offer after checking eligibility.
+
+POST
+
+`/api/v1/offers/:id/decision` — Apply an authorised offer decision.
+
+GET
+
+`/api/v1/invoices/:id` — Return an invoice only to authorised users.
+
+POST
+
+`/api/v1/webhooks/payments/:provider` — Verify payment-provider signatures and process events idempotently.
+
+These routes are illustrative. Before implementation, align their names and payloads with the frontend's existing calls rather than forcing unnecessary changes across the entire JavaScript file.
+
+## 4. D1 and R2 provisions
+
+D1 should contain:
+
+- Organisations, users, roles and permissions.
+- Assets, locations, legal records, valuations and listing states.
+- Document metadata, review decisions and R2 object keys.
+- Enquiries, KYC case status, viewings, offers and offer history.
+- Fee rules, invoices, payment records and sale completion.
+- Notifications, audit events, idempotency records and workflow history.
+
+R2 should contain:
+
+- Property photographs and listing media.
+- Title deeds, court or enforcement documents, valuation reports and supporting evidence.
+- Private KYC files and signed transaction documents.
+- Generated reports or other files that do not belong in relational tables.
+
+Use private buckets or private objects by default. Public listing images should be exposed through a deliberate, controlled public-media path; private documents must never be accessible merely because someone knows an object key.
+
+## 5. Business rules the Worker must enforce
+
+These are the most important backend requirements for strenuous testing.
+
+1. No publication without approval. Check required documents, legal clearance, valuation validity, sale terms and authorised approval at publication time.
+2. Legal holds override publication. A hold must block new publication and prevent further sale progression where policy requires it.
+3. Organisation boundaries apply everywhere. A bank must not read or modify another bank's restricted assets by changing an ID in the request.
+4. The browser is untrusted. Ignore client-supplied role, approval, payment and privileged status claims.
+5. Every transition is validated. A caller cannot jump directly from draft to published or from submitted offer to accepted without satisfying the permitted workflow.
+6. Concurrent decisions are safe. Two reviewers cannot both accept conflicting offers when only one may proceed.
+7. Retries do not duplicate actions. Payment callbacks, repeated submissions and notification retries need idempotency where appropriate.
+8. Sensitive changes are auditable. Record who acted, what changed, when it happened and whether the action succeeded.
+9. Public responses are explicitly allowlisted. Never return internal notes, legal files, KYC information, bank-only fields or internal workflow details.
+10. Errors do not expose secrets. Return useful validation messages while keeping stack traces, credentials and private implementation details out of responses.
+
+## 6. Operational and security provisions
+
+- Validate HTTP method, route parameters, request size, content type and input schema.
+- Use secure session cookies or another deliberate authentication strategy, with CSRF protection when cookie-based authentication is used.
+- Apply rate limits and abuse controls to login, enquiries, public search and uploads.
+- Use prepared SQL statements and appropriate D1 indexes.
+- Set explicit CORS rules for the real Surge domains.
+- Keep secrets in Worker secrets/environment bindings, not in frontend JavaScript.
+- Validate R2 upload completion, allowed file types, size and ownership before accepting a document into the workflow.
+- Keep audit events and payment history protected from ordinary users and avoid exposing sensitive values in logs.
+- Return consistent error responses and request IDs to make failures diagnosable.
+- Add tests for D1/R2 failures, expired sessions, duplicate requests, stale edits, timeouts and retries.
+
+## 7. Standard response format
+
+The frontend should receive a predictable response from the Worker. For example:
+
+```
+{
+  "success": true,
+  "data": {
+    "id": "asset_123",
+    "status": "under_review"
+  },
+  "error": null,
+  "requestId": "req_example"
+}
+```
+
+For a validation failure:
+
+```
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "PUBLICATION_REQUIREMENTS_NOT_MET",
+    "message": "The asset cannot be published yet.",
+    "details": [
+      {
+        "field": "valuation",
+        "reason": "A current approved valuation is required."
+      }
+    ]
+  },
+  "requestId": "req_example"
+}
+```
+
+Use appropriate HTTP status codes as well; the JSON `success` field must not replace HTTP semantics.
+
+## 8. Implementation acceptance criteria
+
+### Worker readiness checklist
+
+0 of 10
+
+Shared data
+
+A change made in one interface is reflected in the others through D1.
+
+Authentication and permissions
+
+Unauthenticated and unauthorised requests are rejected server-side.
+
+Publication gates
+
+Missing documents, expired valuations or active legal holds block publication.
+
+Private storage
+
+Unauthorised users cannot download KYC or legal documents from R2.
+
+Offer integrity
+
+Offer decisions and concurrent acceptance are validated consistently.
+
+Payment integrity
+
+Forged callbacks and duplicate payment events cannot mark an invoice paid incorrectly.
+
+Auditability
+
+Sensitive actions create protected, traceable audit events.
+
+Failure handling
+
+Network, database, storage and notification failures never produce false success.
+
+No mock business data
+
+Production dashboards, notifications, reports and counts are based on actual records.
+
+Frontend integration
+
+Every enabled action calls a real API operation or is explicitly disabled with a reason.
+
+Reset checklist
+
+The key implementation decision: build the Worker as a modular API, with separate handlers for each business area but shared authentication, permissions, validation, audit and database utilities. This lets you implement and test the backend incrementally without rewriting the entire frontend first.
+For Surge Solutions, I would use a multi-tenant, multi-branch architecture where each bank is an organisation, each bank has its own branches, and users are assigned to the bank and branch or branches they are permitted to access.
+
+The critical design decision is that a branch is an organisational unit, not a separate tenant. This lets a bank manage its branches centrally without exposing its assets, documents, offers or financial records to other banks.
+
+## 1. Recommended structure
+
+## Surge Solutions
+
+Platform-level administration
+
+Bank A
+
+Tenant A
+
+Head Office
+
+Accra Branch
+
+Kumasi Branch
+
+Bank B
+
+Tenant B
+
+Head Office
+
+Tema Branch
+
+Takoradi Branch
+
+Every bank has its own users, branches, assets and restricted records. Surge Admin can access multiple banks only according to its assigned permissions.
+
+## 2. The four levels of access
+
+I recommend four levels rather than assigning permissions based on job title alone.
+
+| Level           | Example role             | Access                                         |
+| --------------- | ------------------------ | ---------------------------------------------- |
+| Platform        | Surge Super Admin        | All banks, branches and platform configuration |
+| Bank-wide       | Bank Administrator       | All authorised branches and bank-level reports |
+| Branch          | Branch Manager           | Assets and staff within assigned branches      |
+| Record-specific | Asset Officer / Reviewer | Only assigned records and permitted actions    |
+
+You should also distinguish between who can see a record and who can perform an action on it. For example, a branch manager may view all assets in their branch but only an authorised bank-wide reviewer can approve a listing.
+
+A bank-wide user should not automatically have platform-wide access, and a branch manager should not automatically be able to create bank administrators.
+
+## 3. How I would model this in D1
+
+Keep one shared D1 database. Add explicit tenant and branch ownership to the relevant records.
+
+### Core tables
+
+`organisations`
+
+`id`, `name`, `type`, `status`, `created_at`
+
+One record for each bank and for Surge itself where appropriate.
+
+`branches`
+
+`id`, `organisation_id`, `name`, `code`, `address`, `status`
+
+Each branch belongs to exactly one organisation.
+
+`users`
+
+`id`, `email`, `name`, `status`
+
+Global identity record; do not duplicate a user merely because they access multiple branches.
+
+`user_memberships`
+
+`user_id`, `organisation_id`, `role_id`, `status`
+
+Determines which organisation the user belongs to and their bank-level role.
+
+`user_branch_assignments`
+
+`user_id`, `organisation_id`, `branch_id`, `role_id` (optional)
+
+Restricts branch-level access and supports staff who work across multiple branches.
+
+`assets`
+
+`id`, `organisation_id`, `branch_id`, `created_by`, `status`, `version`
+
+Every bank-owned asset has a clear tenant owner and, where applicable, a responsible branch.
+
+I would also put `organisation_id` on other bank-owned records such as legal cases, document metadata, enquiries, viewings, offers and invoices. Some records may inherit their ownership from an asset, but the Worker must verify that relationship instead of trusting a client-supplied ID.
+
+Use foreign keys and indexes, including composite constraints where practical, to ensure that an asset cannot reference a branch belonging to a different bank.
+
+### A useful distinction
+
+- `organisation_id` answers: Which bank owns or controls this record?
+- `branch_id` answers: Which branch is responsible for it?
+- `created_by` answers: Who created it?
+- `assigned_to` answers: Who is currently handling it?
+
+These fields serve different purposes and should not be interchangeable.
+
+## 4. How the Worker should enforce access
+
+Never let the frontend decide which bank a user belongs to simply by sending an `organisation_id`.
+
+When a request arrives, the Worker should:
+
+1. Validate the user's session.
+2. Load their active membership and permitted branch assignments.
+3. Check the requested action against their role and permissions.
+4. Apply organisation and branch restrictions directly to the D1 query.
+5. Validate that referenced records belong to the same permitted organisation.
+6. Record sensitive actions in the audit log.
+
+For example, a branch-scoped asset query should follow this general pattern:
+
+```
+SELECT a.*
+FROM assets AS a
+JOIN user_branch_assignments AS uba
+  ON uba.branch_id = a.branch_id
+ AND uba.organisation_id = a.organisation_id
+WHERE uba.user_id = ?
+  AND uba.organisation_id = ?
+  AND a.organisation_id = ?;
+```
+
+This is illustrative, not a complete authorisation implementation. The Worker must derive the user identity and permitted organisation from the authenticated session, not blindly accept those values from the browser. Bank-wide permissions need a separate, explicitly checked access path.
+
+## 5. How the interfaces should behave
+
+Bank Portal
+
+- Bank-wide users can switch between authorised branches.
+- Branch users see only their assigned branches.
+- Asset forms select a branch from the user's permitted branches.
+- Reports show branch-level and bank-wide totals according to permissions.
+
+Surge Admin
+
+- Search across banks and branches when authorised.
+- Filter queues by bank, branch, asset status and assigned reviewer.
+- Show the owning bank and responsible branch on internal asset pages.
+- Support authorised reassignment without changing asset ownership accidentally.
+
+Public Marketplace
+
+- Visitors see approved, published public information from all participating banks.
+- The bank or branch is displayed only where disclosure is intended.
+- Internal branch assignments, staff details, legal notes and private documents remain hidden.
+
+## 6. Important edge cases to design for
+
+| Scenario                                       | Required behaviour                                                                           |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| A user transfers branches                      | Revoke the old assignment and grant the new one; preserve historical audit records.          |
+| A branch is deactivated                        | Block new assignments and submissions there; preserve existing assets and history.           |
+| An asset moves between branches                | Require authorisation, validate both branches belong to the same bank and log the transfer.  |
+| A user works across three branches             | Give explicit assignments to all three; do not create duplicate user accounts.               |
+| A bank administrator leaves                    | Revoke membership and sessions without deleting historical records.                          |
+| A bank attempts to access another bank's asset | Deny access even if the caller knows the asset ID.                                           |
+| A bank-wide report is requested                | Aggregate only records belonging to that bank unless the user has platform-level permission. |
+| Surge suspends an asset                        | Apply the platform-level restriction regardless of the bank's branch permissions.            |
+| A branch is renamed                            | Preserve its stable ID so existing assets and audit history remain linked correctly.         |
+
+## 7. One additional design decision: shared or separate review authority?
+
+I recommend that banks manage their own branches, create assets and submit listings, while Surge retains central authority over platform publication, compliance gates and legal holds. Banks may see and manage their own business records, but they cannot bypass Surge's mandatory approval rules.
+
+The bank should also be able to decide whether a branch manager can create users, reassign assets or view bank-wide financial reports. Those permissions should be configurable, within limits imposed by Surge.
+
+My recommendation: use one D1 database, one `organisations` table, one `branches` table, memberships plus branch assignments, and mandatory tenant scoping in every relevant Worker handler. This is simpler to operate than creating a separate database per bank and is a strong starting point for a platform serving many banks and branches.
+These are the additional design decisions I'd prioritise before implementing the Worker.
+1. The most important architectural recommendations
+
+1. Build a proper workflow engine
+Critical
+Avoid scattered checks such as if (status === "approved") throughout different routes. Centralise permitted transitions and their prerequisites.
+For example, publishing a property should invoke one publication service that checks legal holds, mandatory documents, valuation validity, approval and sale terms. Every route that can publish or republish must use that same service.
+
+
+
+
+2. Separate current status from historical events
+Critical
+Store the current state on the relevant record, but also preserve a history of transitions. An asset should tell you its current state, who changed it, when, why and what its previous state was.
+This becomes essential when a bank disputes an approval, an offer is challenged or an asset is suspended after publication.
+
+
+
+
+3. Add optimistic concurrency control
+Critical
+Add a version integer to mutable records. An update should only succeed if the version still matches what the user loaded.
+This prevents a branch manager from accidentally overwriting changes made by a bank administrator in another browser session.
+
+
+
+
+4. Make tenant isolation a shared security primitive
+Critical
+Create common Worker helpers for authentication, permissions and organisation-scoped access. Every private query and file operation must go through the same rules.
+Do not rely on hiding buttons or filtering tables in the frontend to protect one bank from another.
+
+
+
+2. Design the asset lifecycle more carefully
+A single status column will become difficult to manage as the platform grows. An asset can be approved but unpublished, published but legally held, or sold while historical documents remain accessible to authorised staff.
+I would separate its state into distinct dimensions:
+State dimension	Example values
+Review	Draft, submitted, under review, changes required, approved, rejected
+Publication	Unpublished, published, suspended, withdrawn
+Legal	Pending clearance, cleared, held, disputed
+Transaction	No active offer, offers received, offer accepted, completion pending, completed
+Record	Active, archived
+These dimensions must still be coordinated by business rules. For example, legal = held should prevent publication and block transaction steps as defined by the applicable policy.
+Also: do not allow staff to change these fields arbitrarily through a generic asset-update endpoint. Use dedicated actions for approval, publication, legal holds and completion.
+3. Add a reliable background job mechanism
+Some actions shouldn't depend on a single HTTP request finishing successfully.
+Examples include:
+- Sending emails or SMS notifications.
+- Processing uploaded documents for validation.
+- Generating reports and exports.
+- Retrying failed notifications.
+- Processing payment-provider events.
+- Expiring offers or overdue tasks.
+For this, I would consider Cloudflare Queues. Record the underlying business change in D1, then arrange for the follow-up task to be processed and retried independently. Use idempotency keys so retries don't create duplicate invoices, notifications or payment records.
+For workflows that require a business change and an event to be recorded together, use a transactional outbox pattern: commit the business change and an outbox record together, then dispatch pending events asynchronously. This is more reliable than updating D1 and hoping a separate queue publish always succeeds.
+4. Treat documents as first-class records
+For a bank-repossessed property, the documents can matter as much as the listing itself.
+I recommend a document register with:
+- Document type and owning asset.
+- Version number and upload timestamp.
+- Uploading user and organisation.
+- Review status, reviewer and reason.
+- Expiry date where relevant.
+- R2 object key and integrity checksum.
+- Access classification: public, bank-private or Surge-restricted.
+Never overwrite an approved title document silently. Upload a new version and require the appropriate review again.
+Keep R2 objects private by default. Validate file type and size, use generated object keys rather than user-provided paths, and consider malware scanning before a file can be used as verified evidence. A database row saying verified should only be set after the required checks actually pass.
+5. Add a proper financial ledger
+This is especially important if Surge collects deposits, charges fees, issues invoices or handles proceeds.
+Do not treat a field such as payment_status = "paid" as the entire financial record. Keep separate records for invoices, payment attempts, provider transactions, refunds, fees and reconciliation.
+I would ensure that:
+- Amounts use integer minor units or carefully validated decimal handling, with explicit currency.
+- Every payment has a unique provider reference.
+- Webhook signatures are verified.
+- Duplicate callbacks cannot process the same payment twice.
+- Failed and reversed payments are represented explicitly.
+- Invoice totals and fee rules are snapshotted at issuance.
+- Financial adjustments are recorded as new events rather than silently rewriting history.
+For transactions involving significant sums, define the reconciliation and dispute process before going live. A payment-provider success response alone does not necessarily prove that the entire sale has completed.
+6. Improve the multi-bank model further
+Beyond organisations and branches, I would add a few explicit concepts.
+Memberships and invitations
+Users should be invited to a bank or branch, accept the invitation, and have their access revoked without deleting historical records. Support users who are authorised across several branches without duplicate accounts.
+
+
+
+Approval separation
+Consider a maker-checker policy: the person who submits a high-risk listing or changes critical financial details should not be the sole person who approves that same action.
+
+
+
+Explicit asset transfers
+If an asset moves between branches, record the old branch, new branch, authorising user, reason and time. Never change ownership implicitly just because someone edits a branch dropdown.
+
+
+
+Versioned bank configuration
+Store bank-specific preferences such as approval thresholds, permitted roles, notification recipients and operational settings. Critical platform security rules must remain non-overridable by bank configuration.
+
+
+
+7. Make the public marketplace deliberately separate
+The public marketplace should not receive the same asset objects that the bank portal receives and then hide sensitive fields with JavaScript.
+Instead, create a dedicated public response model that only returns approved, published information:
+- Public asset reference.
+- Approved description, photographs and location details.
+- Public asking price and sale conditions.
+- Permitted viewing information.
+- Public contact or enquiry mechanism.
+Never include internal legal notes, KYC details, bank-only comments, document object keys or internal review history.
+I would also use stable public references that are distinct from internal database IDs. This reduces accidental information leakage and makes public URLs easier to maintain.
+8. Use D1 and R2 with operational discipline
+A few Cloudflare-specific choices will save you pain later.
+Area	Recommendation
+D1 migrations	Version every schema change and apply migrations through a controlled deployment process.
+Indexes	Index common filters such as organisation, branch, status, creation date and public listing state.
+Pagination	Use bounded pagination; consider cursor-based pagination for large result sets.
+Search	Start with D1 indexes and SQLite full-text search where appropriate. Add a dedicated search service only if measured needs justify it.
+R2	Separate public media from private documents, or enforce equally strong separation through access controls.
+Caching	Cache only deliberately public data. Avoid caching authenticated bank responses or sensitive files in shared caches.
+Backups	Define backup, restore and recovery-point requirements and test restoration.
+Environments	Keep development, staging and production databases, buckets and secrets separate.
+Monitoring	Track error rates, latency, failed jobs, failed uploads and payment reconciliation discrepancies.
+D1 is a good starting point for this platform, but load-test the actual queries and workflows before making assumptions about scale.
+9. Build a serious audit and security model
+For a platform handling repossessed assets, I'd want to answer questions such as:
+- Who changed the asking price, and what was it before?
+- Who approved publication?
+- Was a required document verified at the time of approval?
+- Who placed or removed a legal hold?
+- Who viewed or downloaded a sensitive document?
+- Who accepted an offer, and what competing offers existed at the time?
+- Was an invoice marked paid through a verified provider event or an internal adjustment?
+The audit log should be protected from ordinary modification, access-controlled, and designed to avoid storing unnecessary sensitive data. For stronger tamper evidence, consider periodically exporting or anchoring audit digests outside the primary application database.
+Also plan for account recovery, staff departures, compromised credentials, session revocation, rate limiting and incident response.
+10. Test workflows, not just pages
+I would make the following end-to-end scenarios release blockers.
+Release-blocking tests
+0/10 checked
+
+[ ] Tenant isolation
+Bank A cannot read or modify Bank B assets, offers, documents or invoices by changing request IDs.
+
+
+[ ] Legal hold
+A legal hold added after approval blocks publication or further transaction steps as policy requires.
+
+
+[ ] Concurrent approvals
+Two reviewers cannot accept conflicting offers when only one is permitted to proceed.
+
+
+[ ] Document replacement
+Replacing a verified document invalidates the old verification when required and records the new version.
+
+
+[ ] Payment retries
+Repeated provider callbacks produce one effective payment and consistent invoice totals.
+
+
+[ ] Branch transfer
+A transfer preserves ownership, history and permissions and rejects branches belonging to another bank.
+
+
+[ ] Session revocation
+A terminated staff member cannot continue using an old session.
+
+
+[ ] Recovery
+A staging restore from backup recovers linked records and file references correctly.
+
+
+[ ] Public privacy
+Public API responses and direct file URLs expose no internal or confidential records.
+
+
+[ ] Failure resilience
+A failed notification or queue consumer does not silently lose a committed business action.
+
+
+
+My suggested implementation order
+1. Foundation: tenant model, branches, memberships, authentication, permissions and D1 migrations.
+2. Asset lifecycle: asset CRUD, document register, legal checks, approvals, publication and audit history.
+3. Cross-interface integration: connect the existing frontend to shared Worker endpoints and eliminate mock data.
+4. Sales workflow: enquiries, viewings, offers, invoicing, payment verification and sale completion.
+5. Reliability: queues, retries, concurrency handling, monitoring, backups and recovery.
+6. Release hardening: tenant-isolation tests, security testing, performance testing and operational procedures.
+One final recommendation: do not build every module at once. Complete the asset lifecycle across all three interfaces first, test it thoroughly with two simulated banks and several branches, then extend the same architecture to offers and financial workflows. That will reveal structural problems before they become expensive to fix.
+Surge Solutions, I would now look beyond the database, Worker and branch permissions. The biggest opportunities are in how the platform manages risk, proves that decisions were legitimate, prevents operational mistakes, and handles the entire asset-disposition process from intake to final transfer.
+Here are additional recommendations that build on the architecture we've already discussed, without requiring you to rewrite your 3,000+ lines of frontend JavaScript.
+1. Introduce an asset case-management system
+Treat every repossessed or distressed asset as a managed case, not merely a listing.
+Each asset should have a unified case workspace containing:
+- Asset overview and ownership records.
+- Bank and branch responsible for the case.
+- Legal enforcement and clearance information.
+- Required documents and outstanding evidence.
+- Valuation and pricing history.
+- Assigned staff and approval responsibilities.
+- Enquiries, viewings, offers and negotiations.
+- Tasks, deadlines, decisions and audit history.
+- Final sale or withdrawal outcome.
+This gives bank officers and Surge administrators one place to understand an asset's entire history.
+Worker provision: create a case-service module that assembles the authorised parts of the case from D1. Do not create a separate copy of every underlying record just to display a unified workspace.
+2. Build a configurable document and compliance checklist
+Example: asset readiness
+Illustrative
+
+Ownership / title evidence
+
+Verified
+
+Enforcement authority
+
+Pending review
+
+Current valuation
+
+Verified
+
+Required sale approvals
+
+Missing
+
+Public listing description
+
+Complete
+
+
+Publication must be blocked until every mandatory requirement for that asset type and applicable process has passed.
+
+Different assets may require different evidence. A repossessed vehicle, residential property and commercial building should not necessarily share an identical checklist.
+I would therefore store versioned checklist templates by asset type, bank policy and applicable workflow. Each case should preserve the specific requirements that applied to it, including any authorised exceptions.
+Important: a document being uploaded is not the same as being verified. A checklist item should record who reviewed it, the outcome, the date and the evidence used.
+3. Add a task engine with deadlines and escalation
+Do not rely on staff remembering to check dashboards.
+The Worker should support tasks such as:
+- Review a newly submitted listing.
+- Request missing documents from a bank.
+- Complete a legal review.
+- Arrange a valuation.
+- Respond to an enquiry.
+- Confirm a viewing.
+- Review an offer before its expiry.
+- Reconcile a payment.
+- Complete the sale and archive the case.
+Each task can have an owner, due date, priority, status and escalation rule. Cloudflare Queues and scheduled Workers can support reminders and overdue checks.
+For example, if a valuation is nearing expiry, the system can notify the responsible branch and flag the asset for review. It should not silently renew the valuation or mark it valid.
+4. Give every asset a complete evidence trail
+A particularly valuable feature would be an Asset Evidence Pack that can be generated whenever a bank, auditor or authorised reviewer needs to examine a case.
+It could contain:
+- Asset details and ownership references.
+- Document inventory and version history.
+- Valuation records and price changes.
+- Legal clearance and hold history.
+- Submission and approval decisions.
+- Enquiries, viewings and offer decisions.
+- Invoices, verified payment references and reconciliation.
+- Final completion records and outstanding exceptions.
+Each pack should show the period covered, generation timestamp and any missing evidence. Keep a record of which files and versions were included so the same historical case can be reconstructed later. Document versioning and auditable disposition workflows are established records-management practices. 
+
+Microsoft Learn
++1
+
+
+
+Worker provision: add an evidence-export service that reads authorised records from D1, retrieves permitted files from R2, and generates a downloadable package. Large exports should run as background jobs.
+5. Add a formal dispute and exception-management module
+Not every case will follow the happy path. A document may be challenged, a buyer may dispute a deposit, two parties may claim authority to sell an asset, or a bank may contest a valuation.
+Instead of burying these issues in internal notes, create a proper exception workflow.
+Exception record
+Exception reference
+
+Unique ID
+
+
+Category
+
+Legal · Valuation · Document · Payment · Buyer
+
+
+Severity
+
+Low · Medium · High · Critical
+
+
+Responsible party
+
+Assigned team or user
+
+
+Evidence
+
+Linked documents and relevant events
+
+
+Resolution
+
+Decision, rationale and supporting evidence
+
+
+
+Critical exceptions should automatically trigger the appropriate restrictions. A disputed title, for example, could block publication or progression to sale pending authorised review.
+Do not let a user resolve an exception simply by changing its status to “Closed.” Require a documented resolution and any required independent approval.
+6. Introduce a pricing and fee rules engine
+Banks may have different commission agreements, reserve prices, buyer fees or approval thresholds. These rules should be configurable without changing Worker source code every time a commercial arrangement changes.
+The rules engine should support:
+- Bank-specific and asset-type-specific fee schedules.
+- Minimum acceptable prices and authorised discount thresholds.
+- Effective dates and version history.
+- Approval requirements for price reductions.
+- Buyer-facing fees and clear fee disclosures.
+- Invoice calculation with a snapshot of the rules used.
+For example, when an invoice is issued, save the applicable fee-rule version and calculated amounts. If the bank changes its commission agreement the next day, an existing invoice should not silently change.
+For price reductions beyond a configured threshold, require a second approval and record the original price, new price, reason and authoriser.
+7. Create an internal risk and anomaly dashboard
+Surge Admin should highlight unusual activity rather than simply displaying counts of assets and offers.
+Examples worth flagging:
+- Repeated failed login attempts against a bank account.
+- Sudden changes to many asset prices.
+- A user downloading an unusually large number of private documents.
+- Multiple accounts submitting suspiciously similar enquiries.
+- Repeated attempts to access another organisation's records.
+- Offers submitted and accepted unusually quickly.
+- Payments that remain unreconciled beyond the expected period.
+- Assets approaching valuation expiry or missing mandatory evidence.
+These should be risk indicators, not automatic accusations. Let authorised staff investigate and record the outcome. Avoid storing unnecessary personal information or using opaque risk scores as the sole basis for rejecting a buyer.
+8. Make search and filtering a first-class feature
+Once several banks have hundreds or thousands of assets, ordinary dropdowns will not be sufficient.
+I would provide a universal internal search covering authorised asset references, bank, branch, location, asset type, status, responsible staff and transaction reference.
+Useful filters include:
+- Submitted but not reviewed.
+- Missing or expired documents.
+- Legal hold or unresolved dispute.
+- Published but without recent enquiries.
+- Offers awaiting decisions.
+- Viewings awaiting confirmation.
+- Unpaid or unreconciled invoices.
+- Completed sales awaiting final documentation.
+Use D1 indexes for common filters and bounded pagination. If full-text search becomes important, evaluate SQLite FTS support before adding a separate search platform.
+9. Add an import centre for banks
+Banks may already have spreadsheets containing hundreds of repossessed properties or vehicles. Requiring staff to create every asset manually could slow adoption considerably.
+Build a controlled CSV import workflow:
+1. Download a versioned template.
+2. Upload the completed file.
+3. Validate each row and identify missing fields, invalid branches and duplicate references.
+4. Show a preview with valid, invalid and potentially duplicate records.
+5. Allow corrections before committing.
+6. Import valid records using an idempotent job, with an import report and audit history.
+I would not automatically publish imported assets. They should enter draft or an appropriate review state and pass the normal workflow.
+Also support a dry run, rollback strategy where practical, and duplicate detection based on bank reference numbers and other carefully selected identifiers.
+10. Make APIs and integrations predictable
+Treat the Worker API as a product, even if the only current clients are your own three interfaces.
+I recommend:
+- A documented API contract, preferably OpenAPI.
+- Consistent error codes and validation responses.
+- Versioned routes and explicit deprecation rules.
+- Idempotency keys for sensitive retryable operations.
+- Request IDs for tracing failures across logs.
+- Pagination and documented filtering.
+- Rate limits for public endpoints.
+- Separate webhook authentication and verification.
+- Integration tests that run against a staging environment.
+If you later integrate valuation providers, payment gateways, email services or identity verification providers, each integration should have its own adapter module rather than placing provider-specific logic inside asset handlers.
+11. Plan retention, legal holds and secure deletion
+Do not automatically delete records simply because an asset has been sold, withdrawn or archived.
+Different data categories may have different retention requirements. A legal hold may require certain documents and events to be preserved even when normal retention would otherwise allow deletion.
+Define a retention policy for:
+- KYC documents.
+- Legal and title documents.
+- Financial records.
+- Offer and viewing history.
+- Audit events.
+- Uploaded temporary files.
+- User accounts and session records.
+Deletion should be an authorised, traceable process that checks retention rules and legal holds. Where deletion is permitted, account for both D1 records and the corresponding R2 objects, including orphaned files and retention requirements.
+The appropriate periods and obligations should be confirmed against the legal and regulatory requirements applicable to Surge's operations in Ghana, rather than hardcoded from a generic template.
+12. Make operational health visible
+Add a technical health page for authorised Surge administrators. It should not expose secrets or raw sensitive data.
+Track:
+- Worker request failures and latency.
+- D1 query failures and slow operations.
+- R2 upload and download errors.
+- Queue backlog and repeated job failures.
+- Notification delivery failures.
+- Payment events awaiting reconciliation.
+- Failed imports and exports.
+- Scheduled jobs that have not run successfully.
+A system can appear functional while notifications are silently failing or payments remain unreconciled. Operational monitoring helps detect these problems before users report them.
+
+13. Additional features worth considering later
+
+
+
+
+
+
+
+
+
+Portfolio analytics
+Compare time to sale, enquiry-to-viewing conversion, offer acceptance, price reductions and realised versus asking prices by bank, branch and asset category.
+
+
+
+
+
+
+
+
+
+
+
+
+Field inspection support
+Let authorised staff record inspection findings, condition reports, photographs and follow-up tasks. Keep evidence linked to the asset and preserve prior inspection versions.
+
+
+
+
+
+
+
+
+
+
+
+
+Auction or structured bidding support
+If your business model permits competitive bidding, define opening and closing times, reserve prices, bid rules, extensions, withdrawal policies and immutable bid history before building the interface.
+
+
+
+
+
+
+
+
+
+
+
+
+Personal work queues
+Give each employee a focused inbox of assigned tasks, overdue actions, approvals and unresolved exceptions instead of requiring everyone to navigate the same global dashboard.
+
+
+
+These are optional enhancements, not prerequisites for launching the core platform.
+14. My priority order for Surge Solutions
+Here is how I would rank the next improvements.
+Priority	Build
+P0 — Before launch	Tenant isolation, workflow enforcement, document verification, legal holds, audit history, secure R2 access and payment integrity
+P1 — Operational readiness	Task queues, escalation, exception management, evidence exports, monitoring, backups and recovery tests
+P2 — Bank adoption	Bulk imports, configurable approval policies, branch analytics, saved filters and bank-specific fee schedules
+P3 — Advanced capabilities	Auction support, external valuation integrations, risk analytics and assisted document extraction
+My strongest recommendation is to build a case-management and evidence layer around the existing asset lifecycle. That is what can distinguish Surge from a generic property listing website: every important decision is traceable, every asset has a clear owner and responsible team, and the platform can demonstrate why a listing was allowed to progress or why it was blocked.
+One final safeguard: do not let new features bypass the same central Worker rules. Whether an action comes from the Bank Portal, Surge Admin, a scheduled job or an external integration, it must pass the appropriate authorisation and workflow checks.
+
 29. Glossary
 Tenant: a bank (or Surge) as an isolated data owner. Listing: the public publication state of an asset. Grant: a buyer's authorization to see an asset's restricted data. Injunction block: hard rule preventing publication while an injunction is active. Reserve: minimum price the bank wants; restricted. Signed URL: short-lived, single-purpose link to a private file.

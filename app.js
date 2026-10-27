@@ -27,11 +27,11 @@ window.Surge = {
     email: 'a.boateng@surgesolutions.com.gh'
   },
   publicBuyer: {
-    name: 'Dr. Kwabena Frimpong',
-    email: 'k.frimpong@apexmed.com.gh',
-    phone: '+233 24 419 8832',
-    ghanaCard: 'GHA-718291044-8',
-    isVerified: true
+    name: '',
+    email: '',
+    phone: '',
+    ghanaCard: '',
+    isVerified: false
   },
   selectedAssetId: 'ast-001',
   openTabs: [
@@ -3181,13 +3181,13 @@ window.Surge.openEnquiryModal = function(assetRef) {
   showModal(`Enquire About ${assetRef}`, `
     <form id="public-enquiry-form">
       <div class="field"><label class="lbl">Your Name<span class="req">*</span></label>
-        <div class="ctl"><input id="enq-name" required value="Dr. Kwabena Frimpong"></div></div>
+        <div class="ctl"><input id="enq-name" required placeholder="Enter your full name"></div></div>
       <div class="field"><label class="lbl">Email<span class="req">*</span></label>
-        <div class="ctl"><input id="enq-email" type="email" required value="k.frimpong@apexmed.com.gh"></div></div>
+        <div class="ctl"><input id="enq-email" type="email" required placeholder="name@example.com"></div></div>
       <div class="field"><label class="lbl">Phone</label>
-        <div class="ctl"><input id="enq-phone" value="+233 24 419 8832"></div></div>
+        <div class="ctl"><input id="enq-phone" placeholder="e.g. +233 24 000 0000"></div></div>
       <div class="field"><label class="lbl">Message<span class="req">*</span></label>
-        <div class="ctl"><textarea id="enq-msg" required>I am interested in this property. Please advise on inspection and KYC access.</textarea></div></div>
+        <div class="ctl"><textarea id="enq-msg" required placeholder="Describe your enquiry, question, or request..."></textarea></div></div>
     </form>
   `, async () => {
     const name = document.getElementById('enq-name').value;
@@ -3209,18 +3209,22 @@ window.Surge.openEnquiryModal = function(assetRef) {
     });
 
     closeModal();
-    notify(`Enquiry received! CRM Lead Reference: ${res.leadRef}`, 'success');
+    notify(`Enquiry received! CRM Lead Reference: ${res.leadRef || 'SL-LEAD-PENDING'}`, 'success');
   }, 'Send Enquiry');
 };
 
 // 9. Public Viewing Request Modal
 window.Surge.openViewingRequestModal = function(assetRef) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDate = tomorrow.toISOString().split('T')[0];
+
   showModal(`Request Viewing — ${assetRef}`, `
     <p class="help">Schedule an accompanied viewing with a Surge Solutions property representative.</p>
     <div class="field"><label class="lbl">Your Name<span class="req">*</span></label>
-      <div class="ctl"><input id="vw-name" value="Dr. Kwabena Frimpong"></div></div>
+      <div class="ctl"><input id="vw-name" required placeholder="Enter your full name"></div></div>
     <div class="field"><label class="lbl">Preferred Date<span class="req">*</span></label>
-      <div class="ctl"><input id="vw-date" type="date" value="2026-10-22"></div></div>
+      <div class="ctl"><input id="vw-date" type="date" min="${minDate}" required></div></div>
     <div class="field"><label class="lbl">Time Slot<span class="req">*</span></label>
       <div class="ctl">
         <select id="vw-slot">
@@ -3230,12 +3234,17 @@ window.Surge.openViewingRequestModal = function(assetRef) {
         </select>
       </div></div>
     <div class="field"><label class="lbl">Notes</label>
-      <div class="ctl"><textarea id="vw-notes" placeholder="Special requirements or questions"></textarea></div></div>
+      <div class="ctl"><textarea id="vw-notes" placeholder="Special requirements, viewing companion names, or questions"></textarea></div></div>
   `, async () => {
     const name = document.getElementById('vw-name').value;
     const date = document.getElementById('vw-date').value;
     const slot = document.getElementById('vw-slot').value;
     const notes = document.getElementById('vw-notes').value;
+
+    if (!name || !date) {
+      alert('Name and date are required.');
+      return;
+    }
 
     const res = await apiCall('/public/viewings', 'POST', {
       assetRef,
@@ -3246,7 +3255,7 @@ window.Surge.openViewingRequestModal = function(assetRef) {
     });
 
     closeModal();
-    notify(res.message, res.isHighRisk ? 'warn' : 'success');
+    notify(res.message || 'Viewing request submitted.', res.isHighRisk ? 'warn' : 'success');
   }, 'Request Appointment');
 };
 
@@ -3257,9 +3266,9 @@ window.Surge.openPublicOfferModal = function(assetRef) {
       <div><strong>FORMAL BINDING OFFER</strong> Only verified buyers may submit purchase offers. Offers below the reserve are reviewed under the bank exception workflow.</div>
     </div>
     <div class="field"><label class="lbl">Buyer Name<span class="req">*</span></label>
-      <div class="ctl"><input id="off-name" value="Dr. Kwabena Frimpong"></div></div>
+      <div class="ctl"><input id="off-name" required placeholder="Enter your full legal or entity name"></div></div>
     <div class="field"><label class="lbl">Offer Amount (GHS)<span class="req">*</span></label>
-      <div class="ctl"><input class="money" id="off-amount" type="number" step="1000" placeholder="e.g. 920000"></div></div>
+      <div class="ctl"><input class="money" id="off-amount" type="number" step="1000" placeholder="e.g. 950000"></div></div>
     <div class="field"><label class="lbl">Conditions / Terms</label>
       <div class="ctl"><textarea id="off-conditions" placeholder="e.g. Subject to vacant possession verification within 30 days"></textarea></div></div>
   `, async () => {
@@ -3267,8 +3276,8 @@ window.Surge.openPublicOfferModal = function(assetRef) {
     const amount = document.getElementById('off-amount').value;
     const conditions = document.getElementById('off-conditions').value;
 
-    if (!amount) {
-      alert('Offer amount is required.');
+    if (!name || !amount) {
+      alert('Buyer name and offer amount are required.');
       return;
     }
 
@@ -3280,7 +3289,7 @@ window.Surge.openPublicOfferModal = function(assetRef) {
         conditions
       });
       closeModal();
-      notify(`Offer ${res.offerRef} submitted successfully! Status: ${res.status}`, 'success');
+      notify(`Offer ${res.offerRef || 'submitted'}! Status: ${res.status || 'Under Bank Review'}`, 'success');
     } catch (err) {
       alert(err.message);
     }
@@ -3289,15 +3298,19 @@ window.Surge.openPublicOfferModal = function(assetRef) {
 
 // 11. Restricted Info Access Modal (KYC & Grant check)
 window.Surge.openRestrictedAccessModal = async function(assetRef) {
+  const buyerEmail = window.Surge?.publicBuyer?.email || '';
   try {
-    const data = await apiCall(`/public/assets/${assetRef}/restricted?buyerEmail=k.frimpong@apexmed.com.gh`);
+    if (!buyerEmail) {
+      throw new Error('Please complete KYC verification with your Ghana Card to access confidential vault documents.');
+    }
+    const data = await apiCall(`/public/assets/${assetRef}/restricted?buyerEmail=${encodeURIComponent(buyerEmail)}`);
     showModal(`Restricted Document Vault — ${assetRef}`, `
       <div class="banner info">
-        <div><strong>BUYER ACCESS GRANT VERIFIED</strong> Identity and NDA verified for Dr. Kwabena Frimpong. Confidential exact address and documentation unlocked.</div>
+        <div><strong>BUYER ACCESS GRANT VERIFIED</strong> Identity and NDA verified. Confidential exact address and documentation unlocked.</div>
       </div>
       <div class="grid2">
         <div class="field"><label class="lbl">Exact Address</label><div class="ctl"><b>${esc(data.exact_address)}</b></div></div>
-        <div class="field"><label class="lbl">Occupancy Status</label><div class="ctl"><span class="badge ${data.occupancy_status.includes('Hostile') ? 'rejected' : 'live'}">${esc(data.occupancy_status)}</span></div></div>
+        <div class="field"><label class="lbl">Occupancy Status</label><div class="ctl"><span class="badge ${data.occupancy_status?.includes('Hostile') ? 'rejected' : 'live'}">${esc(data.occupancy_status)}</span></div></div>
         <div class="field"><label class="lbl">Reserve Price</label><div class="ctl"><b>${formatMoney(data.reserve_price)}</b></div></div>
         <div class="field"><label class="lbl">Minimum Offer</label><div class="ctl"><b>${formatMoney(data.minimum_offer)}</b></div></div>
       </div>
@@ -3335,19 +3348,19 @@ window.Surge.openKYCWizardModal = function() {
   showModal('Buyer Identity & KYC Verification (KY-1)', `
     <form id="kyc-wizard-form">
       <div class="field"><label class="lbl">Full Name<span class="req">*</span></label>
-        <div class="ctl"><input id="kyc-fullname" required value="Dr. Kwabena Frimpong"></div></div>
+        <div class="ctl"><input id="kyc-fullname" required placeholder="Enter full legal name"></div></div>
       <div class="field"><label class="lbl">Email Address<span class="req">*</span></label>
-        <div class="ctl"><input id="kyc-email" type="email" required value="k.frimpong@apexmed.com.gh"></div></div>
+        <div class="ctl"><input id="kyc-email" type="email" required placeholder="name@example.com"></div></div>
       <div class="field"><label class="lbl">Phone Number<span class="req">*</span></label>
-        <div class="ctl"><input id="kyc-phone" required value="+233 24 419 8832"></div></div>
+        <div class="ctl"><input id="kyc-phone" required placeholder="e.g. +233 24 000 0000"></div></div>
       <div class="field"><label class="lbl">Ghana Card No<span class="req">*</span></label>
-        <div class="ctl"><input id="kyc-card" required value="GHA-718291044-8"></div></div>
+        <div class="ctl"><input id="kyc-card" required placeholder="e.g. GHA-000000000-0"></div></div>
       <div class="field"><label class="lbl">Source of Funds</label>
-        <div class="ctl"><input id="kyc-funds" value="Medical Practice & Commercial Real Estate"></div></div>
+        <div class="ctl"><input id="kyc-funds" placeholder="e.g. Commercial Real Estate, Business income, Investments"></div></div>
       <div class="field wide"><label class="lbl">Consents</label>
         <div class="ctl">
           <label style="display:flex;align-items:center;gap:6px;font-size:12px">
-            <input type="checkbox" checked required style="width:auto;height:auto"> Accept Non-Disclosure Agreement (NDA), Buyer Disclaimer, and Data Protection terms.
+            <input type="checkbox" id="kyc-consent" required style="width:auto;height:auto"> Accept Non-Disclosure Agreement (NDA), Buyer Disclaimer, and Data Protection terms.
           </label>
         </div></div>
     </form>
@@ -3357,6 +3370,16 @@ window.Surge.openKYCWizardModal = function() {
     const phone = document.getElementById('kyc-phone').value;
     const card = document.getElementById('kyc-card').value;
     const funds = document.getElementById('kyc-funds').value;
+    const consent = document.getElementById('kyc-consent')?.checked;
+
+    if (!fullName || !email || !phone || !card) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    if (!consent) {
+      alert('You must accept the terms and NDA consent to proceed.');
+      return;
+    }
 
     await apiCall('/public/kyc', 'POST', {
       fullName,
@@ -3366,6 +3389,14 @@ window.Surge.openKYCWizardModal = function() {
       sourceOfFunds: funds,
       relatedAssetRef: 'SS-RE-2026-00241'
     });
+
+    window.Surge.publicBuyer = {
+      name: fullName,
+      email,
+      phone,
+      ghanaCard: card,
+      isVerified: true
+    };
 
     closeModal();
     notify('KYC Application submitted! A Surge Solutions reviewer will verify your documents.', 'success');

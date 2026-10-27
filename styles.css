@@ -64,10 +64,25 @@ body.has-switcher .viewport{top:38px}
   border-right:1px solid var(--border);height:100%;display:flex;align-items:center;
 }
 .menubar .app-title .sq{width:11px;height:11px;background:var(--red);display:inline-block;margin-right:7px;border-radius:2px}
-.menu-item{padding:5px 10px;border-radius:2px;color:var(--text);cursor:default;position:relative}
-.menu-item:hover{background:#E7EEF7}
+.menu-item{padding:5px 10px;border-radius:2px;color:var(--text);cursor:pointer;position:relative;user-select:none}
+.menu-item:hover, .menu-item.active{background:#E7EEF7}
 .menu-item u{text-decoration:underline;text-underline-offset:2px}
 .menu-item .caret{font-size:8px;color:var(--text-2);margin-left:4px}
+.menu-dropdown{
+  position:absolute;top:100%;left:0;min-width:190px;background:#FFFFFF;
+  border:1px solid #9A9A9A;box-shadow:0 4px 14px rgba(0,0,0,0.18);
+  padding:4px 0;z-index:9999;display:none;font-size:12px;color:var(--text);
+  font-weight:normal;text-align:left;
+}
+.menu-dropdown.show{display:block}
+.menu-dropdown-item{
+  padding:6px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  text-decoration:none;color:var(--text);white-space:nowrap;
+}
+.menu-dropdown-item:hover{background:var(--blue);color:#FFFFFF}
+.menu-dropdown-item .shortcut{font-size:11px;color:#888;margin-left:14px}
+.menu-dropdown-item:hover .shortcut{color:#DDD}
+.menu-dropdown-sep{height:1px;background:#E0E0E0;margin:4px 0}
 .menu-spacer{flex:1}
 .menu-env{
   font-size:10.5px;font-weight:700;letter-spacing:.6px;color:#fff;background:var(--red);
