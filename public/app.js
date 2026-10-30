@@ -1,5 +1,5 @@
 /**
- * Surge Solutions — Enterprise Asset Disposition Platform Engine
+ * Surge Solutions Platform Engine
  * Unified Interactive Controller & Shared Data Store
  * Derived from Surge Solutions — Complete Interactive Mockup.html
  */
@@ -766,7 +766,7 @@ const BankPortal = {
               <span class="inst-status">${UI.badge(i.status)}</span>
               <span style="font-size:11px;color:var(--text-2)">Uploaded ${UI.fmtDateShort(i.uploadedAt)}</span>
             </div>
-          `).join('') || '<p style="color:var(--text-2);margin:0">No instruments uploaded yet. Click "+ Add Instrument" to upload.</p>'}
+          `).join('') || '<p style="color:var(--text-2);margin:0">No legal instruments have been added.</p>'}
         </div>
       </div>
       <div class="banner info"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div>Legal verification is performed by Surge. You can upload instruments and request review. Only Surge Legal can issue clearance.</div></div>
@@ -804,7 +804,7 @@ const BankPortal = {
   // ============================================================
   renderSubPage() {
     const a = Store.getAsset(this.selectedAssetId);
-    if (!a) return '<div class="empty-state"><p>No asset selected.</p></div>';
+    if (!a) return '<div class="empty-state"><p>Select an asset to continue.</p></div>';
     switch (this.subPage) {
       case 'edit-basics': return this.renderEditBasics(a);
       case 'edit-legal': return this.renderEditLegal(a);
@@ -949,11 +949,11 @@ const BankPortal = {
               <span class="inst-status">${UI.badge(i.status)}</span>
               <span style="font-size:11px;color:var(--text-2)">${i.uploadedBy} · ${UI.fmtDateShort(i.uploadedAt)}</span>
             </div>
-          `).join('') : '<p style="color:var(--text-2);margin:0">No instruments uploaded yet.</p>'}
+          `).join('') : '<p style="color:var(--text-2);margin:0">No legal instruments have been added.</p>'}
         </div>
       </div>
       <div class="group">
-        <div class="caption">Upload New Instrument</div>
+        <div class="caption">Add Legal Instrument</div>
         <div class="body">
           <div class="field"><span class="lbl">Instrument Type <span class="req">*</span></span><div class="ctl">
             <select id="new-inst-type">
@@ -968,7 +968,7 @@ const BankPortal = {
           <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-inst-input').click()">
             <input type="file" id="file-inst-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'inst')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
-            <div id="inst-status-text">Click to choose instrument file (PDF, DOCX)</div>
+            <div id="inst-status-text">Upload legal instrument</div>
             <div style="font-size:11px;margin-top:4px;color:var(--text-2)">Uploads to private Cloudflare R2 storage</div>
           </div>
           <button class="btn primary" style="margin-top:12px" onclick="BankPortal.addInstrument()">+ Add Instrument to Record</button>
@@ -1013,7 +1013,7 @@ const BankPortal = {
     this._stagedFile = null;
     Store.addAudit('J. Mensah', 'UPLOAD_INSTRUMENT', 'Asset', a.ref, null, null, 'Uploaded ' + type + ' ' + ref + ' (' + fileName + ')');
     Store.persist();
-    UI.toast('Instrument attached to record. Click "Save & Request Legal Review" to notify Surge.', 'success');
+    UI.toast('Instrument attached to record. Click "Submit for Legal Review" to notify Surge.', 'success');
     this.render();
   },
 
@@ -1162,8 +1162,9 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="field"><span class="lbl">Title Document</span><div class="ctl">
-            <div class="upload-zone" onclick="UI.toast('Title document picker opened','success')">
-              <div>Click to upload Title Deed</div>
+            <div class="upload-zone" onclick="document.getElementById('file-title-input').click()">
+            <input type="file" id="file-title-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'title')">
+            <div>Upload title deed</div>
             </div>
           </div></div>
         </div>
@@ -1187,7 +1188,7 @@ const BankPortal = {
       titlePerfection: document.getElementById('title-perfection').value,
       titleDetails: true,
     }, 'J. Mensah', 'Title information submitted');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Title information submitted — awaiting Surge verification');
+    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Title verification pending');
     UI.toast('Title information saved. Surge Property Manager will verify.', 'success');
     this.closeSubPage();
   },
@@ -1204,11 +1205,12 @@ const BankPortal = {
         <div class="body">
           <div class="field"><span class="lbl">Valuation Amount (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="number" value="${a.valuationAmount || ''}" min="0"></div></div>
           <div class="field"><span class="lbl">Valuation Date <span class="req">*</span></span><div class="ctl"><input id="val-date" type="date" value="${a.valuationDate ? a.valuationDate.split('T')[0] : ''}"></div></div>
-          <div class="field"><span class="lbl">Validity (days)</span><div class="ctl"><input id="val-validity" type="number" value="365" min="1"><span class="help">Standard: 365 days. Set per your policy.</span></div></div>
+          <div class="field"><span class="lbl">Validity (days)</span><div class="ctl"><input id="val-validity" type="number" value="365" min="1"><span class="help">Valuation validity period configured per institutional policy.</span></div></div>
           <div class="field"><span class="lbl">Valuer Name</span><div class="ctl"><input id="val-valuer" value="${a.valuerName || ''}" placeholder="Licensed valuer firm"></div></div>
-          <div class="upload-zone" style="margin-top:12px" onclick="UI.toast('Valuation report picker opened','success')">
+          <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-val-input').click()">
+            <input type="file" id="file-val-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'val')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
-            <div>Click to attach Valuation Report (PDF)</div>
+            <div>Upload valuation report (PDF)</div>
           </div>
         </div>
       </div>
@@ -1335,19 +1337,19 @@ const BankPortal = {
     this.openAsset(id);
   },
 
-  saveCurrent() { if (!this.selectedAssetId) return UI.toast('Open an asset first', 'warn'); UI.toast('Asset saved', 'success'); },
+  saveCurrent() { if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn'); UI.toast('Asset saved', 'success'); },
   submitCurrent() { this.submitForReview(); },
 
   submitForReview() {
-    if (!this.selectedAssetId) return UI.toast('Open an asset first', 'warn');
+    if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn');
     const a = Store.getAsset(this.selectedAssetId);
     if (a.legalHold) return UI.toast('Cannot submit: legal hold active', 'error');
     const r = Store.checkPublishReadiness(a);
     const criticalMissing = r.checks.filter(c => !c.pass && ['price','description'].includes(c.key));
-    if (criticalMissing.length) return UI.toast('Submission blocked: ' + criticalMissing.map(c => c.label).join(', '), 'error');
+    if (criticalMissing.length) return UI.toast('This action is unavailable because the following requirements are incomplete: ' + criticalMissing.map(c => c.label).join(', '), 'error');
     Store.updateAsset(this.selectedAssetId, { status: 'Submitted' }, 'J. Mensah', 'Submitted for Surge review');
     Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Submitted for review');
-    UI.toast('Submitted for review. Surge will review within 2 business days.', 'success');
+    UI.toast('Asset submitted for review. Surge disposition team notified.', 'success');
     this.render();
   },
 
@@ -1355,7 +1357,7 @@ const BankPortal = {
     if (!this.selectedAssetId) return;
     Store.updateAsset(this.selectedAssetId, { status: 'Submitted' }, 'J. Mensah', 'Resubmitted');
     Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Resubmitted');
-    UI.toast('Resubmitted', 'success');
+    UI.toast('Asset resubmitted for review.', 'success');
     this.render();
   },
 
@@ -1368,7 +1370,7 @@ const BankPortal = {
       const asset = Store.getAssetByRef(offer.assetRef);
       if (asset) {
         Store.updateAsset(asset.id, { status: 'Sale', publicationStatus: 'Withdrawn' }, 'E. Owusu', 'Offer accepted');
-        UI.toast('Offer accepted. Asset moved to Sale.', 'success');
+        UI.toast('Offer accepted. Sale processing can now begin.', 'success');
       }
     } else UI.toast('Offer ' + decision.toLowerCase(), 'success');
     this.render();
@@ -1501,7 +1503,7 @@ const AdminPortal = {
               
               ${a.status === 'Approved' ? `
                 <button class="btn success" onclick="AdminPortal.publishAsset()" ${!canPublish ? 'disabled title="Gates failing"' : ''}>Publish Listing</button>
-                <button class="btn" onclick="AdminPortal.publishAsset(true)" title="Force publish for demo">Force Publish (Demo)</button>
+                
               ` : ''}
               
               ${isLive ? `
@@ -1543,10 +1545,10 @@ const AdminPortal = {
   renderGateItem(c, a) {
     let fix = '';
     if (!c.pass) {
-      if (c.key === 'legal' || c.key === 'injunction' || c.key === 'hold') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open Legal Workspace</button>`;
+      if (c.key === 'legal' || c.key === 'injunction' || c.key === 'hold') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open</button>`;
       else if (c.key === 'title' || c.key === 'landSearch') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Verify Title</button>`;
       else if (c.key === 'valuation') fix = `<button class="btn small" onclick="UI.toast('Ask bank to re-upload valuation','warn')">Ask Bank for New Valuation</button>`;
-      else fix = `<span style="font-size:11px;color:var(--text-2);font-style:italic">Awaiting bank action</span>`;
+      else fix = `<span style="font-size:11px;color:var(--text-2);font-style:italic">Awaiting bank submission</span>`;
     }
     return `
       <div class="gate-item">
@@ -1571,17 +1573,17 @@ const AdminPortal = {
 
   renderReviewQueue() {
     const queue = Store.assets.filter(a => ['Submitted', 'Under Review', 'Changes Required'].includes(a.status));
-    return `<div class="page-head"><h1>Review Queue</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Status</th><th>Readiness</th><th>Action</th></tr></thead><tbody>${queue.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${UI.badge(a.status)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td><td><button class="btn small primary" onclick="event.stopPropagation();AdminPortal.openAsset('${a.id}')">Open</button></td></tr>`; }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">Empty</td></tr>'}</tbody></table></div>`;
+    return `<div class="page-head"><h1>Review Queue</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Status</th><th>Readiness</th><th>Action</th></tr></thead><tbody>${queue.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${UI.badge(a.status)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td><td><button class="btn small primary" onclick="event.stopPropagation();AdminPortal.openAsset('${a.id}')">Open</button></td></tr>`; }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">No assets currently in review queue.</td></tr>'}</tbody></table></div>`;
   },
 
   renderLegalQueue() {
     const pending = Store.assets.filter(a => !a.legalSubstate?.clearanceIssued || a.injunctionActive || a.legalHold);
-    return `<div class="page-head"><h1>Legal Verification Queue</h1><span class="crumb">${pending.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Legal Status</th><th>Instruments</th><th>Action</th></tr></thead><tbody>${pending.map(a => `<tr><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${UI.badge(a.legalStatus)}</td><td>${(a.instruments || []).length}</td><td><button class="btn small primary" onclick="AdminPortal.openAsset('${a.id}');AdminPortal.openSubPage('legal-review')">Open Legal Workspace</button></td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">No pending legal verifications</td></tr>'}</tbody></table></div>`;
+    return `<div class="page-head"><h1>Legal Verification Queue</h1><span class="crumb">${pending.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Legal Status</th><th>Instruments</th><th>Action</th></tr></thead><tbody>${pending.map(a => `<tr><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${UI.badge(a.legalStatus)}</td><td>${(a.instruments || []).length}</td><td><button class="btn small primary" onclick="AdminPortal.openAsset('${a.id}');AdminPortal.openSubPage('legal-review')">Open</button></td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">No pending legal verifications</td></tr>'}</tbody></table></div>`;
   },
 
   renderTitleQueue() {
     const pending = Store.assets.filter(a => !a.titleVerified);
-    return `<div class="page-head"><h1>Title &amp; Valuation Queue</h1><span class="crumb">${pending.length} assets pending title verification</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Title Details</th><th>Title Verified</th><th>Action</th></tr></thead><tbody>${pending.map(a => `<tr><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${a.titleDetails ? UI.badge('Submitted') : UI.badge('Not Provided')}</td><td>${a.titleVerified ? UI.badge('Verified') : UI.badge('Pending')}</td><td>${a.titleDetails ? `<button class="btn small primary" onclick="AdminPortal.openAsset('${a.id}');AdminPortal.openSubPage('title-verify')">Verify Title</button>` : '<span style="font-size:11px;color:var(--text-2)">Awaiting bank</span>'}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">All titles verified</td></tr>'}</tbody></table></div>`;
+    return `<div class="page-head"><h1>Title &amp; Valuation Queue</h1><span class="crumb">${pending.length} pending verification</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Title Details</th><th>Title Verified</th><th>Action</th></tr></thead><tbody>${pending.map(a => `<tr><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${a.titleDetails ? UI.badge('Submitted') : UI.badge('Not Provided')}</td><td>${a.titleVerified ? UI.badge('Verified') : UI.badge('Pending')}</td><td>${a.titleDetails ? `<button class="btn small primary" onclick="AdminPortal.openAsset('${a.id}');AdminPortal.openSubPage('title-verify')">Verify Title</button>` : '<span style="font-size:11px;color:var(--text-2)">Awaiting bank submission</span>'}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">All titles verified</td></tr>'}</tbody></table></div>`;
   },
 
   renderOffersView() {
@@ -1594,7 +1596,7 @@ const AdminPortal = {
 
   renderSubPage() {
     const a = Store.getAsset(this.selectedAssetId);
-    if (!a) return '<div class="empty-state"><p>No asset selected</p></div>';
+    if (!a) return '<div class="empty-state"><p>Select an asset to continue.</p></div>';
     switch (this.subPage) {
       case 'legal-review': return this.renderLegalWorkspace(a);
       case 'title-verify': return this.renderTitleWorkspace(a);
@@ -1796,7 +1798,7 @@ const AdminPortal = {
     if (!this.selectedAssetId) return; 
     Store.updateAsset(this.selectedAssetId, { status: 'Changes Required' }, 'A. Boateng', 'Changes requested'); 
     Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Changes requested'); 
-    UI.toast('Changes requested', 'warn'); 
+    UI.toast('Changes requested successfully.', 'warn'); 
     this.render(); 
   },
   
@@ -1810,20 +1812,20 @@ const AdminPortal = {
   publishCurrent() { this.publishAsset(); },
   
   publishAsset() {
-    if (!this.selectedAssetId) return UI.toast('Open an asset first', 'warn');
+    if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn');
     const a = Store.getAsset(this.selectedAssetId);
     const r = Store.checkPublishReadiness(a);
     
     if (!r.allPass) {
-      return UI.toast('Publication blocked: ' + r.checks.filter(c => !c.pass).map(c => c.label).join('; '), 'error');
+      return UI.toast('This action is unavailable because the following requirements are incomplete: ' + r.checks.filter(c => !c.pass).map(c => c.label).join('; '), 'error');
     }
     if (a.status !== 'Approved') {
-      return UI.toast('Asset must be Approved by Surge review team before publication', 'error');
+      return UI.toast('This asset must be approved before publication.', 'error');
     }
     
     Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, 'A. Boateng', 'Published to Marketplace');
     Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Published to Public Marketplace');
-    UI.toast('Published to Public Marketplace', 'success');
+    UI.toast('Asset published to Marketplace.', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
   },
   
@@ -1899,7 +1901,7 @@ const PublicMarket = {
         <div><label>Price Range</label><select><option>Any Price</option></select></div>
         <div><label>Occupancy</label><select><option>Any</option></select></div>
         <div><label>Search</label><input placeholder="Reference or location..."></div>
-        <button class="btn primary" onclick="UI.toast('Filter applied','success')">Search</button>
+        <button class="btn primary" onclick="PublicMarket.render()">Search</button>
       </div></div>
       <div class="resultshead"><h3>Available Assets</h3><span class="count">${pub.length} results</span><span class="spacer"></span>
         <div class="viewtoggle">
@@ -1984,7 +1986,7 @@ const PublicMarket = {
       <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="vw-phone" style="width:100%" placeholder="+233 ..."></div></div>
       <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="vw-email" style="width:100%" placeholder="buyer@example.com"></div></div>
       <div class="grid2">
-        <div class="field"><span class="lbl">Preferred Date <span class="req">*</span></span><div class="ctl"><input type="date" id="vw-date" value="${tomorrow}" style="width:100%"></div></div>
+        <div class="field"><span class="lbl">Preferred Date <span class="req">*</span></span><div class="ctl"><input type="date" id="vw-date" required style="width:100%"></div></div>
         <div class="field"><span class="lbl">Time Slot <span class="req">*</span></span><div class="ctl">
           <select id="vw-time" style="width:100%">
             <option>Morning (09:00 - 12:00 GMT)</option>

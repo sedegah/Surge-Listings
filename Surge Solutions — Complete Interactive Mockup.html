@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surge Solutions — Enterprise Asset Disposition Platform</title>
+<title>Surge Solutions</title>
 <style>
 :root {
   --blue: #0B3C75; --blue-hover: #092F5C; --red: #B3262E;
@@ -332,8 +332,8 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
   <span class="brandmark">SURGE <span>&#9632;</span></span>
   <button data-app="bank" class="active">Bank Portal</button>
   <button data-app="admin">Surge Admin</button>
-  <button data-app="public">Public Marketplace</button>
-  <span class="note"><span class="env-dot"></span>Shared D1 Data Layer · Live Sync</span>
+  <button data-app="public">Marketplace</button>
+  <span class="note">Surge Disposition Platform</span>
 </nav>
 
 <div class="viewport">
@@ -342,16 +342,13 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
     <div class="window">
       <div class="menubar">
         <span class="app-title"><span class="sq"></span>Surge Solutions</span>
-        <span class="menu-item" onclick="UI.toast('File menu — use toolbar for actions','success')"><u>F</u>ile</span>
-        <span class="menu-item" onclick="UI.toast('Edit menu — use forms to edit records','success')"><u>E</u>dit</span>
-        <span class="menu-item" onclick="UI.toast('View menu — switch views in navigation','success')"><u>V</u>iew</span>
+        
         <span class="menu-item" onclick="BankPortal.nav('assets')"><u>A</u>ssets</span>
         <span class="menu-item" onclick="BankPortal.nav('legal')"><u>L</u>egal</span>
         <span class="menu-item" onclick="BankPortal.nav('offers')"><u>S</u>ales</span>
         <span class="menu-item" onclick="BankPortal.nav('reports')"><u>R</u>eports</span>
-        <span class="menu-item" onclick="UI.toast('Help: Contact support@surge.gh','success')"><u>H</u>elp</span>
-        <span class="menu-spacer"></span>
-        <span class="menu-env">BANK PORTAL · PROD</span>
+                <span class="menu-spacer"></span>
+        <span class="menu-env">BANK PORTAL</span>
       </div>
       <div class="toolbar">
         <button class="tbtn" onclick="BankPortal.newAsset()"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button>
@@ -379,7 +376,7 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
             <span class="cell">User: <b>j.mensah</b></span>
             <span class="cell">Role: <b>Legal / Recovery Officer</b></span>
             <span class="cell">Org: <b>Meridian Trust Bank</b></span>
-            <span class="cell">Env: <b>PROD</b></span>
+            
             <span class="cell grow" id="clock-bank"></span>
           </footer>
         </div>
@@ -397,7 +394,7 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
         <span class="menu-item" onclick="AdminPortal.nav('legal')"><u>L</u>egal</span>
         <span class="menu-item" onclick="AdminPortal.nav('audit')"><u>U</u>dit</span>
         <span class="menu-spacer"></span>
-        <span class="menu-env">SURGE ADMIN · PROD</span>
+        <span class="menu-env">ADMINISTRATION</span>
       </div>
       <div class="toolbar">
         <button class="tbtn" onclick="AdminPortal.nav('review')"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Review Queue</button>
@@ -423,7 +420,7 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
             <span class="cell">User: <b>a.boateng</b></span>
             <span class="cell">Role: <b>Property Manager</b></span>
             <span class="cell">Org: <b>Surge Solutions</b></span>
-            <span class="cell">Env: <b>PROD</b></span>
+            
             <span class="cell grow" id="clock-admin"></span>
           </footer>
         </div>
