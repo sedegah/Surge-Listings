@@ -162,7 +162,45 @@ input[aria-invalid=true] { border-color: var(--danger) }
   var tries = 0, lockedUntil = 0, lockTimer;
 
   var qs = new URLSearchParams(location.search);
-  var why = qs.get('reason') || (qs.get('next') ? 'required' : null);
+  var rawNext = qs.get('next') || '';
+  var cleanNext = rawNext.trim().replace(/^\//, '');
+  // Route allowlist: only these pages can be redirected to
+  var ALLOWLIST = ['bank.html', 'admin.html', 'marketplace.html', 'bank', 'admin', 'marketplace'];
+  var safeNext = null;
+  if (cleanNext && !/login/i.test(cleanNext) && ALLOWLIST.indexOf(cleanNext) > -1) {
+    safeNext = cleanNext.endsWith('.html') ? cleanNext : cleanNext + '.html';
+  }
+
+  // Diagnostic logging
+  console.info('[Login Page] Initialized', {
+    requestedUrl: location.href,
+    rawNext: rawNext,
+    safeNext: safeNext
+  });
+
+  // Check if user already has an active session
+  var existingToken = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
+  if (existingToken) {
+    fetch(API_BASE + '/api/auth/me', {
+      headers: { 'Authorization': 'Bearer ' + existingToken }
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d && d.authenticated && d.user) {
+          var dest = safeNext || (d.user.scope === 'surge' ? ADMIN_PAGE : NEXT_PAGE);
+          console.info('[Login Page] Active session detected. Redirecting to:', dest);
+          location.href = dest;
+        } else {
+          sessionStorage.removeItem('surge_token');
+          sessionStorage.removeItem('surge_user');
+          localStorage.removeItem('surge_token');
+          localStorage.removeItem('surge_user');
+        }
+      })
+      .catch(function() {});
+  }
+
+  var why = qs.get('reason') || (safeNext ? 'required' : null);
   var notes = { expired: 'Your session expired. Sign in again to continue.', signedout: 'You have been signed out.', required: 'Sign in to open the bank portal.' };
   if (notes[why]) { $('note-msg').textContent = notes[why]; $('note').classList.add('show'); }
 
@@ -219,9 +257,11 @@ input[aria-invalid=true] { border-color: var(--danger) }
             else { localStorage.removeItem('surge_token'); localStorage.removeItem('surge_user'); }
           } catch (e) {}
           btn.textContent = 'Signed in';
-          var back = qs.get('next');
           var home = u.scope === 'surge' ? ADMIN_PAGE : NEXT_PAGE;
-          location.href = (back && /^[\w-]+\.html$/.test(back) && !(back === ADMIN_PAGE && u.scope !== 'surge')) ? back : home;
+          var dest = safeNext || home;
+          if (dest === ADMIN_PAGE && u.scope !== 'surge') dest = NEXT_PAGE;
+          console.info('[Login Page] Sign-in succeeded. Redirecting to:', dest);
+          location.href = dest;
           return;
         }
         tries++; btn.textContent = 'Sign in'; btn.disabled = false; pass.value = '';
