@@ -1364,6 +1364,10 @@ app.get('/marketplace', (req, res) => {
   res.sendFile(path.join(__dirname, 'marketplace.html'));
 });
 
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'login.html'));
+});
+
 app.get('/bank', (req, res) => {
   res.sendFile(path.join(__dirname, 'bank.html'));
 });

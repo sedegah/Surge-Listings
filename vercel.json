@@ -48,6 +48,10 @@
       "destination": "/api/index.js"
     },
     {
+      "source": "/login",
+      "destination": "/login.html"
+    },
+    {
       "source": "/marketplace",
       "destination": "/marketplace.html"
     },
