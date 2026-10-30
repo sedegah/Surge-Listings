@@ -10,8 +10,9 @@
 const Store = {
   assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
-  LEGACY_KEYS: ['surge_platform_v2_store', 'surge_platform_store'],
-  API_BASE: '', // relative — same origin when served from Cloudflare Workers
+  API_BASE: (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.protocol === 'file:'))
+    ? 'https://surge-solutions-api.sedegahkimathi.workers.dev'
+    : '',
 
   init() {
     try {

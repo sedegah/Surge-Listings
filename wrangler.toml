@@ -31,6 +31,3 @@ SIGNED_URL_TTL_MINUTES = "5"
 WATERMARK_TEXT = "SURGE SOLUTIONS GHANA — CONFIDENTIAL & VERIFIED"
 MAX_IMAGES_PER_ASSET = "20"
 
-# Static assets (serve index.html, app.js, etc.)
-[site]
-bucket = "./public"
