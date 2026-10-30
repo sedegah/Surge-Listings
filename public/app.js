@@ -578,7 +578,7 @@ const BankPortal = {
 
   renderAssetDetail(id) {
     const a = Store.getAsset(id);
-    if (!a) return '<div class="empty-state"><p>Asset not found.</p></div>';
+    if (!a) return '<div class="empty-state"><h3>No Asset Selected</h3><p>Select an asset from the list to view details.</p></div>';
     const readiness = Store.checkPublishReadiness(a);
     const canEdit = ['Draft', 'Changes Required', 'Submitted'].includes(a.status);
     const tab = this.detailTab;
@@ -672,10 +672,6 @@ const BankPortal = {
 
   renderReadinessTab(a, readiness) {
     return `
-      <div class="banner info">
-        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div>Each gate must pass before publishing. Where a fix is your responsibility, a button will take you to the correction page. Where it is a Surge responsibility, you can request action.</div>
-      </div>
       <div class="group">
         <div class="caption">Publication Readiness Checklist</div>
         <div class="body">
@@ -793,7 +789,7 @@ const BankPortal = {
         <div class="body">
           <div class="kv-row"><span class="kv-k">Total Photos</span><span class="kv-v">${a.images}</span></div>
           <div class="kv-row"><span class="kv-k">Exterior Photo</span><span class="kv-v">${a.exteriorImage ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required to publish</span>'}</span></div>
-          ${!a.exteriorImage ? `<div class="banner amber" style="margin-top:12px;margin-bottom:0"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg><div><b>Exterior photo required.</b> At least one exterior photo is mandatory for publication (AS-4).</div></div>` : ''}
+          ${!a.exteriorImage ? `<div class="banner amber" style="margin-top:12px;margin-bottom:0"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg><div><b>Exterior photo required.</b> At least one exterior photo is mandatory for publication.</div></div>` : ''}
         </div>
       </div>
     `;
@@ -823,7 +819,6 @@ const BankPortal = {
         <h1>Edit Asset Basics</h1>
         <span class="crumb">${a.ref}</span>
       </div>
-      <div class="banner info"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div>Changes are saved immediately and recorded in the audit log. Required fields must be filled before submission.</div></div>
       <div class="group">
         <div class="caption">Identification</div>
         <div class="body">
@@ -969,7 +964,7 @@ const BankPortal = {
             <input type="file" id="file-inst-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'inst')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
             <div id="inst-status-text">Upload legal instrument</div>
-            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">Uploads to private Cloudflare R2 storage</div>
+            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">Supported formats: PDF, DOCX (up to 25MB)</div>
           </div>
           <button class="btn primary" style="margin-top:12px" onclick="BankPortal.addInstrument()">+ Add Instrument to Record</button>
         </div>
@@ -1079,7 +1074,7 @@ const BankPortal = {
     Store.addAudit('J. Mensah', 'UPLOAD_DOCUMENT', 'Asset', a.ref, null, null, `Uploaded document: ${type} (${fileName})`);
     Store.addActivity(this.selectedAssetId, 'J. Mensah', `Uploaded document: ${type} (${fileName})`);
     Store.persist();
-    UI.toast(`Document ${fileName} uploaded to Cloudflare R2`, 'success');
+    UI.toast(`Document ${fileName} uploaded successfully.`, 'success');
     this.render();
   },
 
@@ -1130,7 +1125,7 @@ const BankPortal = {
     Store.addAudit('J. Mensah', 'UPLOAD_PHOTO', 'Asset', a.ref, null, null, `Uploaded ${type} photo (${fileName})`);
     Store.addActivity(this.selectedAssetId, 'J. Mensah', `Uploaded ${type} photo (${fileName})`);
     Store.persist();
-    UI.toast(`Photo ${fileName} uploaded. Watermark derivative generated in R2.`, 'success');
+    UI.toast(`Photo ${fileName} uploaded successfully.`, 'success');
     this.render();
   },
 
@@ -1187,7 +1182,7 @@ const BankPortal = {
       titleOwner: document.getElementById('title-owner').value.trim(),
       titlePerfection: document.getElementById('title-perfection').value,
       titleDetails: true,
-    }, 'J. Mensah', 'Title information submitted');
+    }, 'J. Mensah', 'Title verification pending');
     Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Title verification pending');
     UI.toast('Title information saved. Surge Property Manager will verify.', 'success');
     this.closeSubPage();
@@ -1450,7 +1445,7 @@ const AdminPortal = {
 
   renderAssetDetail(id) {
     const a = Store.getAsset(id);
-    if (!a) return '<div class="empty-state"><p>Asset not found</p></div>';
+    if (!a) return '<div class="empty-state"><h3>No Asset Selected</h3><p>Select an asset from the list to view details.</p></div>';
     const readiness = Store.checkPublishReadiness(a);
     const canPublish = readiness.allPass && a.status === 'Approved';
     const isLive = a.status === 'Live';
@@ -1612,7 +1607,7 @@ const AdminPortal = {
         <h1>Legal Verification Workspace</h1>
         <span class="crumb">${a.ref} · ${a.bankName}</span>
       </div>
-      <div class="banner info"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div><b>Legal Verification Officer workspace.</b> Review each instrument. Issuing clearance sets <code>legalStatus = Cleared</code> and unblocks the publication gate. Every decision is audited.</div></div>
+      <div class="banner info"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div><b>Legal Verification Officer workspace.</b> Review each instrument. Issuing clearance confirms legal authorization to dispose of the asset. Every decision is recorded in the permanent audit trail.</div></div>
 
       <div class="group">
         <div class="caption">Enforcement Basis</div>
@@ -1824,7 +1819,7 @@ const AdminPortal = {
     }
     
     Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, 'A. Boateng', 'Published to Marketplace');
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Published to Public Marketplace');
+    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Published to Marketplace');
     UI.toast('Asset published to Marketplace.', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
   },
@@ -1910,7 +1905,7 @@ const PublicMarket = {
         </div>
       </div>
       <div class="cards ${this.viewMode === 'list' ? 'list-view' : ''}">
-        ${pub.map(a => this.renderCard(a)).join('') || '<div class="empty-state" style="grid-column:1/-1"><h3>No live assets</h3></div>'}
+        ${pub.map(a => this.renderCard(a)).join('') || '<div class="empty-state" style="grid-column:1/-1"><h3>No live assets currently available</h3><p style="color:var(--text-2);margin-top:6px">Check back shortly or submit an enquiry to receive updates.</p></div>'}
       </div>
       <div class="pub-footer"><div class="legal">All listings are managed by Surge Solutions.</div><span class="spacer"></span><span>&copy; 2026 Surge Solutions</span></div>
     `;
@@ -2103,7 +2098,7 @@ const PublicMarket = {
   },
 
   renderHow() { return `<div class="hero" style="padding:24px 28px"><h2>How It Works</h2></div><div class="group"><div class="caption">1. Browse &amp; Enquire</div><div class="body"><p style="margin:0;font-size:12.5px">Submit a free enquiry. No account needed.</p></div></div><div class="group"><div class="caption">2. Surge Contacts You</div><div class="body"><p style="margin:0;font-size:12.5px">A Surge officer discusses the asset and qualifies your interest.</p></div></div><div class="group"><div class="caption">3. KYC Verification</div><div class="body"><p style="margin:0;font-size:12.5px">Submit identity docs. Surge verifies.</p></div></div><div class="group"><div class="caption">4. Viewing &amp; Offer</div><div class="body"><p style="margin:0;font-size:12.5px">Schedule a viewing, then submit a formal offer.</p></div></div><div class="group"><div class="caption">5. Completion</div><div class="body"><p style="margin:0;font-size:12.5px">Bank decides. If accepted, Surge issues sale docs and invoice.</p></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Live Assets</button></div>`; },
-  renderKyc() { return `<div class="hero" style="padding:24px 28px"><h2>KYC &amp; Verification</h2></div><div class="group"><div class="caption">Why KYC</div><div class="body"><p style="margin:0;font-size:12.5px">KYC is required before viewings and offers, but not to browse. We confirm your identity and source of funds.</p></div></div><div class="group"><div class="caption">What we collect</div><div class="body"><ul style="margin:0;padding-left:20px;font-size:12.5px"><li>Full name and contact</li><li>Ghana Card (encrypted)</li><li>Proof of funds</li><li>Consents</li></ul></div></div><div class="group"><div class="caption">How we protect it</div><div class="body"><ul style="margin:0;padding-left:20px;font-size:12.5px"><li>AES-256-GCM encryption</li><li>Private R2 buckets with signed-URL access</li><li>Only verified reviewers can access</li><li>All access logged</li></ul></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Assets</button></div>`; },
+  renderKyc() { return `<div class="hero" style="padding:24px 28px"><h2>KYC &amp; Verification</h2></div><div class="group"><div class="caption">Why KYC</div><div class="body"><p style="margin:0;font-size:12.5px">KYC is required before viewings and offers, but not to browse. We confirm your identity and source of funds.</p></div></div><div class="group"><div class="caption">What we collect</div><div class="body"><ul style="margin:0;padding-left:20px;font-size:12.5px"><li>Full name and contact</li><li>Ghana Card (encrypted)</li><li>Proof of funds</li><li>Consents</li></ul></div></div><div class="group"><div class="caption">How we protect it</div><div class="body"><ul style="margin:0;padding-left:20px;font-size:12.5px"><li>AES-256-GCM encryption</li><li>Encrypted cloud document vault with audited access</li><li>Only verified reviewers can access</li><li>All access logged</li></ul></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Assets</button></div>`; },
   renderFaq() { return `<div class="hero" style="padding:24px 28px"><h2>FAQ</h2></div><div class="group"><div class="caption">Do I need an account?</div><div class="body"><p style="margin:0;font-size:12.5px">No — browsing and enquiries are free.</p></div></div><div class="group"><div class="caption">Can I contact the bank?</div><div class="body"><p style="margin:0;font-size:12.5px">No. Surge is the sole intermediary.</p></div></div><div class="group"><div class="caption">Is KYC safe?</div><div class="body"><p style="margin:0;font-size:12.5px">Yes — encrypted and audited.</p></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Assets</button></div>`; },
   renderContact() {
     return `<div class="hero" style="padding:24px 28px"><h2>Contact Surge</h2></div><div class="grid2"><div class="group"><div class="caption">Enquiry Form</div><div class="body"><div class="field"><span class="lbl">Name <span class="req">*</span></span><div class="ctl"><input id="ct-name" style="width:100%"></div></div><div class="field"><span class="lbl">Phone <span class="req">*</span></span><div class="ctl"><input id="ct-phone" style="width:100%"></div></div><div class="field"><span class="lbl">Message</span><div class="ctl"><textarea id="ct-msg"></textarea></div></div><button class="btn primary" onclick="PublicMarket.submitContact()">Submit</button></div></div><div class="group"><div class="caption">Contact Details</div><div class="body"><div class="kv-row"><span class="kv-k">Email</span><span class="kv-v">enquiries@surge.gh</span></div><div class="kv-row"><span class="kv-k">Phone</span><span class="kv-v">+233 30 274 0000</span></div><div class="kv-row"><span class="kv-k">Hours</span><span class="kv-v">Mon-Fri, 08:00-17:00 GMT</span></div></div></div></div>`;
