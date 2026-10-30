@@ -551,6 +551,7 @@ function seedData() {
 
   // 3. Users
   const users = [
+    { id: 'u-sedegah', org_id: 'org-surge', bank_id: null, username: 'k.sedegah', full_name: 'Kimathi Sedegah', email: 'k.sedegah@surgesolutions.com.gh', role_code: 'SA', password_hash: '090806' },
     { id: 'u-admin', org_id: 'org-surge', bank_id: null, username: 'admin', full_name: 'System Administrator', email: 'admin@surgesolutions.com.gh', role_code: 'SA' },
     { id: 'u-boateng', org_id: 'org-surge', bank_id: null, username: 'a.boateng', full_name: 'Ama Boateng', email: 'a.boateng@surgesolutions.com.gh', role_code: 'PM' },
     { id: 'u-addo', org_id: 'org-surge', bank_id: null, username: 'k.addo', full_name: 'Kwame Addo', email: 'k.addo@surgesolutions.com.gh', role_code: 'LO' },

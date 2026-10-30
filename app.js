@@ -101,22 +101,42 @@ const Auth = {
   },
 
   async checkAuth(requiredScope = 'bank') {
+    const path = window.location.pathname.toLowerCase();
+
+    // 1. NEVER redirect if on public marketplace or already on login page
+    if (path.includes('login') || path.includes('marketplace') || path === '/' || path === '') {
+      console.info('[Auth Guard] Public / login route bypass:', { path, requiredScope });
+      if (path.includes('login')) return false;
+      return true; // marketplace requires no auth
+    }
+
     const token = this.getToken();
     if (!token) {
-      const curPage = window.location.pathname.split('/').pop() || (requiredScope === 'surge' ? 'admin.html' : 'bank.html');
+      const fallbackTarget = (requiredScope === 'surge') ? 'admin.html' : 'bank.html';
+      let curPage = window.location.pathname.split('/').pop() || fallbackTarget;
+      if (/login/i.test(curPage)) curPage = fallbackTarget;
+
+      console.warn('[Auth Guard] Protected route access without session. Redirecting to login:', {
+        requestedUrl: window.location.href,
+        destination: 'login.html?next=' + encodeURIComponent(curPage),
+        reason: 'Unauthenticated'
+      });
       window.location.href = 'login.html?next=' + encodeURIComponent(curPage);
       return false;
     }
+
     try {
       const res = await fetch(Store.API_BASE + '/api/auth/me', {
         headers: { 'Authorization': 'Bearer ' + token }
       });
       if (!res.ok) {
+        console.warn('[Auth Guard] Session invalid or expired. Clearing session.', { status: res.status });
         this.logout();
         return false;
       }
       const data = await res.json();
       if (!data.authenticated || !data.user) {
+        console.warn('[Auth Guard] Session not authenticated. Clearing session.');
         this.logout();
         return false;
       }
@@ -129,17 +149,20 @@ const Auth = {
       // Authorization check
       if (requiredScope === 'bank') {
         if (data.user.scope === 'public') {
+          console.warn('[Auth Guard] Public buyer attempted to open bank portal.');
           window.location.href = 'login.html?next=bank.html';
           return false;
         }
       } else if (requiredScope === 'surge') {
         if (data.user.scope !== 'surge') {
+          console.warn('[Auth Guard] Non-admin user attempted to open admin portal.');
           alert('Access denied. Administrator privileges required.');
-          window.location.href = 'login.html?next=admin.html';
+          window.location.href = 'bank.html';
           return false;
         }
       }
       this.updateUIProfile();
+      console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
       return true;
     } catch(e) {
       const cached = this.getUser();
@@ -147,6 +170,7 @@ const Auth = {
         this.updateUIProfile();
         return true;
       }
+      console.error('[Auth Guard] Auth check failed with network error:', e);
       return false;
     }
   },
@@ -3324,13 +3348,12 @@ document.querySelectorAll('.switcher button[data-app]').forEach(btn => {
 Store.init();
 
 const bodyPortal = document.body ? document.body.dataset.portal : null;
-if (document.getElementById('bank-work') || bodyPortal === 'bank') {
+if (bodyPortal === 'bank') {
   BankPortal.init();
-}
-if (document.getElementById('admin-work') || bodyPortal === 'admin') {
+} else if (bodyPortal === 'admin') {
   AdminPortal.init();
-}
-if (document.getElementById('public-work') || bodyPortal === 'public' || (!document.getElementById('bank-work') && !document.getElementById('admin-work'))) {
+} else {
+  // Public marketplace is default and needs NO auth
   PublicMarket.init();
 }
 
