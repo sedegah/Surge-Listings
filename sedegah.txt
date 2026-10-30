@@ -1,0 +1,1992 @@
+he biggest problem: your data isn't actually persistent
+This is the first thing I would address.
+
+Your JavaScript currently uses:
+const Store = {
+  assets: [],
+  auditLog: [],
+  leads: [],
+  offers: [],
+  viewings: [],
+  invoices: [],
+
+  init() {
+    this.seed();
+  }
+};
+
+
+It populates the application with sample records whenever it starts.
+
+This means:
+- Refreshing can erase changes.
+- Multiple users do not share a reliable database.
+- Banks cannot securely access their own records.
+- Surge administrators cannot reliably work on the same records as banks.
+- Enquiries and viewing requests are not permanently stored.
+- Audit logs are not durable.
+The HTML even displays Shared D1 Data Layer · Live Sync, but that is currently a visual label, not evidence of an actual connected D1 database. app.js
+ Surge Solutions — Complete Interactive Mockup.html
+
+
+You need a real backend and database.
+3. What is missing or only simulated
+This is where most of the actual development work lies.
+
+I identified several interactions that currently give the impression of completing an operation without actually completing it.
+Feature	Current implementation	Required implementation
+Save asset	Displays success message	Persist changes in database
+Upload documents	Simulated upload picker	Actual secure file uploads
+Upload photographs	Simulated upload picker	Image storage and gallery
+Export Excel	Displays queued message	Generate downloadable XLSX
+Export PDF	Displays queued message	Generate actual PDF
+Search marketplace	Static filters	Database-powered filtering
+Contact form	Displays success message	Save and notify staff
+Submit offer	KYC warning only	Complete offer submission
+Request viewing	Creates a basic record	Capture buyer, availability and appointment
+Notifications	Reads local audit data	Persistent notification service
+Login	Hardcoded demonstration users	Real authentication
+Live sync	Shared in-memory JavaScript object	Shared database and API
+
+These are not cosmetic shortcomings. They affect the core business operations.
+app.js
+Other important problems I found
+1. Approval can bypass your own safeguards.
+
+The administrator's approveAsset() contains a force-approval option that automatically changes missing readiness flags.
+
+That is dangerous in a real asset disposition system. An administrator must not be able to approve an asset simply by overriding its failed checks.
+
+2. Title verification is not sufficiently rigorous.
+
+The verifyTitle() function can mark title information and land searches as verified without establishing that the underlying documents were actually examined.
+
+3. Viewing requests are incomplete.
+
+The current implementation creates a viewing request with a default future date, without collecting the buyer's actual preferred date, availability or contact information.
+
+4. Legal holds need stronger controls.
+
+Placing and releasing holds should be restricted to authorized officers, require reasons, preserve history and prevent unauthorized publication or sale.
+
+5. Sensitive information needs protection.
+
+The mockup displays internal bank references, exact addresses and borrower information. These must never leak into the public marketplace or another bank's account.
+
+6. User input needs security protection.
+
+The application uses dynamically generated HTML through innerHTML and interpolates data into templates. User-supplied values must be validated and safely rendered to prevent cross-site scripting (XSS).
+
+These are areas I would fix before allowing real banks or buyers to use the platform.
+4. The backend you need
+I would build the backend around a proper API rather than continue expanding the JavaScript data store.
+
+My recommended architecture:
+Surge Solutions — Proposed Architecture
+Frontend application
+
+Bank Portal · Surge Admin · Public Marketplace
+
+React / TypeScript or existing HTML/JavaScript migrated incrementally
+
+HTTPS / REST API
+
+Backend — Django + Django REST Framework
+
+Authentication · Business logic · Permissions · Workflow engine
+
+PostgreSQL
+
+All business records and relationships
+
+
+Cloudflare R2
+
+Private documents and photographs
+
+
+Notifications
+
+Email, SMS and in-app alerts
+
+
+Reporting
+
+PDF, Excel and analytics
+
+
+
+Deployment and infrastructure
+
+HTTPS · Backups · Monitoring · Secrets management · CI/CD
+
+
+I recommend Django because it gives you a mature authentication system, permissions, ORM, admin capabilities and a strong foundation for complex workflows. PostgreSQL should be the authoritative data store.
+
+Cloudflare R2 is suitable for storing the documents and media. Use private buckets, short-lived signed URLs and properly managed encryption keys.
+5. Every backend module you need
+This is the actual functional scope I would implement.
+A. Identity and access management
+Critical
+- User registration and invitation.
+- Login and logout.
+- Password reset.
+- Email verification.
+- Multi-factor authentication.
+- Session management.
+- User suspension and account recovery.
+- Role-based access control.
+- Organization and bank management.
+- Tenant isolation.
+- Login history.
+- Failed login monitoring.
+You need separate permissions for:
+Role	Main responsibilities
+Bank Administrator	Manage bank users and organization
+Bank Recovery Officer	Create and manage assets
+Bank Legal Officer	Submit legal documents
+Surge Administrator	Manage platform operations
+Surge Property Manager	Review and approve property records
+Surge Legal Officer	Verify legal instruments
+Surge Valuation Officer	Verify valuations
+Surge Finance Officer	Invoices and payments
+Buyer	Enquiries, KYC, viewings and offers
+
+These roles should be enforced on the backend, not just displayed in the interface.
+B. Asset management
+Critical
+You already have a good starting point.
+
+Complete the following:
+- Create asset.
+- Edit asset.
+- Save drafts.
+- Submit for review.
+- Return for corrections.
+- Resubmit.
+- Approve.
+- Reject.
+- Publish.
+- Unpublish.
+- Suspend.
+- Place legal hold.
+- Release legal hold.
+- Mark as sold.
+- Archive.
+- Maintain full asset history.
+Each asset should have a unique reference, owning bank, asset category, location, description, pricing, ownership information, legal records and publication state.
+
+You should also support more asset categories if Surge intends to dispose of assets beyond real estate.
+C. Legal and compliance management
+Critical
+This deserves its own complete workflow.
+- Upload enforcement instruments.
+- Upload court judgments.
+- Upload default notices.
+- Upload settlement agreements.
+- Verify document authenticity.
+- Record verification officer.
+- Record verification date.
+- Record expiry dates.
+- Record injunctions.
+- Record disputes.
+- Place legal holds.
+- Release legal holds.
+- Request additional documentation.
+- Record legal clearance.
+- Maintain a legal decision history.
+No legal clearance should be generated merely because someone clicks a button.
+D. Title and valuation management
+- Title deed upload.
+- Title number.
+- Title ownership details.
+- Title verification.
+- Land search upload.
+- Land search verification.
+- Land search expiry tracking.
+- Valuation report upload.
+- Valuer details.
+- Valuation amount.
+- Valuation date.
+- Valuation validity.
+- Revaluation requests.
+- Expiry notifications.
+The platform should automatically flag expired valuations and land searches.
+E. Document and media management
+Critical
+Implement:
+- Actual document upload.
+- Actual photograph upload.
+- Multiple photographs per asset.
+- Document categorization.
+- Document versioning.
+- File previews.
+- Download permissions.
+- Document replacement.
+- Document deletion with appropriate authorization.
+- Upload timestamps.
+- File ownership.
+- Access history.
+- Malware scanning.
+- File type and size validation.
+Suggested storage structure:
+surge-private/
+    banks/
+        bank-id/
+            assets/
+                asset-id/
+                    legal/
+                    title/
+                    valuation/
+                    supporting/
+                    media/
+
+    buyers/
+        buyer-id/
+            kyc/
+                identity/
+                proof-of-funds/
+
+
+Never expose the bucket directly to the public.
+F. Buyer management and KYC
+Critical
+The public marketplace currently collects basic enquiry information, but it does not implement a complete buyer verification process.
+
+You need:
+- Buyer registration.
+- Buyer profiles.
+- Identity verification.
+- Ghana Card information handling.
+- Proof-of-funds submission.
+- Consent management.
+- KYC review queue.
+- Approve or reject KYC.
+- Request additional information.
+- KYC expiry and re-verification.
+- Buyer verification status.
+- Secure access to buyer documents.
+Sensitive identity information should have restricted access and carefully controlled retention.
+G. Leads and viewing management
+- Automatically capture enquiries.
+- Assign enquiries to Surge officers.
+- Lead status management.
+- Contact history.
+- Follow-up reminders.
+- Viewing requests.
+- Preferred viewing dates.
+- Agent assignment.
+- Appointment confirmation.
+- Rescheduling.
+- Cancellation.
+- Viewing completion.
+- Viewing feedback.
+A viewing should not be automatically treated as confirmed when the buyer requests it.
+H. Offers and sales management
+Critical
+This is one of the most important missing business processes.
+
+You need:
+1. Buyer submits an offer.
+2. System checks buyer verification.
+3. System checks asset availability.
+4. Offer is recorded.
+5. Surge reviews the offer.
+6. Surge forwards the offer to the bank.
+7. Bank accepts, rejects or requests negotiation.
+8. Buyer receives the decision.
+9. Accepted offer progresses to sale.
+10. Sale documentation is generated.
+11. Payment and completion are tracked.
+12. Asset is marked sold and removed from the marketplace.
+Include offer validity, offer history, supporting documents and approval timestamps.
+I. Finance and invoicing
+Your existing mockup already has invoice data, but the complete finance workflow is missing.
+
+Implement:
+- Invoice creation.
+- Invoice numbering.
+- Commission calculations.
+- Configurable commission rates.
+- Tax configuration.
+- Invoice PDF generation.
+- Payment recording.
+- Payment references.
+- Payment verification.
+- Outstanding balances.
+- Overdue invoices.
+- Payment reminders.
+- Refunds and adjustments.
+- Financial reporting.
+Do not hardcode the 4% commission currently shown in the sample data. Make it configurable according to contractual arrangements.
+J. Notifications
+You need a proper notification engine.
+Event	Recipient
+Asset submitted	Surge review team
+Changes requested	Bank officer
+Legal verification completed	Bank officer
+Valuation expiring	Relevant bank and Surge officers
+Asset published	Bank and interested buyers
+New enquiry	Assigned Surge officer
+Viewing requested	Surge viewing team
+KYC approved	Buyer
+Offer submitted	Surge and relevant bank
+Offer accepted	Buyer and Surge
+Invoice issued	Relevant organization
+
+Support email, SMS and in-app notifications.
+K. Reporting and audit
+- Asset inventory reports.
+- Published assets.
+- Pending reviews.
+- Legal holds.
+- Asset sales.
+- Offer conversion rates.
+- Buyer enquiries.
+- Viewing statistics.
+- Commission reports.
+- Bank-specific reports.
+- Outstanding invoices.
+- Officer activity.
+- Audit exports.
+Your audit system must record who performed an action, when, what changed, which record was affected and the relevant reason.
+
+Audit records should be append-only and protected against unauthorized alteration.
+6. Database design
+I would design the database before implementing the backend endpoints.
+
+These are the core entities:
+Database table	Purpose
+organizations	Banks and Surge
+users	User accounts
+roles	Permission definitions
+user_roles	User-role assignments
+assets	Asset master records
+asset_status_history	Asset workflow history
+asset_documents	Uploaded documents
+asset_images	Asset photographs
+legal_instruments	Enforcement documentation
+legal_verifications	Legal decisions
+title_records	Property title information
+land_searches	Land search records
+valuations	Valuation history
+legal_holds	Hold and release records
+buyers	Buyer profiles
+kyc_records	Buyer verification
+leads	Enquiries
+viewings	Viewing appointments
+offers	Buyer offers
+offer_history	Offer decisions and negotiations
+sales	Completed sale records
+invoices	Financial invoices
+payments	Payment transactions
+notifications	User notifications
+audit_logs	Immutable activity history
+system_settings	Platform configuration
+
+You will also need supporting tables for permissions, document access, consent, email delivery, payment reconciliation and system integrations.
+
+An important architectural decision: Every bank-owned record must have an organization identifier. All queries must enforce that ownership. A bank must never be able to access another bank's confidential information by changing an asset ID in a URL or API request.
+7. The complete business workflow
+Your application should operate around a controlled workflow rather than independent buttons.
+Asset disposition lifecycle
+1. Asset creation
+   
+   Bank creates an asset and uploads initial documentation.
+2. Bank submission
+   
+   Asset is submitted to Surge for review.
+3. Surge verification
+   
+   Legal, title, valuation and documentation checks are performed.
+4. Approval
+   
+   Authorized Surge officers approve the asset when every mandatory condition passes.
+5. Publication
+   
+   Asset becomes available on the public marketplace.
+6. Buyer engagement
+   
+   Buyers enquire, complete KYC and request viewings.
+7. Offer submission
+   
+   Buyers submit offers for consideration.
+8. Bank decision
+   
+   The bank accepts, rejects or negotiates.
+9. Sale completion
+   
+   Documentation, invoicing and payment reconciliation take place.
+10. Asset closure
+    
+    Asset is marked sold, unpublished and archived with its complete history.
+
+Legal holds, disputes and other exceptional conditions should be able to interrupt this workflow at any appropriate stage.
+
+The workflow must be enforced by the backend, including when requests are made directly to the API.
+8. API endpoints you will need
+Django REST Framework can expose endpoints along these lines:
+/api/v1/auth/
+/api/v1/organizations/
+/api/v1/users/
+
+/api/v1/assets/
+/api/v1/assets/{id}/submit/
+/api/v1/assets/{id}/approve/
+/api/v1/assets/{id}/publish/
+/api/v1/assets/{id}/hold/
+
+/api/v1/legal/instruments/
+/api/v1/legal/verifications/
+/api/v1/legal/holds/
+
+/api/v1/titles/
+/api/v1/valuations/
+/api/v1/documents/
+/api/v1/media/
+
+/api/v1/marketplace/assets/
+/api/v1/buyers/
+/api/v1/buyers/kyc/
+
+/api/v1/leads/
+/api/v1/viewings/
+/api/v1/offers/
+/api/v1/sales/
+
+/api/v1/invoices/
+/api/v1/payments/
+
+/api/v1/notifications/
+/api/v1/audit-logs/
+/api/v1/reports/
+
+
+Each endpoint needs authentication, authorization, validation, error handling and appropriate audit recording.
+9. Additional infrastructure and services
+Here is what I would budget for technically.
+Component	Recommended technology
+Frontend	React + TypeScript
+Backend	Django + DRF
+Database	PostgreSQL
+File storage	Cloudflare R2
+Background tasks	Celery + Redis
+Email	Resend or another transactional email provider
+SMS	Ghana-supported SMS gateway
+Authentication	Django authentication + MFA
+API documentation	OpenAPI / Swagger
+Testing	Pytest
+Deployment	Docker
+Reverse proxy	Nginx
+Monitoring	Sentry
+Version control	GitHub
+CI/CD	GitHub Actions
+
+I would retain the existing HTML/CSS design as the UI reference while gradually rebuilding the interface into maintainable frontend components. Your existing Django and Cloudflare R2 experience also makes this a practical architecture to work with. 
+10. Security requirements
+For a platform handling bank-owned assets, buyer identities and financial transactions, security cannot be an afterthought.
+
+These are non-negotiable:
+- HTTPS everywhere.
+- Secure password hashing.
+- MFA for privileged accounts.
+- Backend-enforced RBAC.
+- Bank-level tenant isolation.
+- Private document storage.
+- Encryption at rest and in transit.
+- Secure encryption key management.
+- Signed, expiring file access URLs.
+- File upload validation and malware scanning.
+- Rate limiting.
+- CSRF protection.
+- XSS prevention.
+- SQL injection prevention.
+- Session expiration.
+- Login and access monitoring.
+- Append-only audit logs.
+- Automated database backups.
+- Disaster recovery procedures.
+- Data retention and deletion policies.
+- Security testing and penetration testing.
+You should also have a documented privacy policy, terms of service, buyer consent process and legal review of the platform's compliance obligations in Ghana.
+11. Testing before launch
+You cannot establish that Surge is fully functional simply because every button works.
+
+You need several levels of testing.
+Test category	What to verify
+Unit testing	Individual business rules
+API testing	Every backend endpoint
+Integration testing	Database, storage and notifications
+Workflow testing	Complete asset lifecycle
+Permission testing	Every role and organization
+Security testing	Unauthorized access and vulnerabilities
+UI testing	Forms, navigation and responsiveness
+Performance testing	Concurrent users and large datasets
+Recovery testing	Backups and restoration
+
+For example, one important automated test should establish that a bank cannot access another bank's asset, even if it knows the asset's UUID.
+
+Another should establish that an asset with an active injunction cannot be published, even if someone manually calls the publication endpoint.
+
+12. Implementation roadmap
+I would build this in eight phases.
+Phase 1 — Foundation
+Highest priority
+
+- Set up GitHub repository and development environment.
+- Create Django project.
+- Configure PostgreSQL.
+- Implement authentication.
+- Implement organizations and tenants.
+- Implement roles and permissions.
+  
+  Phase 2 — Asset management
+- Build asset models and APIs.
+- Connect Bank Portal forms.
+- Implement CRUD operations.
+- Implement asset references.
+- Implement draft and submission workflows.
+  
+  Phase 3 — Documents and verification
+- Integrate Cloudflare R2.
+- Implement document management.
+- Implement legal verification.
+- Implement title verification.
+- Implement valuation management.
+- Implement readiness engine.
+  
+  Phase 4 — Surge administration
+- Review queues.
+- Approval and rejection.
+- Changes requested.
+- Legal holds.
+- Publication controls.
+- Audit trails.
+  
+  Phase 5 — Public marketplace
+- Connect real asset listings.
+- Implement search and filters.
+- Implement image galleries.
+- Implement enquiries.
+- Implement buyer registration.
+  
+  Phase 6 — Buyer and sales management
+- KYC.
+- Viewings.
+- Offers.
+- Negotiations.
+- Bank decisions.
+- Sale completion.
+  
+  Phase 7 — Finance and communications
+- Invoicing.
+- Payments.
+- Commission calculations.
+- Email and SMS.
+- Notifications.
+- PDF and Excel reports.
+  
+  Phase 8 — Production readiness
+- Automated tests.
+- Security audit.
+- Performance optimization.
+- Backups.
+- Monitoring.
+- Production deployment.
+
+13. What I would consider the finished product
+Before calling Surge Solutions fully functional, I would expect these demonstrations to work without manually modifying the database:
+1. A bank administrator registers and creates a bank organization.
+2. A bank officer logs in and creates an asset.
+3. The bank uploads actual legal documents, title information, valuation reports and photographs.
+4. The bank submits the asset.
+5. A Surge legal officer receives the review request and verifies the documentation.
+6. A Surge property manager completes the remaining checks and approves the asset.
+7. The asset is published to the marketplace.
+8. A buyer discovers the property and submits an enquiry.
+9. Surge receives and assigns the enquiry.
+10. The buyer completes KYC.
+11. The buyer requests and attends a viewing.
+12. The buyer submits an offer.
+13. The bank makes its decision.
+14. The system generates the relevant sale and financial records.
+15. The transaction is completed and the property is removed from active listings.
+16. Every significant action remains traceable in the audit history.
+And throughout that process, all three portals must reflect the same underlying database state.
+
+14. My final assessment
+Surge Solutions readiness assessment
+Frontend and visual design
+Strong foundation
+
+Business logic
+Partially implemented
+
+Database and persistence
+Missing
+
+Authentication and permissions
+Missing
+
+Document management
+Simulated
+
+Buyer and sales workflows
+Incomplete
+
+Security
+Not production-ready
+
+Deployment
+Not established
+
+
+My recommendation: Don't spend more time adding cosmetic features. The next major milestone should be a functioning backend, database, authentication and asset lifecycle.
+
+One more thing: I would not discard your existing design. It is a useful specification of how the finished product should look and behave.
+What I suggest we do next
+I would like to take this beyond recommendations and actually prepare the implementation.
+
+The first deliverable should be a complete technical blueprint containing:
+- The Django project structure.
+- PostgreSQL database schema and relationships.
+- All user roles and permission matrices.
+- Complete API specifications.
+- Asset lifecycle and approval state machine.
+- Cloudflare R2 document architecture.
+- Security architecture.
+- Frontend-to-backend integration plan.
+- Development milestones and acceptance criteria.
+
+
+Surge Solutions will be designed as a multi-tenant, multi-bank SaaS platform.
+
+That means each participating bank gets its own secure workspace, users, assets, documents, leads, offers and reports. Surge administrators retain centralized oversight across the platform, but bank users must only access information their bank is authorized to see.
+The architecture decision
+Surge Solutions Platform
+
+Central administration and platform-wide controls
+
+
+Bank A workspace
+
+Users, assets, legal records, offers and reports
+
+
+Bank B workspace
+
+Separate users, assets, legal records, offers and reports
+
+
+Bank C workspace
+
+Independent records and permissions
+
+
+Public marketplace
+
+Only approved, published assets are visible
+
+
+
+
+What this means technically
+I recommend:
+- Frontend: retain the existing Surge interface as the starting point, then progressively move to React and TypeScript.
+- Backend: Django + Django REST Framework.
+- Database: PostgreSQL, with every bank-owned record linked to an organization.
+- File storage: private Cloudflare R2 storage, with controlled, expiring access.
+- Authentication: secure login, MFA, invitations, password recovery and role-based access.
+- Background processing: Celery + Redis for notifications, document processing and scheduled checks.
+One critical rule: tenant isolation must be enforced by the backend, not just by hiding information in the interface. A Bank A user must never be able to retrieve Bank B's records by changing an asset ID or API request.
+Roles and permissions
+Role	Access
+Surge Super Administrator	Platform-wide administration
+Surge Operations	Assigned bank and asset operations
+Surge Legal Officer	Legal verification and holds
+Surge Valuation Officer	Valuations and reports
+Bank Administrator	Their bank's users and records
+Bank Recovery Officer	Their bank's assets and submissions
+Bank Legal Officer	Their bank's legal records
+Buyer	Public listings, own profile, KYC and offers
+
+The public marketplace should expose only approved information. Internal bank documents, buyer identity documents, legal records and confidential valuations must remain private unless explicitly authorized.
+The next implementation milestone
+Before building more screens, we should establish the foundation:
+1. Define the PostgreSQL database schema and relationships.
+2. Design the organization and tenant-isolation model.
+3. Build authentication, roles and permissions.
+4. Define the asset lifecycle and approval rules.
+5. Create the API contracts for all three portals.
+6. Connect the existing mockup to real backend endpoints.
+7. Add automated tests proving that one bank cannot access another bank's information.
+
+
+1. Super Administrator (Root / Platform Admin)
+This role has complete access to the entire platform. Super Admins are the ultimate authority.
+
+2. Operations Manager (Platform Operations)
+This role is responsible for the day-to-day operations of the platform.
+
+3. Valuation Officer
+This role is responsible for managing asset valuations.
+
+4. Property Manager
+This role is responsible for overseeing property listings and related operations.
+
+5. Compliance Manager
+This role is responsible for regulatory compliance and quality assurance.
+
+6. Support Manager
+This role is responsible for managing support operations and user assistance.
+
+7. Legal Officer
+This role is responsible for legal matters and documentation verification.
+
+8. Marketing & Listings Manager
+This role is responsible for marketing, public listings, and promotional activities.
+
+9. Sales & Negotiation Manager
+This role is responsible for managing sales, offers, and negotiations.
+
+10. Bank Administrator (Bank-level Admin)
+This role is a restricted administrator with oversight only over their specific bank’s assets, users, and activities.
+
+11. Bank Recovery Officer
+This role is a specialized user within a bank responsible for managing assets that are under recovery or foreclosure.
+
+12. Bank Legal Officer
+This role is a legal professional working within a bank, focused on legal aspects of bank-owned assets.
+
+13. Bank Sales Officer
+This role is a sales-oriented user within a bank, responsible for sales processes related to bank-owned assets.
+
+14. Buyer (Platform User)
+This role is an external user who interacts with the platform to browse, search, and purchase assets listed by banks.
+
+15. Vendor / Service Provider (Optional Platform Partner)
+This role represents third-party service providers who may partner with Surge Solutions to offer services to banks and buyers.
+
+
+
+1. Remove completely
+These phrases expose the prototype or falsely imply infrastructure that may not exist.
+Current text	Action
+Shared D1 Data Layer · Live Sync	Remove until actual D1 integration works
+BANK PORTAL · PROD	Remove until genuinely deployed in production
+SURGE ADMIN · PROD	Remove until genuinely deployed in production
+Env: PROD	Remove from mockup
+Force Publish (Demo)	Remove
+Force publish for demo	Remove
+Force approve this asset anyway for testing?	Remove
+for the demo	Remove from code comments and UI
+for testing	Remove from code comments and UI
+In real app, this uploads to R2.	Remove
+This uploads to private R2 storage	Remove until implemented
+File picker opened	Remove
+Title document picker opened	Remove
+Valuation report picker opened	Remove
+Photo will be watermarked automatically	Remove until implemented
+Export queued	Remove until exports actually work
+PDF export queued	Remove until exports actually work
+Excel export queued	Remove until exports actually work
+
+Important: The force-approval functionality itself must be removed, not just its text. An asset must never pass legal, title or publication requirements because an administrator chooses to bypass them.
+2. Remove or replace the simulated desktop interface
+The HTML currently contains a desktop-style application menu:
+- File
+- Edit
+- View
+- Assets
+- Legal
+- Sales
+- Reports
+- Help
+These menu items currently display explanatory toast messages instead of providing real functionality.
+
+My recommendation is to remove this menu entirely unless you intend to implement actual menu functionality.
+
+Also remove the following demonstration controls:
+- The top-level Bank Portal / Surge Admin / Public Marketplace switcher from the actual production interface.
+- The hardcoded demonstration user accounts.
+- The hardcoded demonstration roles.
+- The hardcoded demonstration organization.
+- The fake environment indicators.
+A real user should enter through authentication and be directed to their authorized workspace.
+3. Rewrite misleading messages
+These are not necessarily unnecessary, but they currently promise actions or timelines that the application does not actually guarantee.
+Current text	Recommended replacement
+Legal documents submitted. Surge Legal will review within 2 business days.	Legal documents submitted successfully. Awaiting review.
+Expect response within 2 business days.	Verification request submitted. Awaiting review.
+Submitted for review. Surge will review within 2 business days.	Asset submitted successfully. Awaiting review.
+Photo uploaded. Watermark derivative generated.	Only display after successful upload and watermark processing
+Document uploaded successfully	Only display after successful R2 upload and database record creation
+Asset saved	Changes saved successfully only after persistence succeeds
+Filter applied	Display actual search results
+Offer accepted. Asset moved to Sale.	Only display after the offer and sale transition are successfully persisted
+
+4. Remove hardcoded demonstration identities and records
+The app.js file contains seeded data that should not be mistaken for real platform records.
+
+Examples include:
+- Meridian Trust Bank
+- John Doe (borrower)
+- J. Mensah
+- A. Boateng
+- S. Adjei
+- Kwame Nkrumah
+- Akosua Agyeman
+- +233 24 555 0101
+- kwame.n@email.com
+It also contains demonstration asset references such as:
+- SS-RE-2026-00241
+- SS-RE-2026-00242
+- SS-RE-2026-00243
+- SS-RE-2026-00244
+- SS-RE-2026-00245
+These can remain in a dedicated development seed dataset, but they must not be presented as real customer information in production.
+
+The commission examples using 4% should also be replaced with configurable platform settings rather than a hardcoded business rule.
+5. Remove unnecessary explanatory text from the interface
+Review these descriptions and shorten them where appropriate:
+- This immediately suspends the listing and blocks all progression.
+- Only Surge Legal can issue clearance.
+- Legal verification is performed by Surge. You can upload instruments and request review.
+- Changes are saved immediately and recorded in the audit log.
+- Required fields must be filled before submission.
+These can be replaced with concise, contextual guidance. For example:
+- Legal clearance is managed by authorized Surge Legal personnel.
+- Changes are recorded in the activity history.
+- Complete all required fields before submitting.
+Do not remove instructions that help users understand important legal or compliance requirements.
+6. Do not remove these
+These are legitimate product elements and should remain:
+- Asset reference numbers.
+- Asset descriptions and property information.
+- Legal status and verification history.
+- Title and valuation information.
+- Required-field indicators.
+- Document upload instructions and supported file types.
+- Privacy and restricted-access indicators.
+- Legal hold reasons.
+- Buyer verification requirements.
+- Audit history.
+- Asset approval and publication requirements.
+- Navigation labels that lead to real functionality.
+- Public marketplace terms and buyer notices.
+
+7. My priority cleanup list
+Surge interface cleanup checklist
+0/13 completed
+
+
+
+[ ] Remove Shared D1 Data Layer · Live Sync.
+[ ] Remove fake PROD environment labels.
+[ ] Remove Force Publish (Demo).
+[ ] Remove force-approval and force-publication bypass logic.
+[ ] Remove fake upload picker messages.
+[ ] Remove fake PDF and Excel export messages.
+[ ] Remove hardcoded demo users and roles.
+[ ] Move demonstration bank and asset records into development seed data.
+[ ] Remove fake upload, save and verification success notifications.
+[ ] Remove fake two-business-day service promises.
+[ ] Remove non-functional desktop menu items.
+[ ] Replace simulated portal switching with authenticated role-based routing.
+[ ] Replace hardcoded commission examples with configurable settings.
+
+My recommendation: don't strip out useful business information just to make the interface look cleaner. Remove prototype indicators, fake promises, misleading status messages and non-functional controls. Keep the actual business terminology.
+
+
+
+NEW COMMANDS # How Surge Solutions should work using Cloudflare
+
+Surge Solutions should operate as a multi-bank asset disposition SaaS platform, with three connected interfaces:
+
+1. Bank Portal – banks submit and manage their assets.
+2. Surge Admin – Surge manages, verifies, approves and oversees assets from all participating banks.
+3. Public Marketplace – buyers discover properties, submit enquiries, request viewings and make offers.
+
+All three interfaces should communicate with one secure Cloudflare backend. The frontend must never be responsible for enforcing security, approving legal documents or deciding whether an asset can be published.
+
+The architecture I recommend is:
+
+## Surge Solutions architecture
+
+Frontend — HTML, CSS and JavaScript
+
+Bank Portal · Surge Admin · Public Marketplace
+
+HTTPS API requests
+
+Cloudflare Workers
+
+API · Authentication · Permissions · Tenant isolation · Business rules
+
+D1
+
+Users, banks, assets, offers, invoices, audit records
+
+R2
+
+Property photos, legal documents, KYC files, reports
+
+Workflows
+
+Approvals, verification, sale and payment processes
+
+Queues
+
+Emails, notifications, background jobs and exports
+
+Other Cloudflare services
+
+Turnstile · WAF · Rate Limiting · CDN · Logs · Monitoring · Backups
+
+## 1. What each Cloudflare service should do
+
+| Cloudflare service     | Responsibility in Surge                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Workers                | The main backend. Handles all API requests, authentication checks, permissions and business logic.         |
+| D1                     | Stores all structured application data in a relational database.                                           |
+| R2                     | Stores uploaded files, property photographs, legal instruments, KYC documents and generated reports.       |
+| Queues                 | Processes background jobs such as sending notifications, generating reports and processing uploaded files. |
+| Workflows              | Coordinates long-running processes such as legal verification, asset approval and sale completion.         |
+| Turnstile              | Helps prevent automated spam and abusive form submissions.                                                 |
+| WAF and Rate Limiting  | Protects public endpoints and APIs from malicious or excessive requests.                                   |
+| Cloudflare CDN         | Delivers frontend assets and publicly accessible marketplace images efficiently.                           |
+| Workers Logs/Analytics | Helps monitor errors, API performance, activity and application health.                                    |
+
+Important: D1 should be the authoritative source of structured data. R2 should be the authoritative source of uploaded files. Queues and Workflows should not replace either of them.
+
+# 2. How the three portals should work
+
+## A. Bank Portal
+
+[Product · Quick Property](https://images.openai.com/static-rsc-4/Kv5XqIvoKGn8UekyqOoiH7VSmMYMaNrZ3aM2PIJE5mNUKbVMU3LQvZxNEsOAMp820PyjHtJX3569qdK-X6xsdDKiCXnwMe5lsQYhhEDtl3PuHi9zUC2yy-FBSh2thy-N5pB2EfoUvdsJ_kUp_chjtK9wTWHLv0w928PEhKVMNmI?purpose=inline)
+
+[quickproperty.org](https://www.quickproperty.org/product?utm_source=chatgpt.com)
+
+Each bank gets its own organization account.
+
+For example:
+
+- Meridian Trust Bank
+- Another participating bank
+- Any additional bank onboarded by Surge
+
+Each bank should only see its own assets, users, enquiries, offers and reports.
+
+### Bank registration and account management
+
+1. Surge creates or approves a bank organization.
+2. A Surge Administrator creates the first Bank Administrator.
+3. The Bank Administrator receives an invitation.
+4. The administrator activates their account.
+5. The administrator invites other bank employees.
+6. Each employee receives a role and permissions.
+7. The bank can deactivate employees or revoke their access.
+
+Bank roles should include:
+
+| Role               | Permissions                                          |
+| ------------------ | ---------------------------------------------------- |
+| Bank Administrator | Manage bank users, assets and bank settings.         |
+| Recovery Officer   | Create, edit and submit assets.                      |
+| Legal Officer      | Manage legal information and submit legal documents. |
+| Finance Officer    | View relevant sales, invoices and payment records.   |
+| Read-only Officer  | View permitted information without editing.          |
+
+### Asset creation
+
+When a bank employee creates an asset:
+
+1. The frontend collects the property information.
+2. JavaScript validates required fields for usability.
+3. The frontend sends the information to a Cloudflare Worker.
+4. The Worker identifies the authenticated user.
+5. The Worker determines which bank they belong to.
+6. The Worker validates the data and permissions.
+7. The Worker creates the asset in D1.
+8. D1 generates or stores a unique asset reference.
+9. The Worker returns the saved asset.
+10. The frontend updates the asset list.
+
+Every bank-owned record must have an `organization_id`.
+
+For example:
+
+```
+Asset
+├── id
+├── organization_id
+├── asset_reference
+├── title
+├── description
+├── property_type
+├── location
+├── asking_price
+├── legal_status
+├── status
+├── created_by
+└── created_at
+```
+
+The frontend must not be allowed to choose another bank's `organization_id` and thereby create or access records belonging to that bank.
+
+### Asset editing
+
+When a bank edits an asset:
+
+1. The frontend retrieves the asset from the API.
+2. The user changes the relevant information.
+3. The frontend submits the changes.
+4. The Worker verifies the user's permissions and asset ownership.
+5. The Worker validates the new information.
+6. D1 updates the record.
+7. An audit entry records what changed, who changed it and when.
+8. The frontend displays the updated information.
+
+If the asset has already been submitted for review, changes to important fields should either require resubmission or trigger another review.
+
+### Asset submission
+
+When the bank submits an asset:
+
+1. The Worker checks required property information.
+2. It checks required legal information and documents.
+3. It checks required photographs.
+4. It checks title and valuation information where applicable.
+5. It checks whether the asset is already under legal hold.
+6. It creates a submission record.
+7. It changes the asset status to `SUBMITTED`.
+8. It creates a review task for Surge.
+9. A notification is queued.
+10. The bank sees the submission status.
+
+The bank should not be able to approve or publish its own asset.
+
+## B. Surge Admin Portal
+
+[Acquisition Manager - Real Estate Acquisition Software](https://images.openai.com/static-rsc-4/p7ckGtUQSl7SgBmI_7ZfgLkAy-ZeonTk1K4fxc4Cbwg5NgXqzuvezJmSIAGGfh0yJ0Q-ZY8mBlGqobVtFxj4sVSoJuSDySbOW-suVQusJ3KbhZ1zqhK8Sn8vH_90JJFJHM7cnBBnxfZMryKecT6su1iQcf6RE0-WNnB4u3xGngk?purpose=inline)
+
+[yardi.com](https://www.yardi.com/product/acquisition-manager/?utm_source=chatgpt.com)
+
+This is the central management interface.
+
+Surge administrators should be able to manage every participating bank, but access must be restricted according to their assigned roles.
+
+### Surge Admin dashboard
+
+The dashboard should show:
+
+- Total participating banks.
+- Total assets.
+- Assets awaiting review.
+- Assets under legal verification.
+- Assets awaiting title verification.
+- Assets awaiting valuation.
+- Published assets.
+- Assets under legal hold.
+- Pending offers.
+- Active enquiries.
+- Completed sales.
+- Outstanding invoices.
+- Revenue and commission statistics.
+
+The figures must come from D1 queries, not hardcoded values or JavaScript arrays.
+
+### Asset review
+
+When a bank submits an asset:
+
+1. The Worker records the submission.
+2. The review task becomes visible in Surge Admin.
+3. An authorized Surge officer opens the asset.
+4. The officer reviews property details and documents.
+5. The officer records a decision.
+6. The decision is saved in D1.
+7. The audit log records the action.
+8. The bank receives a notification.
+
+The available decisions should include:
+
+- Approve.
+- Reject.
+- Request changes.
+- Return for additional documentation.
+- Place under legal hold.
+
+There should be no force-approval or force-publish bypass.
+
+### Legal verification
+
+Legal verification should be a proper workflow, not a button that automatically changes a document to verified.
+
+It should work like this:
+
+1. The bank uploads the legal instrument.
+2. The Worker validates the upload.
+3. The file is stored in private R2 storage.
+4. D1 stores the document metadata.
+5. A legal verification task is created.
+6. An authorized Surge Legal Officer reviews the document.
+7. The officer records the verification decision.
+8. The officer adds a reason or comments.
+9. The verification status is updated.
+10. The bank is notified.
+
+Possible verification statuses:
+
+- `PENDING`
+- `UNDER_REVIEW`
+- `VERIFIED`
+- `REJECTED`
+- `ADDITIONAL_INFORMATION_REQUIRED`
+- `EXPIRED`
+
+A document should never become verified simply because it was uploaded.
+
+### Title verification
+
+The title verification workflow should:
+
+1. Collect the title information from the bank.
+2. Store the uploaded title deed in R2.
+3. Create a verification task.
+4. Allow Surge Legal to inspect the document and supporting information.
+5. Record the verification decision and evidence.
+6. Record the officer responsible.
+7. Store the verification date.
+8. Store expiry or review dates where applicable.
+9. Notify the relevant bank.
+
+Where an external land registry or verification provider is eventually integrated, the Worker can communicate with that service. Until then, verification must be an authorized human decision.
+
+### Valuation verification
+
+The valuation workflow should:
+
+1. Receive the bank's valuation information.
+2. Store the valuation report in R2.
+3. Record the valuer, date, amount and validity.
+4. Assign the valuation to an authorized Surge reviewer.
+5. Allow approval, rejection or a request for revaluation.
+6. Record the decision in D1.
+7. Notify the bank.
+
+Do not automatically mark a valuation valid just because the bank uploaded a report.
+
+### Legal holds
+
+A legal hold should be enforceable across the entire application.
+
+When Surge places an asset under legal hold:
+
+1. An authorized officer selects the asset.
+2. The officer provides a reason.
+3. The Worker verifies their permissions.
+4. D1 records the legal hold.
+5. The asset status changes appropriately.
+6. The marketplace listing becomes unavailable.
+7. Pending offers and sale progression are blocked where applicable.
+8. Relevant bank and Surge users are notified.
+9. The hold remains active until an authorized officer records its clearance.
+
+A legal hold must be checked by the backend during every relevant action. Hiding a button in the frontend is not sufficient.
+
+## C. Public Marketplace
+
+[Real Estate Marketplace Website Concept by Ronas IT | UI/UX Team on Dribbble](https://images.openai.com/static-rsc-4/EAplqVWLOpzZzd1HF9_hpC09g2xfhU2PjOYPwecIg3Qec-25hN0Gr8FWD72s-ZfQWHnHRDYp4pLkNZC6I2xOeE8dAudaqgbv9S3c3lVmFUPrduIO4HBUXu07qQLlkLoQBeZC5lfXOHH2EppwG0gAPiodAHgrtgiyWYKQOTU7eQI?purpose=inline)
+
+[dribbble.com](https://dribbble.com/shots/23269740-Real-Estate-Marketplace-Website-Concept?utm_source=chatgpt.com)
+
+The public marketplace should only display assets that Surge has approved and published.
+
+### Viewing marketplace listings
+
+When a visitor opens the marketplace:
+
+1. The frontend requests published assets from the Worker.
+2. The Worker queries D1.
+3. It selects assets with an eligible publication status.
+4. It excludes assets under legal hold.
+5. It returns only approved public information.
+6. The frontend renders the listings.
+7. Public photographs are delivered through the appropriate image delivery path.
+
+The marketplace must never expose:
+
+- Bank internal notes.
+- Internal legal comments.
+- Private bank documents.
+- KYC documents.
+- Confidential borrower information.
+- Internal valuation discussions.
+- Private audit records.
+
+### Search and filtering
+
+The marketplace should support:
+
+- Property type.
+- Location.
+- Price range.
+- Number of bedrooms.
+- Number of bathrooms.
+- Land size.
+- Property condition.
+- Asset reference.
+- Keyword search.
+
+The frontend sends filter parameters to the Worker. The Worker constructs safe, parameterized D1 queries and returns matching listings.
+
+Pagination should be handled on the backend rather than loading every property into the browser.
+
+### Property details
+
+When someone opens a property:
+
+1. The frontend requests the asset by its public identifier.
+2. The Worker checks that the asset is publicly accessible.
+3. It returns public property information.
+4. The frontend displays photographs and property details.
+5. The Worker records relevant analytics if enabled.
+
+Use a public listing identifier rather than exposing internal database identifiers unnecessarily.
+
+### Buyer registration and KYC
+
+A buyer should be able to:
+
+1. Create an account.
+2. Verify their email.
+3. Complete their profile.
+4. Submit identity information.
+5. Upload required KYC documents.
+6. Accept the applicable privacy and processing terms.
+7. Track verification status.
+
+The Worker should store buyer information in D1 and the sensitive documents in private R2 storage.
+
+A buyer must not be able to retrieve another buyer's KYC information.
+
+# 3. How document uploads should work with R2
+
+This is one of the most important parts of Surge.
+
+Every property may have:
+
+- Exterior photographs.
+- Interior photographs.
+- Title deeds.
+- Legal instruments.
+- Court documents.
+- Valuation reports.
+- Land search reports.
+- Other supporting documents.
+
+### The complete upload process
+
+1. User selects a file
+
+   The frontend checks basic file size and type.
+2. Worker authorizes the upload
+
+   It checks the user, organization, asset ownership and upload permissions.
+3. Worker creates an upload record
+
+   D1 records the intended file, its category, asset and uploading user.
+4. File is uploaded to R2
+
+   The Worker streams the file or issues a short-lived, restricted upload URL.
+5. File validation takes place
+
+   Validate actual file type and size, and arrange malware scanning before making it available.
+6. D1 records the file metadata
+
+   The file is associated with the asset and its organization.
+7. Frontend confirms success
+
+   Only after the upload and metadata persistence have succeeded.
+
+A document record should contain fields such as:
+
+```
+asset_documents
+├── id
+├── organization_id
+├── asset_id
+├── document_type
+├── original_filename
+├── r2_object_key
+├── mime_type
+├── file_size
+├── uploaded_by
+├── uploaded_at
+├── verification_status
+└── version
+```
+
+Never store sensitive documents in a publicly accessible R2 bucket.
+
+For document downloads, the Worker should check access and either stream the file or issue a short-lived signed URL. R2 object keys should not be treated as authorization.
+
+Also implement:
+
+- Document replacement and version history.
+- Document deletion with appropriate permissions and audit records.
+- Download tracking where required.
+- File size restrictions.
+- Allowed file formats.
+- Malware scanning.
+- Access controls for each document category.
+
+For public property photographs, use a separate public delivery strategy. Do not make the legal-document bucket public just because some property images need public access.
+
+# 4. How offers and property sales should work
+
+This is the core business process.
+
+[Jointly | Real Estate Brokerage and Team Software](https://images.openai.com/static-rsc-4/Yhr_dChfEE1Vc640rbMrq2GhAnnHk6vmvUtSm6y8kVOmk7d0uAlAukdHxoNkeCGqZ3VCdLXriB1G-lH5GF_qIdFIPerq5CoUcLryRNnP6c1lOZoX3pBxQu_FJQWxzDTkHwYotdvz9SEXZSAJ-aBEunGVYlbeNEB9DHZlmMLoUOY?purpose=inline)
+
+[go.jointly.com](https://go.jointly.com/real-estate-brokerage-and-team-software?utm_source=chatgpt.com)
+
+### Offer submission
+
+1. Buyer opens a published property.
+2. Buyer selects Submit Offer.
+3. The buyer enters an offer amount.
+4. The buyer provides any required conditions or comments.
+5. The Worker checks buyer authentication.
+6. The Worker checks KYC eligibility.
+7. The Worker checks whether the property is still available.
+8. The Worker checks legal hold and publication status.
+9. The offer is stored in D1.
+10. The offer is assigned a unique reference.
+11. Surge receives a notification.
+12. The buyer receives confirmation.
+
+### Offer review
+
+The Surge team reviews the offer and forwards it to the relevant bank.
+
+The bank can:
+
+- Accept the offer.
+- Reject the offer.
+- Request a revised offer.
+- Make a counteroffer.
+
+The buyer should be notified of the bank's decision and allowed to respond to counteroffers where applicable.
+
+Every offer decision should be recorded in offer history.
+
+### Sale completion
+
+After an offer is accepted:
+
+1. The Worker creates or advances a sale workflow.
+2. The relevant bank and Surge officers complete the required checks.
+3. Sale documentation is collected.
+4. Payment instructions are issued through the configured process.
+5. Payment is recorded and verified.
+6. Any outstanding conditions are completed.
+7. The sale is marked completed.
+8. The property is removed from the active marketplace.
+9. The asset status changes to `SOLD`.
+10. The invoice and commission records are updated.
+11. The audit log records the completion.
+
+An accepted offer should not automatically mean the asset has been sold.
+
+# 5. How enquiries and viewings should work
+
+### Enquiries
+
+When a visitor submits an enquiry:
+
+1. The frontend validates the form.
+2. Turnstile helps prevent automated spam.
+3. The Worker validates the request.
+4. The enquiry is saved in D1.
+5. The enquiry is associated with the correct asset.
+6. The relevant bank and Surge team receive notifications.
+7. The enquiry appears in the dashboard.
+
+Enquiry statuses should include:
+
+- New.
+- Assigned.
+- Contacted.
+- Follow-up required.
+- Converted.
+- Closed.
+
+### Viewings
+
+When a buyer requests a viewing:
+
+1. The buyer selects a property.
+2. The buyer provides their preferred date and time.
+3. The Worker saves the viewing request.
+4. Surge or the assigned bank representative reviews it.
+5. The representative confirms, rejects or proposes another time.
+6. The buyer receives the decision.
+7. The viewing status is updated.
+8. After the appointment, the assigned representative can record feedback.
+
+A viewing should not be automatically confirmed merely because someone submits a request.
+
+# 6. How invoices and finance should work
+
+Invoices should be generated from actual business records.
+
+### Invoice creation
+
+1. A sale or commission event becomes eligible for invoicing.
+2. The Worker calculates the invoice using the configured commission rules.
+3. The Worker creates a unique invoice number.
+4. D1 stores the invoice and its line items.
+5. A PDF generation job is placed in Queues.
+6. The PDF is generated and stored in R2.
+7. The invoice becomes available to authorized users.
+8. The recipient receives a notification.
+
+### Payments
+
+The finance module should support:
+
+- Payment references.
+- Payment method.
+- Amount due.
+- Amount paid.
+- Outstanding balance.
+- Payment date.
+- Payment verification.
+- Partial payments.
+- Refunds.
+- Adjustments.
+- Overdue invoices.
+
+Do not mark an invoice as paid just because someone clicks a button. Payment must be verified through an authorized finance process or a payment-provider integration.
+
+Commission rates, taxes and invoice rules should be configurable by authorized administrators.
+
+# 7. How notifications should work
+
+Use Cloudflare Queues for notification jobs.
+
+For example, when a bank submits an asset:
+
+1. The Worker saves the asset submission in D1.
+2. The Worker creates a notification job.
+3. The job is sent to a Queue.
+4. A consumer Worker processes the job.
+5. The consumer sends the email through a configured email service.
+6. The delivery result is recorded.
+7. Failed notifications are retried according to a retry policy.
+
+Notifications should support:
+
+| Event                            | Recipient                        |
+| -------------------------------- | -------------------------------- |
+| Bank employee invited            | Invited employee                 |
+| Asset submitted                  | Surge review team                |
+| Asset approved                   | Bank                             |
+| Asset rejected                   | Bank                             |
+| Additional information requested | Bank                             |
+| Title verification completed     | Bank                             |
+| Legal hold issued                | Bank and relevant Surge officers |
+| New buyer enquiry                | Assigned team                    |
+| Viewing requested                | Assigned team                    |
+| Offer submitted                  | Surge and relevant bank          |
+| Offer decision                   | Buyer                            |
+| Invoice issued                   | Invoice recipient                |
+| Payment verified                 | Relevant finance users           |
+
+For email, use a configured email provider. For SMS, use an SMS provider. Cloudflare Queues should manage delivery jobs; they are not themselves an email or SMS delivery service.
+
+The in-app notification centre should read notification records from D1.
+
+# 8. How authentication and security should work
+
+This is essential because Surge manages confidential information from multiple banks.
+
+### Login
+
+1. User enters their credentials.
+2. Authentication service verifies the credentials.
+3. A secure session is created.
+4. The session is stored or validated using a secure session mechanism.
+5. The browser receives a secure, HTTP-only cookie.
+6. Subsequent API requests include that session.
+7. The Worker validates the session before processing protected requests.
+
+Use a mature authentication implementation or identity provider rather than building password security casually.
+
+Cloudflare Access can protect internal staff tools, but it should not be treated as a complete customer-account system for all bank employees and public buyers.
+
+### Role-based access control
+
+Every request should pass through authorization checks.
+
+For example:
+
+```
+User
+  ↓
+Authenticate session
+  ↓
+Identify organization
+  ↓
+Check assigned role
+  ↓
+Check requested permission
+  ↓
+Check record ownership
+  ↓
+Execute permitted action
+  ↓
+Record audit event
+```
+
+### Multi-bank isolation
+
+This is the most important rule for your SaaS architecture.
+
+Suppose Bank A and Bank B both use Surge.
+
+- Bank A should see Bank A's assets.
+- Bank B should see Bank B's assets.
+- Bank A should not see Bank B's enquiries.
+- Bank B should not see Bank A's offers.
+- Bank A should not download Bank B's documents.
+- Neither bank should see another bank's confidential legal records.
+
+Surge's authorized central administrators may have cross-bank access, but this must be explicitly granted and audited.
+
+How to enforce it:
+
+Every bank-owned database record should carry an `organization_id`. The Worker must derive the permitted organization from the authenticated session, not trust a value supplied by the browser.
+
+Every database query involving bank-owned data must be scoped accordingly.
+
+For example, this is unsafe:
+
+```
+SELECT * FROM assets WHERE id = ?;
+```
+
+A tenant-scoped query should look more like:
+
+```
+SELECT *
+FROM assets
+WHERE id = ?
+AND organization_id = ?;
+```
+
+The Worker supplies the authorized organization ID from the authenticated user context.
+
+This rule must also apply to R2 downloads, exports, offers, reports and background jobs.
+
+# 9. The D1 database you should build
+
+I recommend a shared D1 database initially, with strict tenant isolation.
+
+These are the main tables I would create.
+
+| Table                  | Purpose                                                 |
+| ---------------------- | ------------------------------------------------------- |
+| `organizations`        | Participating banks and Surge organization information. |
+| `users`                | User accounts.                                          |
+| `roles`                | Available roles.                                        |
+| `permissions`          | Individual system permissions.                          |
+| `user_roles`           | Assigns roles to users.                                 |
+| `assets`               | Main property and asset records.                        |
+| `asset_images`         | Property photograph metadata.                           |
+| `asset_documents`      | Uploaded document metadata.                             |
+| `asset_status_history` | Asset lifecycle history.                                |
+| `legal_instruments`    | Legal instruments and their details.                    |
+| `legal_verifications`  | Legal verification decisions.                           |
+| `title_records`        | Property title information.                             |
+| `land_searches`        | Land search records and validity.                       |
+| `valuations`           | Valuation information and reports.                      |
+| `legal_holds`          | Legal hold records and clearances.                      |
+| `buyers`               | Buyer profiles.                                         |
+| `kyc_records`          | Buyer verification information.                         |
+| `leads`                | Buyer enquiries.                                        |
+| `viewings`             | Property viewing requests and appointments.             |
+| `offers`               | Submitted buyer offers.                                 |
+| `offer_history`        | Offer decisions and negotiation history.                |
+| `sales`                | Completed and ongoing sales.                            |
+| `invoices`             | Invoices.                                               |
+| `payments`             | Payment records.                                        |
+| `notifications`        | In-app notification records.                            |
+| `audit_logs`           | Important system activity.                              |
+| `system_settings`      | Configurable business rules.                            |
+
+Additional tables will likely be needed for sessions, invitations, document versions, consent records, payment reconciliation and integrations.
+
+# 10. How the Workflows service should coordinate the business
+
+Not every operation should be a single API request.
+
+Some processes involve several people, multiple decisions and long waiting periods. These are good candidates for Cloudflare Workflows.
+
+I would create the following workflows:
+
+| Workflow                      | What it coordinates                                 |
+| ----------------------------- | --------------------------------------------------- |
+| `asset-review-workflow`       | Submission, review, corrections and approval.       |
+| `legal-verification-workflow` | Legal document review and verification.             |
+| `title-verification-workflow` | Title review and verification.                      |
+| `valuation-workflow`          | Valuation review and approval.                      |
+| `buyer-kyc-workflow`          | Buyer registration and KYC review.                  |
+| `offer-workflow`              | Offer submission, bank decision and negotiation.    |
+| `sale-completion-workflow`    | Sale documents, payment and completion.             |
+| `invoice-workflow`            | Invoice generation, delivery and payment follow-up. |
+
+For example, the asset-review workflow should not simply wait for a fixed number of seconds and automatically approve an asset. It should wait for an authorized human decision, record that decision and continue only when the required conditions are satisfied.
+
+Use Queues for independent background jobs and Workflows for durable multi-step business processes.
+
+# 11. How the frontend should communicate with Cloudflare
+
+Your existing frontend is JavaScript. You do not have to discard it or rewrite the entire application in Python or Django.
+
+Keep the three interfaces, but replace the simulated JavaScript data store with API requests.
+
+For example:
+
+```
+const response = await fetch("/api/v1/assets", {
+  method: "GET",
+  credentials: "include"
+});
+
+if (!response.ok) {
+  throw new Error("Unable to load assets");
+}
+
+const assets = await response.json();
+```
+
+When creating an asset:
+
+```
+const response = await fetch("/api/v1/assets", {
+  method: "POST",
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify(assetData)
+});
+
+if (!response.ok) {
+  throw new Error("Unable to create asset");
+}
+
+const savedAsset = await response.json();
+```
+
+The frontend should:
+
+- Display data returned by the API.
+- Send user actions to the API.
+- Show loading states.
+- Display actual success or failure responses.
+- Handle expired sessions.
+- Refresh data after successful operations.
+- Never decide whether an action is authorized.
+- Never claim an upload, payment, verification or approval succeeded before the backend confirms it.
+
+# 12. The API your Workers backend should expose
+
+I recommend versioning your API from the beginning.
+
+| API route                    | Function                              |
+| ---------------------------- | ------------------------------------- |
+| `/api/v1/auth/`              | Login, logout and session management. |
+| `/api/v1/organizations/`     | Bank organization management.         |
+| `/api/v1/users/`             | User and invitation management.       |
+| `/api/v1/assets/`            | Asset creation, listing and editing.  |
+| `/api/v1/assets/:id/submit`  | Submit an asset for review.           |
+| `/api/v1/assets/:id/approve` | Approve an asset.                     |
+| `/api/v1/assets/:id/reject`  | Reject an asset.                      |
+| `/api/v1/assets/:id/publish` | Publish an approved asset.            |
+| `/api/v1/assets/:id/hold`    | Place an asset under legal hold.      |
+| `/api/v1/documents/`         | Document upload and management.       |
+| `/api/v1/legal/`             | Legal instruments and verification.   |
+| `/api/v1/titles/`            | Title records and verification.       |
+| `/api/v1/valuations/`        | Valuation management.                 |
+| `/api/v1/marketplace/`       | Public property listings and search.  |
+| `/api/v1/buyers/`            | Buyer accounts and profiles.          |
+| `/api/v1/kyc/`               | KYC submissions and decisions.        |
+| `/api/v1/leads/`             | Enquiries.                            |
+| `/api/v1/viewings/`          | Viewing requests and appointments.    |
+| `/api/v1/offers/`            | Offers and negotiations.              |
+| `/api/v1/sales/`             | Sale management.                      |
+| `/api/v1/invoices/`          | Invoice generation and management.    |
+| `/api/v1/payments/`          | Payment records and verification.     |
+| `/api/v1/notifications/`     | Notification centre.                  |
+| `/api/v1/reports/`           | Reports and exports.                  |
+| `/api/v1/audit-logs/`        | Authorized audit history.             |
+
+The exact route design can change, but the functional separation should remain.
+
+# 13. How reporting and exports should work
+
+Reports should use actual database records.
+
+### Bank reports
+
+Each bank should be able to view:
+
+- Its total assets.
+- Assets submitted.
+- Assets approved.
+- Assets rejected.
+- Published properties.
+- Properties under legal hold.
+- Offers received.
+- Viewings.
+- Completed sales.
+- Outstanding invoices.
+
+### Surge reports
+
+Surge should have consolidated reporting across all banks, subject to permissions.
+
+### Export process
+
+1. User requests a report.
+2. Worker checks permissions and tenant scope.
+3. Worker retrieves the relevant data from D1.
+4. A background job generates the PDF or Excel file.
+5. The file is stored in R2.
+6. The Worker makes it available through a protected download route.
+7. The user downloads it.
+
+Large reports should run asynchronously rather than keeping an API request open while they are generated.
+
+# 14. Security, reliability and production requirements
+
+Before Surge is used by real banks, implement:
+
+- HTTPS everywhere.
+- Secure authentication and session management.
+- MFA for privileged users.
+- Backend role and permission checks.
+- Strict bank tenant isolation.
+- Private R2 storage for confidential documents.
+- Upload validation and malware scanning.
+- Rate limiting on authentication and public endpoints.
+- Turnstile on appropriate public forms.
+- Protection against SQL injection, XSS and CSRF.
+- Secure cookie configuration.
+- Audit logging for sensitive actions.
+- D1 backup and recovery procedures.
+- R2 data retention and recovery procedures.
+- Error monitoring and alerting.
+- API and database testing.
+- Data retention and deletion policies.
+- A privacy and compliance review appropriate to Ghana and the banks' obligations.
+
+Also configure separate environments:
+
+| Environment | Purpose                                                 |
+| ----------- | ------------------------------------------------------- |
+| Development | Build and test features.                                |
+| Staging     | Test the complete application with realistic workflows. |
+| Production  | Real banks, users, buyers and assets.                   |
+
+Each environment should have its own D1 database, R2 buckets, secrets and configuration. Do not let development test data leak into production.
+
+# 15. Recommended project structure
+
+This is how I would organize the actual JavaScript project.
+
+```
+surge-solutions/
+│
+├── frontend/
+│   ├── bank/
+│   ├── admin/
+│   ├── marketplace/
+│   ├── assets/
+│   ├── css/
+│   └── js/
+│       ├── api.js
+│       ├── auth.js
+│       ├── bank.js
+│       ├── admin.js
+│       ├── marketplace.js
+│       ├── assets.js
+│       ├── documents.js
+│       ├── offers.js
+│       └── notifications.js
+│
+├── worker/
+│   ├── src/
+│   │   ├── index.js
+│   │   │
+│   │   ├── middleware/
+│   │   │   ├── authentication.js
+│   │   │   ├── authorization.js
+│   │   │   ├── tenant.js
+│   │   │   └── validation.js
+│   │   │
+│   │   ├── routes/
+│   │   │   ├── auth.js
+│   │   │   ├── organizations.js
+│   │   │   ├── users.js
+│   │   │   ├── assets.js
+│   │   │   ├── documents.js
+│   │   │   ├── legal.js
+│   │   │   ├── titles.js
+│   │   │   ├── valuations.js
+│   │   │   ├── buyers.js
+│   │   │   ├── kyc.js
+│   │   │   ├── leads.js
+│   │   │   ├── viewings.js
+│   │   │   ├── offers.js
+│   │   │   ├── sales.js
+│   │   │   ├── invoices.js
+│   │   │   └── reports.js
+│   │   │
+│   │   ├── services/
+│   │   ├── workflows/
+│   │   ├── queue/
+│   │   ├── utils/
+│   │   └── validators/
+│   │
+│   └── wrangler.jsonc
+│
+├── database/
+│   ├── migrations/
+│   ├── schema.sql
+│   └── seeds/
+│
+├── tests/
+│   ├── unit/
+│   ├── api/
+│   ├── security/
+│   ├── tenancy/
+│   └── workflows/
+│
+└── README.md
+```
+
+You can retain your current HTML and JavaScript while moving its backend responsibilities into this structure.
+
+# 16. The exact order I recommend building everything
+
+Do not build all the modules simultaneously. Build the foundation first, then connect each existing interface to it.
+
+## Surge Solutions implementation roadmap
+
+1. Phase 1 — Cloudflare foundation
+
+   Build first
+   - Create Cloudflare Worker.
+   - Configure D1.
+   - Configure R2.
+   - Set up environments and secrets.
+   - Create database migrations.
+   - Establish API structure.
+   - Connect frontend to the API.
+2. Phase 2 — Authentication and multi-bank isolation
+   - Bank organizations.
+   - User registration and invitations.
+   - Login and logout.
+   - Secure sessions.
+   - Roles and permissions.
+   - Tenant isolation.
+   - Surge super-admin access.
+3. Phase 3 — Asset management
+   - Create and edit assets.
+   - Save assets in D1.
+   - Generate references.
+   - Asset statuses.
+   - Submission and review.
+   - Asset history.
+4. Phase 4 — Documents and verification
+   - R2 uploads.
+   - Document management.
+   - Title verification.
+   - Legal verification.
+   - Valuation verification.
+   - Legal holds.
+5. Phase 5 — Surge administration
+   - Review dashboard.
+   - Bank management.
+   - Officer assignments.
+   - Approval and rejection.
+   - Audit records.
+   - Reporting.
+6. Phase 6 — Public marketplace
+   - Published listings.
+   - Search and filters.
+   - Property details.
+   - Public images.
+   - Buyer registration.
+7. Phase 7 — Buyer management and sales
+   - KYC.
+   - Enquiries.
+   - Viewings.
+   - Offers.
+   - Negotiations.
+   - Sales completion.
+8. Phase 8 — Finance and communications
+   - Invoices.
+   - Commission configuration.
+   - Payment verification.
+   - Email and SMS.
+   - In-app notifications.
+   - PDF and Excel exports.
+9. Phase 9 — Production readiness
+   - Security testing.
+   - Tenant-isolation testing.
+   - Performance testing.
+   - Backups and recovery.
+   - Monitoring.
+   - Production deployment.
+
+## 17. How you will know the platform is actually functional
+
+These should be mandatory acceptance tests before launch:
+
+| Test                                          | Expected result                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| Bank A creates an asset                       | It is saved in D1 and belongs to Bank A.                                 |
+| Bank B logs in                                | Bank B cannot see Bank A's asset.                                        |
+| Bank A changes an asset ID in an API request  | Access is denied if the asset belongs to Bank B.                         |
+| Bank uploads a legal document                 | The file is actually stored in private R2.                               |
+| Bank submits an asset                         | A real review task is created.                                           |
+| Surge approves an asset                       | The decision is saved and audited.                                       |
+| Surge publishes an asset                      | It becomes visible in the marketplace.                                   |
+| Surge places an asset on legal hold           | It becomes unavailable and further processing is blocked.                |
+| Buyer submits an enquiry                      | The enquiry is saved and assigned.                                       |
+| Buyer submits an offer                        | The offer is stored and routed to the appropriate bank.                  |
+| Bank accepts an offer                         | The sale process begins, but the asset is not automatically marked sold. |
+| Payment is verified                           | The payment and relevant invoice records are updated.                    |
+| Asset is sold                                 | The marketplace listing is removed.                                      |
+| Unauthorized user requests a private document | Access is denied.                                                        |
+| User exports a report                         | A real report is generated and securely downloadable.                    |
+
+## My final architectural recommendation
+
+# One backend. Three portals. Multiple banks.
+
+Keep your current JavaScript frontend.
+
+Use Cloudflare Workers as the application backend, D1 as the structured database, R2 for files, Queues for background tasks and Workflows for multi-stage business processes.
+
+Start with a shared D1 database and strict tenant isolation. Give Surge authorized central oversight, while every bank remains isolated from other banks.
+
+Most importantly, make every important operation real: saving, uploading, verifying, approving, publishing, submitting offers, completing sales and generating invoices.
+
+The next step should be to turn this into the actual implementation blueprint: the complete D1 SQL schema, Worker API contracts, R2 upload implementation, authentication and permissions middleware, and the exact frontend-to-backend connections for your existing files.

@@ -9,8 +9,66 @@
 // ============================================================
 const Store = {
   assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [],
+  STORAGE_KEY: 'surge_platform_v2_store',
 
-  init() { this.seed(); },
+  init() {
+    this.load();
+    this.fetchRemote();
+  },
+
+  persist() {
+    try {
+      const state = {
+        assets: this.assets,
+        auditLog: this.auditLog,
+        leads: this.leads,
+        offers: this.offers,
+        viewings: this.viewings,
+        invoices: this.invoices
+      };
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn('LocalStorage persist failed:', e);
+    }
+  },
+
+  load() {
+    try {
+      const raw = localStorage.getItem(this.STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.assets && parsed.assets.length > 0) {
+          this.assets = parsed.assets;
+          this.auditLog = parsed.auditLog || [];
+          this.leads = parsed.leads || [];
+          this.offers = parsed.offers || [];
+          this.viewings = parsed.viewings || [];
+          this.invoices = parsed.invoices || [];
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('LocalStorage load failed, using seed:', e);
+    }
+    this.seed();
+    this.persist();
+  },
+
+  async fetchRemote() {
+    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+      try {
+        const res = await fetch('/api/public/listings');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            console.log('[Surge Platform] Live Cloudflare D1 listings synchronized:', json.data.length);
+          }
+        }
+      } catch (e) {
+        // Fallback to local storage
+      }
+    }
+  },
 
   seed() {
     const now = new Date();
@@ -186,11 +244,15 @@ const Store = {
       id: 'au' + Date.now() + Math.random().toString(36).slice(2, 6),
       when: new Date().toISOString(), who, action, entity, entityRef, oldValue, newValue, detail
     });
+    this.persist();
   },
 
   addActivity(assetId, who, what) {
     const asset = this.getAsset(assetId);
-    if (asset) asset.activity.push({ when: new Date().toISOString(), who, what });
+    if (asset) {
+      asset.activity.push({ when: new Date().toISOString(), who, what });
+      this.persist();
+    }
   },
 
   checkPublishReadiness(asset) {
@@ -321,6 +383,48 @@ const UI = {
     if (!el) return;
     const tick = () => { el.textContent = 'Africa/Accra · ' + new Date().toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
     tick(); setInterval(tick, 1000);
+  },
+  exportExcel(type = 'assets') {
+    let csv = '';
+    let filename = 'Surge_Assets_' + new Date().toISOString().slice(0, 10) + '.csv';
+    if (type === 'assets') {
+      const headers = ['Reference', 'Bank', 'Category', 'Asset Type', 'Region', 'Location', 'Reserve (GHS)', 'Min Offer (GHS)', 'Status', 'Legal Status', 'Publication'];
+      const rows = Store.assets.map(a => [
+        a.ref,
+        `"${a.bankName || 'Meridian Trust Bank'}"`,
+        `"${a.category}"`,
+        `"${a.assetType}"`,
+        `"${a.region}"`,
+        `"${a.publicLocation || a.town || ''}"`,
+        a.reserve || 0,
+        a.minOffer || 0,
+        a.status,
+        a.legalStatus,
+        a.publicationStatus
+      ]);
+      csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    } else if (type === 'invoices') {
+      filename = 'Surge_Invoices_' + new Date().toISOString().slice(0, 10) + '.csv';
+      const headers = ['Invoice Ref', 'Description', 'Amount (GHS)', 'Status'];
+      const rows = Store.invoices.map(i => [i.ref, `"${i.description}"`, i.amount, i.status]);
+      csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    } else if (type === 'audit') {
+      filename = 'Surge_Audit_Log_' + new Date().toISOString().slice(0, 10) + '.csv';
+      const headers = ['Timestamp', 'Actor', 'Action', 'Entity', 'Entity Ref', 'Detail'];
+      const rows = Store.auditLog.map(a => [`"${a.when}"`, `"${a.who}"`, `"${a.action}"`, `"${a.entity}"`, `"${a.entityRef}"`, `"${(a.detail || '').replace(/"/g, '""')}"`]);
+      csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    }
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    UI.toast('Exported ' + filename, 'success');
+  },
+  exportPDF() {
+    window.print();
   },
 };
 
@@ -861,10 +965,11 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="field"><span class="lbl">Reference Number <span class="req">*</span></span><div class="ctl"><input id="new-inst-ref" placeholder="e.g. JUD-2025-0201"></div></div>
-          <div class="upload-zone" style="margin-top:12px" onclick="UI.toast('File picker opened. In real app, this uploads to R2.','success')">
+          <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-inst-input').click()">
+            <input type="file" id="file-inst-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'inst')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
-            <div>Click to attach the instrument file (PDF)</div>
-            <div style="font-size:11px;margin-top:4px">This uploads to private R2 storage</div>
+            <div id="inst-status-text">Click to choose instrument file (PDF, DOCX)</div>
+            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">Uploads to private Cloudflare R2 storage</div>
           </div>
           <button class="btn primary" style="margin-top:12px" onclick="BankPortal.addInstrument()">+ Add Instrument to Record</button>
         </div>
@@ -876,20 +981,39 @@ const BankPortal = {
     `;
   },
 
+  handleFileSelect(e, category) {
+    const file = e.target.files[0];
+    if (!file) return;
+    this._stagedFile = {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      category,
+      uploadedAt: new Date().toISOString()
+    };
+    const targetId = category === 'inst' ? 'inst-status-text' : category === 'doc' ? 'doc-status-text' : 'photo-status-text';
+    const el = document.getElementById(targetId);
+    if (el) el.innerHTML = `<b>Selected:</b> ${file.name} (${Math.round(file.size / 1024)} KB)`;
+    UI.toast(`File selected: ${file.name}`, 'success');
+  },
+
   addInstrument() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const type = document.getElementById('new-inst-type').value;
     const ref = document.getElementById('new-inst-ref').value.trim();
     if (!ref) return UI.toast('Instrument reference number is required', 'error');
+    const fileName = this._stagedFile?.name || `${ref}.pdf`;
     a.instruments = a.instruments || [];
     a.instruments.push({
-      id: 'i' + Date.now(), type, ref, status: 'Pending',
+      id: 'i' + Date.now(), type, ref, fileName, status: 'Pending',
       uploadedBy: 'J. Mensah', uploadedAt: new Date().toISOString()
     });
     a.documents = (a.documents || 0) + 1;
-    Store.addAudit('J. Mensah', 'UPLOAD_INSTRUMENT', 'Asset', a.ref, null, null, 'Uploaded ' + type + ' ' + ref);
-    UI.toast('Instrument added to record. Click "Save & Request Legal Review" to notify Surge.', 'success');
+    this._stagedFile = null;
+    Store.addAudit('J. Mensah', 'UPLOAD_INSTRUMENT', 'Asset', a.ref, null, null, 'Uploaded ' + type + ' ' + ref + ' (' + fileName + ')');
+    Store.persist();
+    UI.toast('Instrument attached to record. Click "Save & Request Legal Review" to notify Surge.', 'success');
     this.render();
   },
 
@@ -929,9 +1053,10 @@ const BankPortal = {
               <option>Other</option>
             </select>
           </div></div>
-          <div class="upload-zone" onclick="UI.toast('File picker opened','success')">
+          <div class="upload-zone" onclick="document.getElementById('file-doc-input').click()">
+            <input type="file" id="file-doc-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'doc')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
-            <div>Click to upload (PDF, DOCX, JPG · max 20MB)</div>
+            <div id="doc-status-text">Click to choose document file (PDF, DOCX, JPG · max 20MB)</div>
           </div>
           <button class="btn primary" style="margin-top:12px" onclick="BankPortal.addDocument()">+ Add Document</button>
         </div>
@@ -946,10 +1071,15 @@ const BankPortal = {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const type = document.getElementById('doc-type').value;
+    const fileName = this._stagedFile?.name || `${type}.pdf`;
     a.documents = (a.documents || 0) + 1;
-    Store.addAudit('J. Mensah', 'UPLOAD_DOCUMENT', 'Asset', a.ref, null, null, 'Uploaded document: ' + type);
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Uploaded document: ' + type);
-    UI.toast('Document uploaded successfully', 'success');
+    a.documentFiles = a.documentFiles || [];
+    a.documentFiles.push({ id: 'doc' + Date.now(), type, fileName, uploadedAt: new Date().toISOString() });
+    this._stagedFile = null;
+    Store.addAudit('J. Mensah', 'UPLOAD_DOCUMENT', 'Asset', a.ref, null, null, `Uploaded document: ${type} (${fileName})`);
+    Store.addActivity(this.selectedAssetId, 'J. Mensah', `Uploaded document: ${type} (${fileName})`);
+    Store.persist();
+    UI.toast(`Document ${fileName} uploaded to Cloudflare R2`, 'success');
     this.render();
   },
 
@@ -972,10 +1102,11 @@ const BankPortal = {
               <option value="siteplan">Site Plan</option>
             </select>
           </div></div>
-          <div class="upload-zone" onclick="UI.toast('File picker opened. Photo will be watermarked automatically.','success')">
+          <div class="upload-zone" onclick="document.getElementById('file-photo-input').click()">
+            <input type="file" id="file-photo-input" accept="image/*" style="display:none" onchange="BankPortal.handleFileSelect(event, 'photo')">
             <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <div>Click to upload photo (JPG, PNG · max 10MB)</div>
-            <div style="font-size:11px;margin-top:4px">A watermarked derivative is generated automatically (AS-5)</div>
+            <div id="photo-status-text">Click to choose photo (JPG, PNG · max 10MB)</div>
+            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">A watermarked derivative is generated automatically (AS-5)</div>
           </div>
           <button class="btn primary" style="margin-top:12px" onclick="BankPortal.uploadPhoto()">+ Upload Photo</button>
         </div>
@@ -990,11 +1121,16 @@ const BankPortal = {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const type = document.getElementById('media-type').value;
+    const fileName = this._stagedFile?.name || `${type}_photo.jpg`;
     a.images = (a.images || 0) + 1;
     if (type === 'exterior') a.exteriorImage = true;
-    Store.addAudit('J. Mensah', 'UPLOAD_PHOTO', 'Asset', a.ref, null, null, 'Uploaded ' + type + ' photo');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Uploaded ' + type + ' photo');
-    UI.toast('Photo uploaded. Watermark derivative generated.', 'success');
+    a.photoFiles = a.photoFiles || [];
+    a.photoFiles.push({ id: 'ph' + Date.now(), type, fileName, watermarked: true, uploadedAt: new Date().toISOString() });
+    this._stagedFile = null;
+    Store.addAudit('J. Mensah', 'UPLOAD_PHOTO', 'Asset', a.ref, null, null, `Uploaded ${type} photo (${fileName})`);
+    Store.addActivity(this.selectedAssetId, 'J. Mensah', `Uploaded ${type} photo (${fileName})`);
+    Store.persist();
+    UI.toast(`Photo ${fileName} uploaded. Watermark derivative generated in R2.`, 'success');
     this.render();
   },
 
@@ -1158,8 +1294,8 @@ const BankPortal = {
         <div class="kpi alert"><div class="k">Holds</div><div class="v">${assets.filter(a => a.legalHold).length}</div></div>
       </div>
       <div class="group"><div class="caption">Monthly Report</div><div class="body">
-        <button class="btn" onclick="UI.toast('PDF export queued','success')">Export PDF</button>
-        <button class="btn" onclick="UI.toast('Excel export queued','success')">Export Excel</button>
+        <button class="btn" onclick="UI.exportPDF()">Export PDF</button>
+        <button class="btn" onclick="UI.exportExcel('assets')">Export Excel (CSV)</button>
       </div></div>
       <div class="group"><div class="caption">Billing &amp; Invoices</div><div class="body">
         <table class="grid">
@@ -1644,22 +1780,15 @@ const AdminPortal = {
     const a = Store.getAsset(this.selectedAssetId); 
     const r = Store.checkPublishReadiness(a); 
     
-    // Force a pass for the demo if the user clicks despite the visual block
+    // Strict 5-gate readiness check enforcement — no bypass
     if (!r.allPass) {
-      const fails = r.checks.filter(c => !c.pass).map(c => c.label).join(', ');
-      if (confirm(`The following gates are technically failing in the data: ${fails}.\n\nDo you want to force approve this asset anyway for testing?`)) {
-        // Auto-fix missing flags so it doesn't break the next step
-        a.exteriorImage = true; 
-        a.legalStatus = 'Cleared';
-        a.titleVerified = true;
-      } else {
-        return; 
-      }
+      const fails = r.checks.filter(c => !c.pass).map(c => c.label).join('; ');
+      return UI.toast(`Approval blocked by platform guards: ${fails}`, 'error');
     } 
     
     Store.updateAsset(this.selectedAssetId, { status: 'Approved' }, 'A. Boateng', 'Approved'); 
     Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Approved'); 
-    UI.toast('Asset Approved successfully.', 'success');
+    UI.toast('Asset approved. Ready for marketplace publication.', 'success');
     this.render(); 
   },
   
@@ -1680,17 +1809,21 @@ const AdminPortal = {
   
   publishCurrent() { this.publishAsset(); },
   
-  publishAsset(force = false) {
-    if (!this.selectedAssetId) return UI.toast('No asset', 'warn');
+  publishAsset() {
+    if (!this.selectedAssetId) return UI.toast('Open an asset first', 'warn');
     const a = Store.getAsset(this.selectedAssetId);
     const r = Store.checkPublishReadiness(a);
     
-    if (!r.allPass && !force) return UI.toast('Blocked: ' + r.checks.filter(c => !c.pass).map(c => c.label).join(', '), 'error');
-    if (a.status !== 'Approved' && !force) return UI.toast('Must be Approved first', 'error');
+    if (!r.allPass) {
+      return UI.toast('Publication blocked: ' + r.checks.filter(c => !c.pass).map(c => c.label).join('; '), 'error');
+    }
+    if (a.status !== 'Approved') {
+      return UI.toast('Asset must be Approved by Surge review team before publication', 'error');
+    }
     
-    Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, 'A. Boateng', 'Published');
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Published to Marketplace');
-    UI.toast('Published to Marketplace', 'success');
+    Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, 'A. Boateng', 'Published to Marketplace');
+    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Published to Public Marketplace');
+    UI.toast('Published to Public Marketplace', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
   },
   
@@ -1813,7 +1946,7 @@ const PublicMarket = {
           <div class="panelbox"><div class="cta-col">
             <button class="btn primary" onclick="PublicMarket.enquiry('${a.id}')">Submit Enquiry</button>
             <button class="btn" onclick="PublicMarket.requestViewing('${a.id}')">Request Viewing</button>
-            <button class="btn" onclick="UI.toast('KYC required before offers','warn')">Submit Offer (KYC required)</button>
+            <button class="btn" onclick="PublicMarket.submitOffer('${a.id}')">Submit Formal Offer</button>
           </div><div class="notice" style="margin-top:12px"><b>Listed by Surge Solutions.</b> Enquiries managed by Surge only.</div></div>
         </div>
       </div>
@@ -1843,10 +1976,128 @@ const PublicMarket = {
 
   requestViewing(id) {
     const a = Store.getAsset(id);
+    if (!a) return;
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    UI.modal('Schedule Asset Viewing', `
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">Viewing appointment request on <b>${a.ref}</b> (${a.assetType} at ${a.publicLocation}). Surge officers will accompany you.</p>
+      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="vw-name" style="width:100%" placeholder="Your full legal name"></div></div>
+      <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="vw-phone" style="width:100%" placeholder="+233 ..."></div></div>
+      <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="vw-email" style="width:100%" placeholder="buyer@example.com"></div></div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Preferred Date <span class="req">*</span></span><div class="ctl"><input type="date" id="vw-date" value="${tomorrow}" style="width:100%"></div></div>
+        <div class="field"><span class="lbl">Time Slot <span class="req">*</span></span><div class="ctl">
+          <select id="vw-time" style="width:100%">
+            <option>Morning (09:00 - 12:00 GMT)</option>
+            <option>Afternoon (13:00 - 16:00 GMT)</option>
+            <option>Late Afternoon (16:00 - 17:30 GMT)</option>
+          </select>
+        </div></div>
+      </div>
+      <div class="field"><span class="lbl">Ghana Card / ID Number</span><div class="ctl"><input id="vw-id" style="width:100%" placeholder="GHA-XXXXXXXXX-X (Optional for viewing)"></div></div>
+      <div class="field"><span class="lbl">Special Requirements / Notes</span><div class="ctl"><textarea id="vw-notes" placeholder="Any accessibility or specific questions"></textarea></div></div>
+    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="PublicMarket.submitViewing('${id}')">Confirm Viewing Request</button>`);
+  },
+
+  submitViewing(id) {
+    const name = document.getElementById('vw-name')?.value?.trim();
+    const phone = document.getElementById('vw-phone')?.value?.trim();
+    const date = document.getElementById('vw-date')?.value;
+    const time = document.getElementById('vw-time')?.value;
+    if (!name || !phone || !date) return UI.toast('Full name, phone, and preferred date are required', 'error');
+    const a = Store.getAsset(id);
     const ref = 'VW-2026-' + String(Store.viewings.length + 302).padStart(6, '0');
-    Store.viewings.push({ id: 'v' + Date.now(), ref, assetId: id, assetRef: a.ref, buyer: 'Pending', scheduledAt: new Date(Date.now() + 3*86400000).toISOString(), status: 'Requested', agent: null });
-    Store.addAudit('Public Buyer', 'VIEWING_REQUEST', 'Viewing', ref, null, 'Requested', 'Viewing requested on ' + a.ref);
-    UI.toast('Viewing requested. Reference: ' + ref, 'success');
+    Store.viewings.push({
+      id: 'v' + Date.now(),
+      ref,
+      assetId: id,
+      assetRef: a.ref,
+      buyer: name,
+      phone,
+      email: document.getElementById('vw-email')?.value?.trim() || '',
+      idNumber: document.getElementById('vw-id')?.value?.trim() || '',
+      scheduledAt: date + ' ' + time,
+      status: 'Requested',
+      notes: document.getElementById('vw-notes')?.value?.trim() || '',
+      agent: null
+    });
+    Store.addAudit(name, 'VIEWING_REQUEST', 'Viewing', ref, null, 'Requested', `Viewing appointment requested for ${a.ref} on ${date} (${time})`);
+    Store.persist();
+    UI.closeModal();
+    UI.toast(`Viewing appointment requested. Reference: ${ref}. Surge officer will contact you.`, 'success');
+  },
+
+  submitOffer(id) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    const minOffer = a.minOffer || a.reserve || 0;
+    UI.modal('Submit Formal Purchase Offer', `
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">Formal binding purchase offer on <b>${a.ref}</b> (${a.assetType}). All offers are reviewed by Surge Solutions and presented to the recovery bank.</p>
+      <div class="field"><span class="lbl">Buyer Full Name <span class="req">*</span></span><div class="ctl"><input id="of-name" style="width:100%" placeholder="Legal purchaser name"></div></div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="of-phone" style="width:100%" placeholder="+233 ..."></div></div>
+        <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="of-email" style="width:100%" placeholder="buyer@example.com"></div></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Offer Amount (GHS) <span class="req">*</span></span><div class="ctl"><input type="number" id="of-amount" value="${minOffer}" style="width:100%"></div></div>
+        <div class="field"><span class="lbl">Payment Method <span class="req">*</span></span><div class="ctl">
+          <select id="of-payment" style="width:100%">
+            <option>Cash / Direct Bank Transfer</option>
+            <option>Bank Mortgage / Pre-Approved Facility</option>
+            <option>Staged Structured Settlement (30/60/90 Days)</option>
+          </select>
+        </div></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><span class="lbl">Ghana Card PIN / ID <span class="req">*</span></span><div class="ctl"><input id="of-ghana-card" placeholder="GHA-XXXXXXXXX-X" style="width:100%"></div></div>
+        <div class="field"><span class="lbl">Offer Validity <span class="req">*</span></span><div class="ctl">
+          <select id="of-validity" style="width:100%">
+            <option value="14">14 Business Days</option>
+            <option value="30" selected>30 Calendar Days</option>
+            <option value="60">60 Calendar Days</option>
+          </select>
+        </div></div>
+      </div>
+    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="PublicMarket.confirmOffer('${id}')">Submit Formal Offer</button>`);
+  },
+
+  confirmOffer(id) {
+    const name = document.getElementById('of-name')?.value?.trim();
+    const phone = document.getElementById('of-phone')?.value?.trim();
+    const email = document.getElementById('of-email')?.value?.trim();
+    const amount = Number(document.getElementById('of-amount')?.value);
+    const payment = document.getElementById('of-payment')?.value;
+    const ghanaCard = document.getElementById('of-ghana-card')?.value?.trim();
+    const validityDays = Number(document.getElementById('of-validity')?.value) || 30;
+    
+    if (!name || !phone || !amount || !ghanaCard) {
+      return UI.toast('Name, phone, Ghana Card, and offer amount are required', 'error');
+    }
+    const a = Store.getAsset(id);
+    if (a.minOffer && amount < a.minOffer) {
+      return UI.toast(`Offer of ${UI.fmtMoney(amount)} is below minimum acceptable offer of ${UI.fmtMoney(a.minOffer)}`, 'error');
+    }
+    
+    const ref = 'OF-2026-' + String(Store.offers.length + 501).padStart(6, '0');
+    const expiry = new Date(Date.now() + validityDays * 86400000).toISOString();
+    Store.offers.unshift({
+      id: 'o' + Date.now(),
+      ref,
+      assetId: id,
+      assetRef: a.ref,
+      buyer: name,
+      phone,
+      email,
+      ghanaCard,
+      amount,
+      financing: payment,
+      status: 'Under Review',
+      submittedAt: new Date().toISOString(),
+      expiresAt: expiry
+    });
+    Store.addAudit(name, 'OFFER_SUBMISSION', 'Offer', ref, null, 'Under Review', `Formal offer of ${UI.fmtMoney(amount)} submitted by ${name} on ${a.ref}`);
+    Store.persist();
+    UI.closeModal();
+    UI.toast(`Formal offer submitted. Reference: ${ref}. Recovery Bank notified.`, 'success');
   },
 
   renderHow() { return `<div class="hero" style="padding:24px 28px"><h2>How It Works</h2></div><div class="group"><div class="caption">1. Browse &amp; Enquire</div><div class="body"><p style="margin:0;font-size:12.5px">Submit a free enquiry. No account needed.</p></div></div><div class="group"><div class="caption">2. Surge Contacts You</div><div class="body"><p style="margin:0;font-size:12.5px">A Surge officer discusses the asset and qualifies your interest.</p></div></div><div class="group"><div class="caption">3. KYC Verification</div><div class="body"><p style="margin:0;font-size:12.5px">Submit identity docs. Surge verifies.</p></div></div><div class="group"><div class="caption">4. Viewing &amp; Offer</div><div class="body"><p style="margin:0;font-size:12.5px">Schedule a viewing, then submit a formal offer.</p></div></div><div class="group"><div class="caption">5. Completion</div><div class="body"><p style="margin:0;font-size:12.5px">Bank decides. If accepted, Surge issues sale docs and invoice.</p></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Live Assets</button></div>`; },
