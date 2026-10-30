@@ -10,60 +10,14 @@
 <body data-portal="admin">
 <nav class="switcher">
   <span class="brandmark">SURGE <span>&#9632;</span></span>
-  <button data-app="bank">Bank Portal</button>
+  <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>
   <button data-app="admin" class="active">Surge Admin</button>
-  <button data-app="public">Marketplace</button>
+  <a href="marketplace.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</a>
   <span class="note">Surge Disposition Platform</span>
+  <button class="tbtn" onclick="Auth.logout()" style="color:#E0555C;margin-left:auto;border:1px solid rgba(224,85,92,0.4);border-radius:2px;padding:3px 10px;font-size:11.5px;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:middle;margin-right:4px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
 </nav>
 
 <div class="viewport">
-  <!-- BANK PORTAL -->
-  <section class="app" id="app-bank">
-    <div class="window">
-      <div class="menubar">
-        <span class="app-title"><span class="sq"></span>Surge Solutions</span>
-        
-        <span class="menu-item" onclick="BankPortal.nav('assets')"><u>A</u>ssets</span>
-        <span class="menu-item" onclick="BankPortal.nav('legal')"><u>L</u>egal</span>
-        <span class="menu-item" onclick="BankPortal.nav('offers')"><u>S</u>ales</span>
-        <span class="menu-item" onclick="BankPortal.nav('reports')"><u>R</u>eports</span>
-                <span class="menu-spacer"></span>
-        <span class="menu-env">BANK PORTAL</span>
-      </div>
-      <div class="toolbar">
-        <button class="tbtn" onclick="BankPortal.newAsset()"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button>
-        <button class="tbtn" onclick="BankPortal.saveCurrent()"><svg class="ico" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h7V4"/><path d="M8 20v-6h8v6"/></svg>Save</button>
-        <span class="tsep"></span>
-        <button class="tbtn" onclick="BankPortal.submitCurrent()"><svg class="ico" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6z"/></svg>Submit for Review</button>
-        <span class="tsep"></span>
-        <button class="tbtn" onclick="UI.exportPDF()"><svg class="ico" viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="8" rx="1"/><path d="M7 17h10v4H7z"/></svg>Print</button>
-        <button class="tbtn" onclick="UI.exportExcel('assets')"><svg class="ico" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg>Export</button>
-      </div>
-      <div class="mainrow">
-        <nav class="navpane" id="bank-nav">
-          <div class="navitem" data-view="dashboard"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</div>
-          <div class="navitem active" data-view="assets"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>My Assets</div>
-          <div class="navitem" data-view="legal"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>Legal &amp; Enforcement</div>
-          <div class="navitem" data-view="documents"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l7-2 9-9-5-5-9 9z"/><path d="M14 4l5 5"/></svg>Title &amp; Documents</div>
-          <div class="navitem" data-view="offers"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>Offers &amp; Decisions</div>
-          <div class="navitem" data-view="reports"><svg class="ico" viewBox="0 0 24 24"><path d="M5 20V9M12 20V4M19 20v-7"/></svg>Reports</div>
-          <div class="navitem" data-view="notifications"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V9a6 6 0 0112 0v7"/><path d="M4 16h16v4H4z"/></svg>Notifications</div>
-        </nav>
-        <div class="workspace">
-          <div class="doctabs" id="bank-doctabs"></div>
-          <main class="work" id="bank-work"></main>
-          <footer class="statusbar">
-            <span class="cell">User: <b>j.mensah</b></span>
-            <span class="cell">Role: <b>Legal / Recovery Officer</b></span>
-            <span class="cell">Org: <b>Surge Solutions Platform Operator</b></span>
-            
-            <span class="cell grow" id="clock-bank"></span>
-          </footer>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- SURGE ADMIN -->
   <section class="app active" id="app-admin">
     <div class="window">
@@ -85,7 +39,7 @@
         <button class="tbtn" onclick="AdminPortal.nav('banks')"><svg class="ico" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>Banks &amp; Staff</button>
         <button class="tbtn" onclick="AdminPortal.nav('audit')"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Audit Log</button>
         <span class="tsep"></span>
-        <button class="tbtn" onclick="Auth.logout()"><svg class="ico" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
+        <button class="tbtn" onclick="Auth.logout()" style="color:#B3262E"><svg class="ico" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
       </div>
       <div class="mainrow">
         <nav class="navpane" id="admin-nav">
@@ -102,34 +56,12 @@
           <div class="doctabs" id="admin-doctabs"></div>
           <main class="work" id="admin-work"></main>
           <footer class="statusbar">
-            <span class="cell">User: <b>a.boateng</b></span>
-            <span class="cell">Role: <b>Property Manager</b></span>
+            <span class="cell">User: <b>admin</b></span>
+            <span class="cell">Role: <b>Super Administrator</b></span>
             <span class="cell">Org: <b>Surge Solutions</b></span>
-            
             <span class="cell grow" id="clock-admin"></span>
           </footer>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- PUBLIC -->
-  <section class="app" id="app-public">
-    <div class="window" style="background:var(--win-bg)">
-      <div class="pub">
-        <header class="pub-header">
-          <div class="pub-logo" onclick="PublicMarket.goHome()"><span class="sq"></span>Surge Solutions <small>Marketplace</small></div>
-          <nav class="pub-nav" id="pub-nav">
-            <a data-page="home" class="active" onclick="PublicMarket.goHome()">Buy Assets</a>
-            <a data-page="how" onclick="PublicMarket.goHow()">How It Works</a>
-            <a data-page="kyc" onclick="PublicMarket.goKyc()">KYC &amp; Verification</a>
-            <a data-page="faq" onclick="PublicMarket.goFaq()">FAQ</a>
-            <a data-page="contact" onclick="PublicMarket.goContact()">Contact</a>
-          </nav>
-          <span class="spacer"></span>
-          <div class="contact"><b>Listed and managed by Surge Solutions</b><br>Buyer enquiries only · No direct seller contact</div>
-        </header>
-        <div class="pub-body" id="public-work"></div>
       </div>
     </div>
   </section>
