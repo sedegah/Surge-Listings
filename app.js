@@ -2494,157 +2494,36 @@ const AdminPortal = {
     this.render();
   },
 
-  BOG_PRESETS: [
-    {
-      name: 'Stanbic Bank Ghana Limited',
-      code: 'SBG',
-      license: 'BG-014 · Class-1 Commercial Bank',
-      hq: 'Stanbic Heights, Plot 215, South Liberation Link, Airport City, Accra',
-      email: 'specialassets@stanbic.com.gh',
-      phone: '+233 30 823 8900',
-      branch: 'Airport City Foreclosure & Recovery Hub',
-      region: 'Greater Accra',
-      commission: 4.0,
-      color: '#0033aa',
-      gradient: 'linear-gradient(135deg, #0A2540 0%, #0052FF 100%)'
-    },
-    {
-      name: 'GCB Bank PLC',
-      code: 'GCB',
-      license: 'BG-001 · Class-1 Commercial Bank',
-      hq: 'GCB Millennium House, Thorpe Road, High Street, Accra',
-      email: 'assetrecovery@gcbbank.com.gh',
-      phone: '+233 30 268 1531',
-      branch: 'High Street Main Operations & Foreclosure Desk',
-      region: 'Greater Accra',
-      commission: 4.0,
-      color: '#002d62',
-      gradient: 'linear-gradient(135deg, #0C2340 0%, #b8860b 100%)'
-    },
-    {
-      name: 'Ecobank Ghana PLC',
-      code: 'EBG',
-      license: 'BG-008 · Pan-African Commercial Bank',
-      hq: '2 Morocco Lane, Airport City, Accra',
-      email: 'remedialassets@ecobank.com',
-      phone: '+233 30 221 4110',
-      branch: 'Airport City Remedial Management Centre',
-      region: 'Greater Accra',
-      commission: 4.5,
-      color: '#005b94',
-      gradient: 'linear-gradient(135deg, #004B87 0%, #00838f 100%)'
-    },
-    {
-      name: 'Absa Bank Ghana Limited',
-      code: 'ABSA',
-      license: 'BG-003 · Class-1 Commercial Bank',
-      hq: 'Absa House, High Street, Accra Central',
-      email: 'foreclosures@absa.africa',
-      phone: '+233 30 221 0000',
-      branch: 'Absa House Corporate & Recovery Desk',
-      region: 'Greater Accra',
-      commission: 4.0,
-      color: '#be0028',
-      gradient: 'linear-gradient(135deg, #990024 0%, #be0028 100%)'
-    },
-    {
-      name: 'Zenith Bank (Ghana) Limited',
-      code: 'ZBG',
-      license: 'BG-022 · Class-1 Commercial Bank',
-      hq: 'Zenith Heights, 87 Independence Avenue, Ridge, Accra',
-      email: 'specialassets@zenithbank.com.gh',
-      phone: '+233 30 261 1500',
-      branch: 'Zenith Heights Special Assets Desk',
-      region: 'Greater Accra',
-      commission: 4.5,
-      color: '#e21a22',
-      gradient: 'linear-gradient(135deg, #b31920 0%, #e21a22 100%)'
-    },
-    {
-      name: 'Fidelity Bank Ghana Limited',
-      code: 'FBG',
-      license: 'BG-018 · Class-1 Commercial Bank',
-      hq: 'Ridge Towers, 10 Ambassadorial Enclave, Ridge, Accra',
-      email: 'distressedassets@fidelitybank.com.gh',
-      phone: '+233 30 221 4490',
-      branch: 'Ridge Towers Distressed Asset Operations',
-      region: 'Greater Accra',
-      commission: 5.0,
-      color: '#f37021',
-      gradient: 'linear-gradient(135deg, #e65100 0%, #1a237e 100%)'
-    },
-    {
-      name: 'Standard Chartered Bank Ghana PLC',
-      code: 'SCB',
-      license: 'BG-002 · Class-1 Commercial Bank',
-      hq: 'StanChart Head Office Building, 87 Independence Avenue, Accra',
-      email: 'assetmanagement@sc.com',
-      phone: '+233 30 261 0750',
-      branch: 'Independence Avenue Corporate Centre',
-      region: 'Greater Accra',
-      commission: 4.0,
-      color: '#007a3d',
-      gradient: 'linear-gradient(135deg, #005a36 0%, #00875a 100%)'
-    },
-    {
-      name: 'CalBank PLC',
-      code: 'CAL',
-      license: 'BG-010 · Class-1 Commercial Bank',
-      hq: '23 Independence Avenue, Ridge, Accra',
-      email: 'recoveries@calbank.net',
-      phone: '+233 30 268 0068',
-      branch: 'CalBank Head Office Recovery Unit',
-      region: 'Greater Accra',
-      commission: 4.5,
-      color: '#d96a00',
-      gradient: 'linear-gradient(135deg, #d96a00 0%, #283593 100%)'
-    }
-  ],
-
   renderBanksAndStaffView() {
     const isBanks = this.activeBankTab === 'banks';
     return `
-      <!-- Hero Header -->
-      <div style="background:linear-gradient(135deg, #0B3C75 0%, #153A6B 100%);border-radius:8px;padding:20px 24px;color:#fff;margin-bottom:18px;box-shadow:0 6px 20px rgba(11,60,117,0.15);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">
+      <div class="page-head" style="flex-wrap:wrap;gap:10px">
         <div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;letter-spacing:0.4px">
-              <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ADE80;box-shadow:0 0 6px #4ADE80"></span>
-              BANK OF GHANA REGULATED NETWORK
-            </span>
-            <span style="font-size:11px;color:#93C5FD">· D1 Multi-Tenant Isolation Active</span>
-          </div>
-          <h1 style="margin:0;font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.2px;display:flex;align-items:center;gap:10px">
-            <svg style="width:22px;height:22px;stroke:#60A5FA;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
-            Institutional Banking Partners &amp; Staff Administration
+          <h1 style="display:flex;align-items:center;gap:8px">
+            <svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--blue)"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+            Bank Partners &amp; Staff Administration
           </h1>
-          <div style="font-size:12.5px;color:#CBD5E1;margin-top:3px">
-            Multi-tenant institutional onboarding, recovery officer accounts, SLA parameters, and credential provisioning
-          </div>
+          <span class="crumb">Multi-tenant institutional onboarding, staff user accounts, and credential provisioning</span>
         </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn" onclick="AdminPortal.modalAddBank()" style="background:#FFFFFF;color:#0B3C75;border:none;font-weight:700;font-size:13px;padding:8px 16px;height:auto;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:inline-flex;align-items:center;gap:6px">
-            <svg style="width:16px;height:16px;stroke:#0B3C75;fill:none;stroke-width:2.2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-            Onboard New Bank
+        <span class="spacer"></span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" onclick="AdminPortal.modalAddBank()">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Onboard New Bank
           </button>
-          <button class="btn" onclick="AdminPortal.modalAddStaff()" style="background:#28A745;color:#fff;border:none;font-weight:600;font-size:13px;padding:8px 16px;height:auto;border-radius:4px;box-shadow:0 2px 8px rgba(40,167,69,0.25);display:inline-flex;align-items:center;gap:6px">
-            <svg style="width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2.2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
-            Add Staff &amp; Password
+          <button class="btn" onclick="AdminPortal.modalAddStaff()" style="background:#28a745;color:#fff;border-color:#28a745">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>Add Staff &amp; Password
           </button>
         </div>
       </div>
 
-      <!-- Modern Tabs -->
-      <div class="tabs-inner" style="margin:0 0 16px;border-bottom:2px solid #E2E8F0;display:flex;gap:4px">
-        <div class="tab-inner ${isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('banks')" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:10px 18px;font-weight:600;font-size:13px;border-bottom:3px solid ${isBanks ? 'var(--blue)' : 'transparent'};margin-bottom:-2px;color:${isBanks ? 'var(--blue)' : 'var(--text-2)'}">
-          <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
-          <span>Institutional Partner Banks</span>
-          <span style="background:${isBanks ? 'var(--blue)' : '#E2E8F0'};color:${isBanks ? '#fff' : '#475569'};font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">${Store.banks.length}</span>
+      <div class="tabs-inner" style="margin:14px 0 16px">
+        <div class="tab-inner ${isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('banks')" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <span>Partner Banks</span>
+          <span class="pill ${Store.banks.length ? 'ok' : ''}">${Store.banks.length}</span>
         </div>
-        <div class="tab-inner ${!isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('staff')" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:10px 18px;font-weight:600;font-size:13px;border-bottom:3px solid ${!isBanks ? 'var(--blue)' : 'transparent'};margin-bottom:-2px;color:${!isBanks ? 'var(--blue)' : 'var(--text-2)'}">
-          <svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-          <span>Bank Staff &amp; Credential Vault</span>
-          <span style="background:${!isBanks ? 'var(--blue)' : '#E2E8F0'};color:${!isBanks ? '#fff' : '#475569'};font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">${Store.users.length}</span>
+        <div class="tab-inner ${!isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('staff')" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <span>Bank Staff &amp; Credentials</span>
+          <span class="pill ${Store.users.length ? 'ok' : ''}">${Store.users.length}</span>
         </div>
       </div>
 
@@ -2658,142 +2537,34 @@ const AdminPortal = {
     const totalStaff = banks.reduce((sum, b) => sum + (b.staffCount || 0), 0);
 
     return `
-      <!-- Executive KPI Cards -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-bottom:20px">
-        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-left:4px solid #0B3C75;border-radius:6px;padding:14px 16px;box-shadow:0 2px 6px rgba(0,0,0,0.03)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:0.5px">INSTITUTIONAL PARTNERS</span>
-            <div style="width:28px;height:28px;border-radius:6px;background:#EFF6FF;display:flex;align-items:center;justify-content:center">
-              <svg style="width:15px;height:15px;stroke:#0B3C75;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11"/></svg>
-            </div>
-          </div>
-          <div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1.2">${banks.length}</div>
-          <div style="font-size:11px;color:#64748B;margin-top:4px">${banks.length === 0 ? 'Clean slate — ready to onboard' : 'Bank of Ghana regulated'}</div>
-        </div>
-
-        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-left:4px solid #1E7B34;border-radius:6px;padding:14px 16px;box-shadow:0 2px 6px rgba(0,0,0,0.03)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:0.5px">BANK RECOVERY OFFICERS</span>
-            <div style="width:28px;height:28px;border-radius:6px;background:#F0FDF4;display:flex;align-items:center;justify-content:center">
-              <svg style="width:15px;height:15px;stroke:#1E7B34;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>
-            </div>
-          </div>
-          <div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1.2">${totalStaff}</div>
-          <div style="font-size:11px;color:#1E7B34;margin-top:4px;font-weight:600">Active Credential Vault</div>
-        </div>
-
-        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-left:4px solid #7C3AED;border-radius:6px;padding:14px 16px;box-shadow:0 2px 6px rgba(0,0,0,0.03)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:0.5px">DISPOSITION PORTFOLIO</span>
-            <div style="width:28px;height:28px;border-radius:6px;background:#F5F3FF;display:flex;align-items:center;justify-content:center">
-              <svg style="width:15px;height:15px;stroke:#7C3AED;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-            </div>
-          </div>
-          <div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1.2">${totalAssets}</div>
-          <div style="font-size:11px;color:#64748B;margin-top:4px">Foreclosed &amp; Distressed Assets</div>
-        </div>
-
-        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-left:4px solid #D97706;border-radius:6px;padding:14px 16px;box-shadow:0 2px 6px rgba(0,0,0,0.03)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:0.5px">STANDARD COMMISSION</span>
-            <div style="width:28px;height:28px;border-radius:6px;background:#FFFBEB;display:flex;align-items:center;justify-content:center">
-              <svg style="width:15px;height:15px;stroke:#D97706;fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M16 8l-8 8M9 8h.01M15 16h.01"/></svg>
-            </div>
-          </div>
-          <div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1.2">4.0% — 5.0%</div>
-          <div style="font-size:11px;color:#D97706;margin-top:4px;font-weight:600">SLA Protected Benchmark</div>
-        </div>
+      <div class="kpis" style="margin-bottom:18px">
+        <div class="kpi"><div class="k">Institutional Partners</div><div class="v">${banks.length}</div></div>
+        <div class="kpi ok"><div class="k">Active Bank Staff</div><div class="v">${totalStaff}</div></div>
+        <div class="kpi info"><div class="k">Assets in Portfolio</div><div class="v">${totalAssets}</div></div>
+        <div class="kpi alert"><div class="k">Standard Commission</div><div class="v">4.0% — 5.0%</div></div>
       </div>
 
       ${banks.length === 0 ? `
-        <!-- BREATHTAKING INSTITUTIONAL LAUNCHPAD (CLEAN EMPTY STATE) -->
-        <div style="background:linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);border:1px solid #CBD5E1;border-radius:10px;padding:36px 28px;box-shadow:0 8px 28px rgba(11,60,117,0.06);margin-bottom:24px;text-align:center">
-          <div style="width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg, #0B3C75 0%, #1E5EA8 100%);color:#fff;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(11,60,117,0.25);margin-bottom:14px">
-            <svg style="width:34px;height:34px;stroke:#fff;fill:none;stroke-width:1.8" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
-          </div>
-          <div style="margin-bottom:8px">
-            <span style="display:inline-block;background:#EBF3FC;color:#0B3C75;font-size:11.5px;font-weight:700;padding:3px 12px;border-radius:12px;letter-spacing:0.5px">
-              ALL MOCK BANKS DELETED · CLEAN PRODUCTION REGISTRY
-            </span>
-          </div>
-          <h2 style="margin:0 0 8px;font-size:22px;color:#0F172A;font-weight:800">Ready to Onboard Institutional Bank Partners</h2>
-          <p style="color:#64748B;max-width:620px;margin:0 auto 20px;font-size:13.5px;line-height:1.6">
-            All fake banks and placeholder test data have been wiped. Onboard official Bank of Ghana licensed commercial banking partners below to configure multi-tenant isolation, statutory recovery commissions, and provision staff credentials.
-          </p>
-          <div style="display:flex;justify-content:center;gap:12px;margin-bottom:30px;flex-wrap:wrap">
-            <button class="btn primary" onclick="AdminPortal.modalAddBank()" style="padding:10px 24px;font-size:13.5px;font-weight:700;border-radius:4px;box-shadow:0 4px 14px rgba(11,60,117,0.25);height:auto;display:inline-flex;align-items:center;gap:8px">
-              <svg style="width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2.2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-              Open Bank Onboarding Form
-            </button>
-          </div>
-
-          <!-- Fast-Onboard Registry of Real Ghana Banks -->
-          <div style="border-top:1px solid #E2E8F0;padding-top:24px;text-align:left">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-              <div>
-                <strong style="font-size:13px;color:#1E293B;display:flex;align-items:center;gap:6px">
-                  <svg style="width:16px;height:16px;stroke:#1E7B34;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  Bank of Ghana Licensed Commercial Bank Registry
-                </strong>
-                <span style="font-size:11.5px;color:#64748B">Click "+ Onboard This Bank" to auto-populate official corporate credentials in 1 click</span>
-              </div>
-              <span style="font-size:11px;background:#E8F5E9;color:#1E7B34;font-weight:700;padding:3px 10px;border-radius:12px">
-                Class-1 Licensed Registry
-              </span>
-            </div>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:12px">
-              ${this.BOG_PRESETS.map((p, idx) => `
-                <div style="background:#FFFFFF;border:1px solid #CBD5E1;border-radius:6px;padding:14px;box-shadow:0 2px 6px rgba(0,0,0,0.03);display:flex;flex-direction:column;justify-content:space-between;transition:all 0.15s ease" onmouseover="this.style.borderColor='var(--blue)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='#CBD5E1';this.style.transform='none'">
-                  <div>
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                      <div style="width:38px;height:38px;border-radius:6px;background:${p.gradient};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:0.5px;box-shadow:0 2px 6px rgba(0,0,0,0.15)">
-                        ${p.code}
-                      </div>
-                      <div style="flex:1;min-width:0">
-                        <h4 style="margin:0;font-size:13.5px;color:#0F172A;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</h4>
-                        <span style="font-size:10.5px;color:#1E7B34;font-weight:600">${p.license}</span>
-                      </div>
-                    </div>
-                    <div style="font-size:11.5px;color:#64748B;margin-bottom:10px;line-height:1.4">
-                      <div><strong>HQ:</strong> ${p.hq}</div>
-                      <div><strong>Email:</strong> ${p.email}</div>
-                    </div>
-                  </div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #F1F5F9;padding-top:10px;margin-top:8px">
-                    <span style="font-size:11px;font-weight:700;color:var(--blue)">SLA: ${p.commission}% Commission</span>
-                    <button class="btn small primary" onclick="AdminPortal.quickOnboardPreset(${idx})" style="font-size:11.5px;font-weight:600;padding:4px 10px;height:auto">
-                      + Onboard Bank
-                    </button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
+        <div class="gridwrap" style="padding:40px 20px;text-align:center">
+          <svg class="ico" viewBox="0 0 24 24" style="width:48px;height:48px;stroke:var(--text-2);margin-bottom:12px"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+          <h3 style="margin:0 0 8px">No Partner Banks Registered Yet</h3>
+          <p style="color:var(--text-2);margin:0 0 16px">Onboard institutional banking partners to begin managing repossessed and distressed assets.</p>
+          <button class="btn primary" onclick="AdminPortal.modalAddBank()">+ Onboard First Partner Bank</button>
         </div>
       ` : `
-        <!-- ONBOARDED INSTITUTIONAL BANK CARDS -->
         <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));gap:16px">
           ${banks.map(b => `
-            <div style="background:#FFFFFF;border:1px solid #CBD5E1;border-top:4px solid var(--blue);border-radius:8px;padding:18px;box-shadow:0 4px 12px rgba(11,60,117,0.06);display:flex;flex-direction:column;justify-content:space-between">
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:space-between">
               <div>
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div style="width:42px;height:42px;border-radius:6px;background:linear-gradient(135deg, #0B3C75 0%, #153A6B 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;letter-spacing:0.5px;box-shadow:0 2px 8px rgba(11,60,117,0.25)">
-                      ${b.code}
-                    </div>
-                    <div>
-                      <h3 style="margin:0;font-size:15px;color:#0F172A;font-weight:700;line-height:1.3">${b.name}</h3>
-                      <span style="font-size:10.5px;color:#1E7B34;font-weight:600;display:inline-flex;align-items:center;gap:4px">
-                        <svg style="width:11px;height:11px;stroke:#1E7B34;fill:none;stroke-width:2.2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-                        Class-1 Commercial Bank · Verified
-                      </span>
-                    </div>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+                  <div>
+                    <span style="display:inline-block;background:var(--blue);color:#fff;font-family:Consolas,monospace;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:4px">${b.code}</span>
+                    <h3 style="margin:0;font-size:15px;line-height:1.3">${b.name}</h3>
                   </div>
                   <span class="badge ${b.status === 'Active' ? 'ok' : 'draft'}">${b.status}</span>
                 </div>
 
-                <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;display:flex;flex-direction:column;gap:5px">
+                <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;display:flex;flex-direction:column;gap:4px">
                   <div style="display:flex;align-items:center;gap:6px">
                     <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>
                     <span>${b.email || '—'}</span>
@@ -2804,36 +2575,31 @@ const AdminPortal = {
                   </div>
                 </div>
 
-                <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:10px 14px;margin-bottom:14px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;text-align:center">
+                <div style="background:#F7F9FB;border:1px solid #E8EEF5;border-radius:3px;padding:8px 12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;text-align:center">
                   <div>
-                    <div style="font-size:10.5px;color:#64748B;font-weight:600">Commission</div>
-                    <div style="font-weight:800;font-size:14px;color:var(--blue)">${b.commissionRate || 4.0}%</div>
+                    <div style="font-size:11px;color:var(--text-2)">Commission</div>
+                    <div style="font-weight:700;font-size:13px;color:var(--blue)">${b.commissionRate || 4.0}%</div>
                   </div>
                   <div>
-                    <div style="font-size:10.5px;color:#64748B;font-weight:600">Assets</div>
-                    <div style="font-weight:800;font-size:14px;color:#0F172A">${b.assetCount || 0}</div>
+                    <div style="font-size:11px;color:var(--text-2)">Assets</div>
+                    <div style="font-weight:700;font-size:13px">${b.assetCount || 0}</div>
                   </div>
                   <div>
-                    <div style="font-size:10.5px;color:#64748B;font-weight:600">Staff</div>
-                    <div style="font-weight:800;font-size:14px;color:#1E7B34">${b.staffCount || 0}</div>
+                    <div style="font-size:11px;color:var(--text-2)">Staff</div>
+                    <div style="font-weight:700;font-size:13px;color:#28a745">${b.staffCount || 0}</div>
                   </div>
-                </div>
-
-                <div style="font-size:10.5px;color:#64748B;display:flex;align-items:center;gap:5px;margin-bottom:8px">
-                  <svg style="width:12px;height:12px;stroke:#64748B;fill:none;stroke-width:2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                  <span>Isolated Tenant: <code>tenant-${(b.code || '').toLowerCase()}.surge.internal</code></span>
                 </div>
               </div>
 
-              <div style="display:flex;gap:6px;border-top:1px solid #E2E8F0;padding-top:12px;margin-top:auto">
-                <button class="btn small ok" onclick="AdminPortal.modalAddStaff('${b.id}')" title="Add new user to this bank" style="flex:1;font-weight:600">
+              <div style="display:flex;gap:6px;border-top:1px solid #ECEFF2;padding-top:12px;margin-top:auto">
+                <button class="btn small ok" onclick="AdminPortal.modalAddStaff('${b.id}')" title="Add new user to this bank" style="flex:1">
                   + Add Staff
                 </button>
                 <button class="btn small" onclick="AdminPortal.filterBankStaff('${b.id}')" title="View staff for this bank" style="flex:1">
                   View Staff (${b.staffCount || 0})
                 </button>
-                <button class="btn small danger" onclick="if(confirm('Are you sure you want to remove partner bank ' + '${b.name}' + '? All tenant workspaces will be archived.')) Store.deleteBank('${b.id}');" title="Remove Bank" style="padding:2px 8px">
-                  Remove
+                <button class="btn small danger" onclick="Store.deleteBank('${b.id}')" title="Remove Bank">
+                  ✕
                 </button>
               </div>
             </div>
@@ -2882,24 +2648,24 @@ const AdminPortal = {
 
     return `
       <!-- Filter Toolbar -->
-      <div class="searchpanel" style="margin-bottom:14px;padding:12px 14px;background:#FFFFFF;border:1px solid #CBD5E1;border-radius:6px">
+      <div class="searchpanel" style="margin-bottom:14px;padding:12px 14px">
         <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end">
           <div>
-            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block;font-weight:600">Search Staff by Name / Username / Email</label>
+            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Search Staff by Name / Username / Email</label>
             <input type="text" placeholder="e.g. Mensah or j.mensah..." value="${this.staffSearchQuery || ''}" 
               oninput="AdminPortal.staffSearchQuery = this.value; AdminPortal.render();" 
-              style="width:100%;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:3px;font-size:12.5px">
+              style="width:100%;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
           </div>
           <div>
-            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block;font-weight:600">Filter by Partner Bank</label>
-            <select onchange="AdminPortal.selectedBankFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:3px;font-size:12.5px">
+            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Filter by Partner Bank</label>
+            <select onchange="AdminPortal.selectedBankFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
               <option value="">All Banks &amp; Platforms (${Store.users.length})</option>
               ${banks.map(b => `<option value="${b.id}" ${this.selectedBankFilter === b.id ? 'selected' : ''}>${b.name} (${b.code})</option>`).join('')}
             </select>
           </div>
           <div>
-            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block;font-weight:600">Filter by Role</label>
-            <select onchange="AdminPortal.staffRoleFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:3px;font-size:12.5px">
+            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Filter by Role</label>
+            <select onchange="AdminPortal.staffRoleFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
               <option value="">All Roles</option>
               <option value="BA" ${this.staffRoleFilter === 'BA' ? 'selected' : ''}>Bank Administrator (BA)</option>
               <option value="LRO" ${this.staffRoleFilter === 'LRO' ? 'selected' : ''}>Legal / Recovery Officer (LRO)</option>
@@ -2916,10 +2682,10 @@ const AdminPortal = {
       </div>
 
       <!-- Staff Grid -->
-      <div class="gridwrap" style="background:#FFFFFF;border:1px solid #CBD5E1;border-radius:6px;overflow:hidden">
-        <div class="gridtoolbar" style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border-bottom:1px solid #E2E8F0;padding:10px 14px">
-          <strong style="font-size:12.5px;color:#0F172A">Showing ${users.length} of ${Store.users.length} Active Accounts</strong>
-          <span style="font-size:11.5px;color:#64748B">Credential Vault · Scrypt &amp; AES-256 Protected</span>
+      <div class="gridwrap">
+        <div class="gridtoolbar" style="display:flex;align-items:center;justify-content:space-between">
+          <strong style="font-size:12.5px">Showing ${users.length} of ${Store.users.length} Staff Accounts</strong>
+          <span style="font-size:11.5px;color:var(--text-2)">Passwords can be assigned, viewed, and reset anytime</span>
         </div>
         <table class="grid">
           <thead>
@@ -2935,19 +2701,19 @@ const AdminPortal = {
           </thead>
           <tbody>
             ${users.length === 0 ? `
-              <tr><td colspan="7" style="text-align:center;padding:36px;color:#64748B">No staff members match the selected filters.</td></tr>
+              <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-2)">No staff members match the selected filters.</td></tr>
             ` : users.map(u => `
               <tr>
                 <td>
-                  <div style="font-weight:700;color:#0F172A">${u.fullName}</div>
-                  <div style="font-size:11px;color:#64748B">${u.email}</div>
+                  <div style="font-weight:600">${u.fullName}</div>
+                  <div style="font-size:11px;color:var(--text-2)">${u.email}</div>
                 </td>
                 <td>
-                  <span style="font-family:Consolas,monospace;font-size:12px;background:#EEF3F8;color:var(--blue);padding:2px 7px;border-radius:3px;font-weight:700">@${u.username}</span>
+                  <span style="font-family:Consolas,monospace;font-size:12px;background:#EEF3F8;color:var(--blue);padding:2px 6px;border-radius:3px;font-weight:600">@${u.username}</span>
                 </td>
                 <td>
-                  <div style="font-weight:600;color:#1E293B">${u.bankName || 'Surge Solutions'}</div>
-                  <div style="font-size:10.5px;color:#64748B">${u.branchName || 'Head Office'}</div>
+                  <div style="font-weight:600">${u.bankName || 'Surge Solutions'}</div>
+                  <div style="font-size:10.5px;color:var(--text-2)">${u.branchName || 'Head Office'}</div>
                 </td>
                 <td>
                   <span class="badge ${u.roleCode === 'BA' ? 'ok' : u.roleCode === 'LRO' ? 'pending' : u.roleCode === 'AP' ? 'live' : 'draft'}">
@@ -2956,10 +2722,10 @@ const AdminPortal = {
                 </td>
                 <td>
                   <div style="display:flex;align-items:center;gap:6px">
-                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#1E7B34"></span>
-                    <span style="font-size:11.5px;font-weight:700;color:#1E7B34">Credentials Active</span>
-                    <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" style="margin-left:6px;padding:2px 6px;font-size:10.5px">
-                      Reset
+                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#28a745"></span>
+                    <span style="font-size:11.5px;font-weight:600;color:#28a745">Password Active</span>
+                    <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" style="margin-left:6px;padding:2px 6px;font-size:11px">
+                      Reset Password
                     </button>
                   </div>
                 </td>
@@ -2973,7 +2739,7 @@ const AdminPortal = {
                     <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" title="Assign new password">
                       Key
                     </button>
-                    <button class="btn small danger" onclick="if(confirm('Delete staff account for ' + '${u.fullName}' + '?')) Store.deleteUser('${u.id}')" title="Delete account">
+                    <button class="btn small danger" onclick="Store.deleteUser('${u.id}')" title="Delete account">
                       ✕
                     </button>
                   </div>
@@ -2986,243 +2752,84 @@ const AdminPortal = {
     `;
   },
 
-  // Apply quick preset in onboarding modal
-  applyBankPreset(idx) {
-    const p = this.BOG_PRESETS[idx];
-    if (!p) return;
-    const legalInput = document.getElementById('add-bank-legal-name');
-    const codeInput = document.getElementById('add-bank-short-code');
-    const emailInput = document.getElementById('add-bank-email');
-    const phoneInput = document.getElementById('add-bank-phone');
-    const commInput = document.getElementById('add-bank-commission');
-    const branchInput = document.getElementById('add-bank-branch');
-    const hqInput = document.getElementById('add-bank-hq');
-    const licenseInput = document.getElementById('add-bank-license');
-
-    if (legalInput) legalInput.value = p.name;
-    if (codeInput) codeInput.value = p.code;
-    if (emailInput) emailInput.value = p.email;
-    if (phoneInput) phoneInput.value = p.phone;
-    if (commInput) commInput.value = p.commission;
-    if (branchInput) branchInput.value = p.branch;
-    if (hqInput) hqInput.value = p.hq;
-    if (licenseInput) licenseInput.value = p.license;
-
-    this.updateCommissionModeler(p.commission);
-
-    // Update preset pills active state
-    document.querySelectorAll('.bank-preset-pill').forEach((el, i) => {
-      if (i === idx) {
-        el.style.background = 'var(--blue)';
-        el.style.color = '#fff';
-        el.style.borderColor = 'var(--blue)';
-      } else {
-        el.style.background = '#FFFFFF';
-        el.style.color = '#1E293B';
-        el.style.borderColor = '#CBD5E1';
-      }
-    });
-
-    // Update tenant preview
-    const previewEl = document.getElementById('tenant-preview-id');
-    if (previewEl) previewEl.innerText = `tenant-${p.code.toLowerCase()}.surge.internal`;
-  },
-
-  // Live commission modeler
-  updateCommissionModeler(rate) {
-    const r = Number(rate) || 4.0;
-    const rateEl = document.getElementById('modeler-rate-display');
-    const feeEl = document.getElementById('modeler-fee-display');
-    const netEl = document.getElementById('modeler-net-display');
-    const slider = document.getElementById('add-bank-commission');
-
-    if (rateEl) rateEl.innerText = r.toFixed(1) + '%';
-    if (slider && Number(slider.value) !== r) slider.value = r;
-
-    const sampleVolume = 1500000;
-    const fee = Math.round(sampleVolume * (r / 100));
-    const net = sampleVolume - fee;
-
-    if (feeEl) feeEl.innerText = 'GHS ' + fee.toLocaleString();
-    if (netEl) netEl.innerText = 'GHS ' + net.toLocaleString();
-  },
-
-  // Quick onboard from empty state
-  quickOnboardPreset(idx) {
-    this.modalAddBank(idx);
-  },
-
-  // REDESIGNED EXECUTIVE INSTITUTIONAL BANK ONBOARDING MODAL
-  modalAddBank(preselectedPresetIdx = -1) {
-    const presets = this.BOG_PRESETS;
-    const defaultRate = 4.0;
-
+  // Modal: Add Partner Bank
+  modalAddBank() {
     const bodyHtml = `
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <!-- Executive Banner -->
-        <div style="background:linear-gradient(135deg, #0A2540 0%, #153A6B 100%);padding:14px 18px;border-radius:6px;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:38px;height:38px;border-radius:6px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center">
-              <svg style="width:20px;height:20px;stroke:#60A5FA;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
-            </div>
-            <div>
-              <div style="font-size:14.5px;font-weight:700;letter-spacing:-0.2px">Onboard Institutional Banking Partner</div>
-              <div style="font-size:11.5px;color:#CBD5E1">Bank of Ghana Class-1 Licensed Commercial Bank Provisioning &amp; Multi-Tenant Setup</div>
-            </div>
-          </div>
-          <span style="font-size:10.5px;background:#1E7B34;color:#fff;font-weight:700;padding:3px 8px;border-radius:12px">
-            AES-256 Tenant Isolation
-          </span>
-        </div>
-
-        <!-- Bank of Ghana Registry Fast-Select Ribbon -->
-        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:12px 14px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <strong style="font-size:12px;color:#1E293B;display:flex;align-items:center;gap:5px">
-              <svg style="width:13px;height:13px;stroke:#1E7B34;fill:none;stroke-width:2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              Fast-Fill from Official Bank of Ghana Registry
-            </strong>
-            <span style="font-size:10.5px;color:#64748B">Click a licensed bank to auto-complete regulatory parameters</span>
-          </div>
-          <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">
-            ${presets.map((p, i) => `
-              <button type="button" class="bank-preset-pill" onclick="AdminPortal.applyBankPreset(${i})" style="border:1px solid #CBD5E1;background:#FFFFFF;color:#1E293B;padding:5px 10px;border-radius:4px;font-size:11.5px;font-weight:600;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.15s">
-                <span style="font-family:Consolas,monospace;font-weight:800;color:var(--blue)">${p.code}</span>
-                <span>${p.name.split(' ')[0]}</span>
-              </button>
-            `).join('')}
-            <button type="button" onclick="AdminPortal.applyBankPreset(-1); document.getElementById('add-bank-legal-name').value=''; document.getElementById('add-bank-short-code').value=''; document.getElementById('add-bank-email').value=''; document.getElementById('add-bank-phone').value=''; document.getElementById('add-bank-branch').value='Head Office - Accra';" style="border:1px dashed #CBD5E1;background:transparent;color:#64748B;padding:5px 10px;border-radius:4px;font-size:11.5px;white-space:nowrap;cursor:pointer">
-              Custom / Blank
-            </button>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <p style="margin:0 0 4px;font-size:12.5px;color:var(--text-2)">
+          Register an authorized commercial bank partner into the Surge platform. An isolated tenant workspace with primary branch and commission structure will be generated.
+        </p>
+        
+        <div class="field">
+          <span class="lbl">Bank Legal Name <span class="req">*</span></span>
+          <div class="ctl">
+            <input id="add-bank-legal-name" style="width:100%" placeholder="e.g. Zenith Bank Ghana Limited" required>
           </div>
         </div>
 
-        <!-- 2-Column Corporate Onboarding Form -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <!-- Column 1: Identity & Compliance -->
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Bank Legal Name <span class="req">*</span></span>
-              <div class="ctl">
-                <input id="add-bank-legal-name" style="width:100%" placeholder="e.g. Stanbic Bank Ghana Limited" required>
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Bank Short Code (3–5 letters) <span class="req">*</span></span>
-              <div class="ctl">
-                <input id="add-bank-short-code" style="width:100%;text-transform:uppercase;font-family:Consolas,monospace;font-weight:700" placeholder="e.g. SBG" maxlength="6" required oninput="const code = this.value.toUpperCase(); document.getElementById('tenant-preview-id').innerText = 'tenant-' + code.toLowerCase() + '.surge.internal';">
-                <small style="font-size:10px;color:var(--text-2)">Generates tenant ID, asset public reference prefixes, and login scopes</small>
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Bank of Ghana License Reg.</span>
-              <div class="ctl">
-                <input id="add-bank-license" style="width:100%" placeholder="e.g. BG-014 · Class-1 Commercial Bank">
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Corporate Head Office Address</span>
-              <div class="ctl">
-                <input id="add-bank-hq" style="width:100%" placeholder="e.g. Stanbic Heights, Plot 215, Airport City, Accra">
-              </div>
-            </div>
-          </div>
-
-          <!-- Column 2: Communications & Operational Hub -->
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Asset Recovery Desk Email <span class="req">*</span></span>
-              <div class="ctl">
-                <input type="email" id="add-bank-email" style="width:100%" placeholder="e.g. specialassets@stanbic.com.gh" required>
-                <small style="font-size:10px;color:var(--text-2)">Official recipient for statutory review notices and buyer bids</small>
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Recovery Department Phone</span>
-              <div class="ctl">
-                <input type="tel" id="add-bank-phone" style="width:100%" placeholder="e.g. +233 30 823 8900">
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Primary Recovery Hub / Branch</span>
-              <div class="ctl">
-                <input id="add-bank-branch" style="width:100%" placeholder="e.g. Airport City Foreclosure &amp; Recovery Desk">
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Regional Jurisdiction <span class="req">*</span></span>
-              <div class="ctl">
-                <select id="add-bank-region" style="width:100%" onchange="AdminPortal.onBankRegionChange(this.value)">
-                  ${GhanaGeo.renderRegionOptions('Greater Accra')}
-                </select>
-              </div>
-            </div>
-
-            <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Head Office District / Constituency</span>
-              <div class="ctl">
-                <select id="add-bank-district" style="width:100%">
-                  ${GhanaGeo.renderDistrictOptions('Greater Accra', 'Ayawaso West Wuogon')}
-                </select>
-              </div>
-            </div>
+        <div class="field">
+          <span class="lbl">Bank Short Code <span class="req">*</span></span>
+          <div class="ctl">
+            <input id="add-bank-short-code" style="width:100%" placeholder="e.g. ZBG" maxlength="6" style="text-transform:uppercase" required>
+            <small style="font-size:10.5px;color:var(--text-2)">Used for references, tenant identifiers, and branches (3–5 uppercase letters)</small>
           </div>
         </div>
 
-        <!-- Interactive Statutory Commission Slider & Modeler -->
-        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:6px;padding:14px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div>
-              <strong style="font-size:12.5px;color:#0F172A">Standard Institutional Commission Rate</strong>
-              <div style="font-size:11px;color:#64748B">Contractual percentage retained by Surge Solutions on successful asset settlement</div>
-            </div>
-            <span id="modeler-rate-display" style="font-size:18px;font-weight:800;color:var(--blue)">4.0%</span>
-          </div>
-
-          <input type="range" id="add-bank-commission" min="1.0" max="10.0" step="0.5" value="${defaultRate}" style="width:100%;accent-color:var(--blue);cursor:pointer;margin-bottom:10px" oninput="AdminPortal.updateCommissionModeler(this.value)">
-
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:4px;padding:8px 12px;font-size:11.5px">
-            <div>
-              <span style="color:#64748B">On GHS 1,500,000 Property Disposal:</span>
-              <div style="font-weight:700;color:var(--blue)">Surge Commission: <span id="modeler-fee-display">GHS 60,000</span></div>
-            </div>
-            <div>
-              <span style="color:#64748B">Bank Net Liquid Recovery:</span>
-              <div style="font-weight:700;color:#1E7B34">Net Proceeds: <span id="modeler-net-display">GHS 1,440,000</span></div>
-            </div>
+        <div class="field">
+          <span class="lbl">Primary Contact Email <span class="req">*</span></span>
+          <div class="ctl">
+            <input type="email" id="add-bank-email" style="width:100%" placeholder="e.g. recoveries@zenithbank.com.gh" required>
           </div>
         </div>
 
-        <!-- Multi-Tenant System Provisioning Architecture -->
-        <div style="background:#F1F5F9;border:1px dashed #CBD5E1;border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;font-size:11.5px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <svg style="width:16px;height:16px;stroke:#1E7B34;fill:none;stroke-width:2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            <span>Multi-Tenant Endpoint: <strong id="tenant-preview-id" style="font-family:Consolas,monospace;color:var(--blue)">tenant-bank.surge.internal</strong></span>
+        <div class="field">
+          <span class="lbl">Contact Phone Number</span>
+          <div class="ctl">
+            <input type="tel" id="add-bank-phone" style="width:100%" placeholder="e.g. +233 30 211 4455">
           </div>
-          <span style="font-size:10.5px;color:#64748B">Isolated Cloudflare D1 Partition &amp; R2 Vault</span>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Default Commission Rate (%)</span>
+          <div class="ctl">
+            <input type="number" id="add-bank-commission" style="width:100%" value="4.0" step="0.5" min="1" max="15">
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Primary Branch Name</span>
+          <div class="ctl">
+            <input id="add-bank-branch" style="width:100%" placeholder="e.g. Head Office - Accra">
+          </div>
+        </div>
+
+
+        <div class="field">
+          <span class="lbl">Region <span class="req">*</span></span>
+          <div class="ctl">
+            <select id="add-bank-region" style="width:100%" onchange="AdminPortal.onBankRegionChange(this.value)">
+              ${GhanaGeo.renderRegionOptions('Greater Accra')}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">District / Constituency</span>
+          <div class="ctl">
+            <select id="add-bank-district" style="width:100%">
+              ${GhanaGeo.renderDistrictOptions('Greater Accra', 'Ayawaso West Wuogon')}
+            </select>
+          </div>
         </div>
       </div>
     `;
 
     const footerHtml = `
-      <button class="btn" onclick="UI.closeModal()" style="font-size:12.5px">Cancel</button>
-      <button class="btn primary" onclick="AdminPortal.submitAddBank()" style="font-weight:700;font-size:13px;padding:6px 18px">
-        Complete Institutional Onboarding
-      </button>
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn primary" onclick="AdminPortal.submitAddBank()">Register Bank Partner</button>
     `;
 
-    UI.modal('Onboard Institutional Partner Bank', bodyHtml, footerHtml, true);
-
-    // If preset requested, apply it
-    if (preselectedPresetIdx >= 0) {
-      setTimeout(() => this.applyBankPreset(preselectedPresetIdx), 50);
-    }
+    UI.modal('Onboard New Partner Bank', bodyHtml, footerHtml, false);
   },
 
   async submitAddBank() {
