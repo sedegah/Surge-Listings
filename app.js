@@ -8,7 +8,7 @@
 // SHARED DATA STORE
 // ============================================================
 const Store = {
-  assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [],
+  assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
   LEGACY_KEYS: ['surge_platform_v2_store', 'surge_platform_store'],
   API_BASE: '', // relative — same origin when served from Cloudflare Workers
@@ -28,6 +28,8 @@ const Store = {
     this.offers = [];
     this.viewings = [];
     this.invoices = [];
+    this.banks = [];
+    this.users = [];
     this.fetchRemote();
   },
 
@@ -41,13 +43,15 @@ const Store = {
 
   async fetchRemote() {
     try {
-      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes] = await Promise.allSettled([
+      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes] = await Promise.allSettled([
         fetch(this.API_BASE + '/api/v1/assets?scope=all'),
         fetch(this.API_BASE + '/api/v1/leads'),
         fetch(this.API_BASE + '/api/v1/offers'),
         fetch(this.API_BASE + '/api/v1/viewings'),
         fetch(this.API_BASE + '/api/v1/invoices'),
         fetch(this.API_BASE + '/api/v1/audit-logs'),
+        fetch(this.API_BASE + '/api/v1/banks'),
+        fetch(this.API_BASE + '/api/v1/users'),
       ]);
 
       // Assets
@@ -167,12 +171,171 @@ const Store = {
         }
       }
 
+      // Banks
+      if (banksRes.status === 'fulfilled' && banksRes.value.ok) {
+        const json = await banksRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.banks = json.data.map(b => ({
+            id: b.id,
+            orgId: b.organization_id,
+            name: b.legal_name,
+            code: b.short_code,
+            email: b.contact_email,
+            phone: b.contact_phone,
+            commissionRate: b.default_commission_rate,
+            branchCount: b.branch_count || 1,
+            assetCount: b.asset_count || 0,
+            staffCount: b.staff_count || 0,
+            totalPortfolioValue: b.total_portfolio_value || 0,
+            status: b.status || 'Active',
+            createdAt: b.created_at
+          }));
+        }
+      }
+
+      // Users & Staff
+      if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
+        const json = await usersRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.users = json.data.map(u => ({
+            id: u.id,
+            username: u.username,
+            fullName: u.full_name,
+            email: u.email,
+            roleCode: u.role_code,
+            roleName: u.role_name || u.role_code,
+            bankId: u.bank_id,
+            bankName: u.bank_name || (u.bank_id ? u.bank_id : 'Surge Solutions'),
+            bankCode: u.bank_code || '',
+            branchId: u.branch_id,
+            branchName: u.branch_name || 'Head Office',
+            status: u.status || 'Active',
+            hasPassword: !!u.has_password,
+            mfaEnabled: !!u.mfa_enabled,
+            lastLogin: u.last_login,
+            createdAt: u.created_at
+          }));
+        }
+      }
+
       // Re-render all active portals
       if (typeof BankPortal !== 'undefined' && BankPortal.render) BankPortal.render();
       if (typeof AdminPortal !== 'undefined' && AdminPortal.render) AdminPortal.render();
       if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
     } catch (e) {
       console.warn('API fetch failed — UI will show empty state:', e);
+    }
+  },
+
+  async createBank(bankData) {
+    try {
+      const res = await fetch(this.API_BASE + '/api/v1/banks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        body: JSON.stringify(bankData)
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to create bank');
+      UI.toast(`Partner bank "${bankData.legal_name}" registered successfully.`, 'success');
+      await this.fetchRemote();
+      return true;
+    } catch (err) {
+      console.error('createBank error:', err);
+      UI.toast(err.message, 'error');
+      return false;
+    }
+  },
+
+  async createUser(userData) {
+    try {
+      const res = await fetch(this.API_BASE + '/api/v1/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        body: JSON.stringify(userData)
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to create staff member');
+      UI.toast(`Staff user @${userData.username} registered with credentials.`, 'success');
+      await this.fetchRemote();
+      return true;
+    } catch (err) {
+      console.error('createUser error:', err);
+      UI.toast(err.message, 'error');
+      return false;
+    }
+  },
+
+  async resetUserPassword(userId, newPassword) {
+    try {
+      const res = await fetch(this.API_BASE + `/api/v1/users/${userId}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        body: JSON.stringify({ password: newPassword })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to reset password');
+      UI.toast('Password updated successfully.', 'success');
+      await this.fetchRemote();
+      return true;
+    } catch (err) {
+      console.error('resetUserPassword error:', err);
+      UI.toast(err.message, 'error');
+      return false;
+    }
+  },
+
+  async toggleUserStatus(userId) {
+    const user = this.users.find(u => u.id === userId);
+    if (!user) return;
+    const newStatus = user.status === 'Active' ? 'Suspended' : 'Active';
+    try {
+      const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to update status');
+      UI.toast(`User status updated to ${newStatus}.`, 'success');
+      await this.fetchRemote();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  async deleteUser(userId) {
+    const user = this.users.find(u => u.id === userId);
+    if (!user) return;
+    if (!confirm(`Are you sure you want to permanently remove staff account @${user.username} (${user.fullName})?`)) return;
+    try {
+      const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' }
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to delete user');
+      UI.toast(`User @${user.username} deleted.`, 'success');
+      await this.fetchRemote();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  async deleteBank(bankId) {
+    const bank = this.banks.find(b => b.id === bankId);
+    if (!bank) return;
+    if (!confirm(`Are you sure you want to remove partner bank "${bank.name}" (${bank.code}) and all its associated staff?`)) return;
+    try {
+      const res = await fetch(this.API_BASE + `/api/v1/banks/${bankId}`, {
+        method: 'DELETE',
+        headers: { 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' }
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to delete bank');
+      UI.toast(`Bank ${bank.name} removed.`, 'success');
+      await this.fetchRemote();
+    } catch (err) {
+      UI.toast(err.message, 'error');
     }
   },
 
@@ -1470,11 +1633,10 @@ const BankPortal = {
     Store.persist();
 
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch('/api/v1/assets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah' },
+      fetch(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-bank-id': a.bankId || 'bank-mtb', 'x-actor-name': 'J. Mensah' },
         body: JSON.stringify({
-          bankId: 'bank-mtb',
           internalBankRef: a.caseRef,
           categoryCode: a.category,
           assetType: a.assetType,
@@ -1488,7 +1650,13 @@ const BankPortal = {
           minimumOffer: a.minOffer,
           showReservePublicly: a.showReserve
         })
-      }).catch(() => {});
+      }).then(r => r.json()).then(res => {
+        if (!res.success) {
+          console.warn('API update warning:', res.error);
+        }
+      }).catch(err => {
+        console.error('API update failed:', err);
+      });
     }
 
     UI.toast('Asset details saved successfully.', 'success');
@@ -1547,6 +1715,7 @@ const BankPortal = {
 // ============================================================
 const AdminPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
+  activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '',
 
   init() {
     document.querySelectorAll('#admin-nav .navitem').forEach(el => {
@@ -1574,6 +1743,7 @@ const AdminPortal = {
       case 'title': el.innerHTML = this.renderTitleQueue(); break;
       case 'offers': el.innerHTML = this.renderOffersView(); break;
       case 'audit': el.innerHTML = this.renderAuditView(); break;
+      case 'banks': el.innerHTML = this.renderBanksAndStaffView(); break;
       default: el.innerHTML = this.renderAssetList();
     }
   },
@@ -1583,21 +1753,30 @@ const AdminPortal = {
     if (!el) return;
     if (this.selectedAssetId) {
       const a = Store.getAsset(this.selectedAssetId);
-      el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('assets')">Assets</div><div class="dtab active">${a.ref}<span class="x" onclick="event.stopPropagation();AdminPortal.closeAsset()">×</span></div>`;
-    } else el.innerHTML = `<div class="dtab active">Assets</div>`;
+      el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('assets')">Assets</div><div class="dtab active">${a ? a.ref : 'Asset'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeAsset()">×</span></div>`;
+    } else {
+      const titleMap = {
+        'dashboard': 'Dashboard', 'assets': 'Assets', 'review': 'Review Queue',
+        'legal': 'Legal Verification', 'title': 'Title & Valuation', 'offers': 'Offers',
+        'audit': 'Audit Log', 'banks': 'Banks & Staff'
+      };
+      el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
+    }
   },
 
   renderDashboard() {
     const all = Store.assets;
     const legalQueueCount = all.filter(a => a.status === 'Submitted' && !a.legalSubstate?.clearanceIssued).length;
     return `
-      <div class="page-head"><h1>Admin Dashboard</h1><span class="crumb">Surge Solutions · ${all.length} assets</span></div>
+      <div class="page-head"><h1>Admin Dashboard</h1><span class="crumb">Surge Solutions · Platform Overview</span></div>
       <div class="kpis">
         <div class="kpi" onclick="AdminPortal.nav('assets')"><div class="k">Assets</div><div class="v">${all.length}</div></div>
         <div class="kpi ok" onclick="AdminPortal.nav('assets')"><div class="k">Live</div><div class="v">${all.filter(a => a.status === 'Live').length}</div></div>
         <div class="kpi warn" onclick="AdminPortal.nav('review')"><div class="k">Review</div><div class="v">${all.filter(a => ['Submitted','Under Review'].includes(a.status)).length}</div></div>
         <div class="kpi warn" onclick="AdminPortal.nav('legal')"><div class="k">Legal Pending</div><div class="v">${legalQueueCount}</div></div>
         <div class="kpi alert" onclick="AdminPortal.nav('assets')"><div class="k">Holds</div><div class="v">${all.filter(a => a.legalHold).length}</div></div>
+        <div class="kpi" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Partner Banks</div><div class="v">${Store.banks.length}</div></div>
+        <div class="kpi ok" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Active Staff</div><div class="v">${Store.users.length}</div></div>
       </div>
       <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `<li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${a.action}</b> ${a.entityRef} — ${a.detail || ''}</div><div class="tl-who">${a.who}</div></li>`).join('')}</ul></div></div>
     `;
@@ -2026,6 +2205,545 @@ const AdminPortal = {
     Store.addActivity(id, 'A. Boateng', 'Legal hold released');
     UI.toast('Legal hold released. Asset returns to Approved.', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
+  },
+
+  // ============================================================
+  // BANK PARTNERS & STAFF MANAGEMENT
+  // ============================================================
+  setBankTab(tab) {
+    this.activeBankTab = tab;
+    this.render();
+  },
+
+  filterBankStaff(bankId) {
+    this.selectedBankFilter = bankId;
+    this.activeBankTab = 'staff';
+    this.render();
+  },
+
+  renderBanksAndStaffView() {
+    const isBanks = this.activeBankTab === 'banks';
+    return `
+      <div class="page-head" style="flex-wrap:wrap;gap:10px">
+        <div>
+          <h1 style="display:flex;align-items:center;gap:8px">
+            <svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--blue)"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+            Bank Partners &amp; Staff Administration
+          </h1>
+          <span class="crumb">Multi-tenant institutional onboarding, staff user accounts, and credential provisioning</span>
+        </div>
+        <span class="spacer"></span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" onclick="AdminPortal.modalAddBank()">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Onboard New Bank
+          </button>
+          <button class="btn" onclick="AdminPortal.modalAddStaff()" style="background:#28a745;color:#fff;border-color:#28a745">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>Add Staff &amp; Password
+          </button>
+        </div>
+      </div>
+
+      <div class="tabs-inner" style="margin:14px 0 16px">
+        <div class="tab-inner ${isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('banks')" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <span>Partner Banks</span>
+          <span class="pill ${Store.banks.length ? 'ok' : ''}">${Store.banks.length}</span>
+        </div>
+        <div class="tab-inner ${!isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('staff')" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <span>Bank Staff &amp; Credentials</span>
+          <span class="pill ${Store.users.length ? 'ok' : ''}">${Store.users.length}</span>
+        </div>
+      </div>
+
+      ${isBanks ? this.renderBanksTab() : this.renderStaffTab()}
+    `;
+  },
+
+  renderBanksTab() {
+    const banks = Store.banks || [];
+    const totalAssets = banks.reduce((sum, b) => sum + (b.assetCount || 0), 0);
+    const totalStaff = banks.reduce((sum, b) => sum + (b.staffCount || 0), 0);
+
+    return `
+      <div class="kpis" style="margin-bottom:18px">
+        <div class="kpi"><div class="k">Institutional Partners</div><div class="v">${banks.length}</div></div>
+        <div class="kpi ok"><div class="k">Active Bank Staff</div><div class="v">${totalStaff}</div></div>
+        <div class="kpi info"><div class="k">Assets in Portfolio</div><div class="v">${totalAssets}</div></div>
+        <div class="kpi alert"><div class="k">Standard Commission</div><div class="v">4.0% — 5.0%</div></div>
+      </div>
+
+      ${banks.length === 0 ? `
+        <div class="gridwrap" style="padding:40px 20px;text-align:center">
+          <svg class="ico" viewBox="0 0 24 24" style="width:48px;height:48px;stroke:var(--text-2);margin-bottom:12px"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+          <h3 style="margin:0 0 8px">No Partner Banks Registered Yet</h3>
+          <p style="color:var(--text-2);margin:0 0 16px">Onboard institutional banking partners to begin managing repossessed and distressed assets.</p>
+          <button class="btn primary" onclick="AdminPortal.modalAddBank()">+ Onboard First Partner Bank</button>
+        </div>
+      ` : `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));gap:16px">
+          ${banks.map(b => `
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:space-between">
+              <div>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+                  <div>
+                    <span style="display:inline-block;background:var(--blue);color:#fff;font-family:Consolas,monospace;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:4px">${b.code}</span>
+                    <h3 style="margin:0;font-size:15px;line-height:1.3">${b.name}</h3>
+                  </div>
+                  <span class="badge ${b.status === 'Active' ? 'ok' : 'draft'}">${b.status}</span>
+                </div>
+
+                <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;display:flex;flex-direction:column;gap:4px">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>
+                    <span>${b.email || '—'}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+                    <span>${b.phone || '—'}</span>
+                  </div>
+                </div>
+
+                <div style="background:#F7F9FB;border:1px solid #E8EEF5;border-radius:3px;padding:8px 12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;text-align:center">
+                  <div>
+                    <div style="font-size:11px;color:var(--text-2)">Commission</div>
+                    <div style="font-weight:700;font-size:13px;color:var(--blue)">${b.commissionRate || 4.0}%</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;color:var(--text-2)">Assets</div>
+                    <div style="font-weight:700;font-size:13px">${b.assetCount || 0}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;color:var(--text-2)">Staff</div>
+                    <div style="font-weight:700;font-size:13px;color:#28a745">${b.staffCount || 0}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:6px;border-top:1px solid #ECEFF2;padding-top:12px;margin-top:auto">
+                <button class="btn small ok" onclick="AdminPortal.modalAddStaff('${b.id}')" title="Add new user to this bank" style="flex:1">
+                  + Add Staff
+                </button>
+                <button class="btn small" onclick="AdminPortal.filterBankStaff('${b.id}')" title="View staff for this bank" style="flex:1">
+                  View Staff (${b.staffCount || 0})
+                </button>
+                <button class="btn small danger" onclick="Store.deleteBank('${b.id}')" title="Remove Bank">
+                  ✕
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    `;
+  },
+
+  renderStaffTab() {
+    let users = Store.users || [];
+    const banks = Store.banks || [];
+
+    // Filter by bank
+    if (this.selectedBankFilter) {
+      users = users.filter(u => u.bankId === this.selectedBankFilter);
+    }
+
+    // Filter by role
+    if (this.staffRoleFilter) {
+      users = users.filter(u => u.roleCode === this.staffRoleFilter);
+    }
+
+    // Filter by search query
+    if (this.staffSearchQuery) {
+      const q = this.staffSearchQuery.toLowerCase();
+      users = users.filter(u => 
+        (u.fullName && u.fullName.toLowerCase().includes(q)) ||
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
+      );
+    }
+
+    const roleNameMap = {
+      'BA': 'Bank Administrator',
+      'LRO': 'Legal / Recovery Officer',
+      'AO': 'Asset Officer',
+      'AP': 'Approver',
+      'BFO': 'Finance Officer',
+      'VW': 'Auditor / Viewer',
+      'SA': 'Surge Administrator',
+      'PM': 'Property Manager',
+      'LO': 'Legal Officer',
+      'SG': 'System Guard'
+    };
+
+    return `
+      <!-- Filter Toolbar -->
+      <div class="searchpanel" style="margin-bottom:14px;padding:12px 14px">
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end">
+          <div>
+            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Search Staff by Name / Username / Email</label>
+            <input type="text" placeholder="e.g. Mensah or j.mensah..." value="${this.staffSearchQuery || ''}" 
+              oninput="AdminPortal.staffSearchQuery = this.value; AdminPortal.render();" 
+              style="width:100%;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
+          </div>
+          <div>
+            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Filter by Partner Bank</label>
+            <select onchange="AdminPortal.selectedBankFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
+              <option value="">All Banks &amp; Platforms (${Store.users.length})</option>
+              ${banks.map(b => `<option value="${b.id}" ${this.selectedBankFilter === b.id ? 'selected' : ''}>${b.name} (${b.code})</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Filter by Role</label>
+            <select onchange="AdminPortal.staffRoleFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
+              <option value="">All Roles</option>
+              <option value="BA" ${this.staffRoleFilter === 'BA' ? 'selected' : ''}>Bank Administrator (BA)</option>
+              <option value="LRO" ${this.staffRoleFilter === 'LRO' ? 'selected' : ''}>Legal / Recovery Officer (LRO)</option>
+              <option value="AO" ${this.staffRoleFilter === 'AO' ? 'selected' : ''}>Asset Officer (AO)</option>
+              <option value="AP" ${this.staffRoleFilter === 'AP' ? 'selected' : ''}>Approver (AP)</option>
+              <option value="BFO" ${this.staffRoleFilter === 'BFO' ? 'selected' : ''}>Finance Officer (BFO)</option>
+              <option value="VW" ${this.staffRoleFilter === 'VW' ? 'selected' : ''}>Auditor / Viewer (VW)</option>
+            </select>
+          </div>
+          <div>
+            <button class="btn" onclick="AdminPortal.staffSearchQuery=''; AdminPortal.selectedBankFilter=''; AdminPortal.staffRoleFilter=''; AdminPortal.render();" style="height:32px">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Staff Grid -->
+      <div class="gridwrap">
+        <div class="gridtoolbar" style="display:flex;align-items:center;justify-content:space-between">
+          <strong style="font-size:12.5px">Showing ${users.length} of ${Store.users.length} Staff Accounts</strong>
+          <span style="font-size:11.5px;color:var(--text-2)">Passwords can be assigned, viewed, and reset anytime</span>
+        </div>
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Staff Member</th>
+              <th>Username</th>
+              <th>Partner Bank</th>
+              <th>Role</th>
+              <th>Security &amp; Password</th>
+              <th>Status</th>
+              <th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${users.length === 0 ? `
+              <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-2)">No staff members match the selected filters.</td></tr>
+            ` : users.map(u => `
+              <tr>
+                <td>
+                  <div style="font-weight:600">${u.fullName}</div>
+                  <div style="font-size:11px;color:var(--text-2)">${u.email}</div>
+                </td>
+                <td>
+                  <span style="font-family:Consolas,monospace;font-size:12px;background:#EEF3F8;color:var(--blue);padding:2px 6px;border-radius:3px;font-weight:600">@${u.username}</span>
+                </td>
+                <td>
+                  <div style="font-weight:600">${u.bankName || 'Surge Solutions'}</div>
+                  <div style="font-size:10.5px;color:var(--text-2)">${u.branchName || 'Head Office'}</div>
+                </td>
+                <td>
+                  <span class="badge ${u.roleCode === 'BA' ? 'ok' : u.roleCode === 'LRO' ? 'pending' : u.roleCode === 'AP' ? 'live' : 'draft'}">
+                    ${roleNameMap[u.roleCode] || u.roleCode}
+                  </span>
+                </td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#28a745"></span>
+                    <span style="font-size:11.5px;font-weight:600;color:#28a745">Password Active</span>
+                    <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" style="margin-left:6px;padding:2px 6px;font-size:11px">
+                      Reset Password
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  <span class="badge ${u.status === 'Active' ? 'ok' : 'hold'}" style="cursor:pointer" onclick="Store.toggleUserStatus('${u.id}')" title="Click to toggle status">
+                    ${u.status || 'Active'}
+                  </span>
+                </td>
+                <td style="text-align:right">
+                  <div style="display:inline-flex;gap:4px">
+                    <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" title="Assign new password">
+                      Key
+                    </button>
+                    <button class="btn small danger" onclick="Store.deleteUser('${u.id}')" title="Delete account">
+                      ✕
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  },
+
+  // Modal: Add Partner Bank
+  modalAddBank() {
+    const bodyHtml = `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <p style="margin:0 0 4px;font-size:12.5px;color:var(--text-2)">
+          Register an authorized commercial bank partner into the Surge platform. An isolated tenant workspace with primary branch and commission structure will be generated.
+        </p>
+        
+        <div class="field">
+          <span class="lbl">Bank Legal Name <span class="req">*</span></span>
+          <div class="ctl">
+            <input id="add-bank-legal-name" style="width:100%" placeholder="e.g. Zenith Bank Ghana Limited" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Bank Short Code <span class="req">*</span></span>
+          <div class="ctl">
+            <input id="add-bank-short-code" style="width:100%" placeholder="e.g. ZBG" maxlength="6" style="text-transform:uppercase" required>
+            <small style="font-size:10.5px;color:var(--text-2)">Used for references, tenant identifiers, and branches (3–5 uppercase letters)</small>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Primary Contact Email <span class="req">*</span></span>
+          <div class="ctl">
+            <input type="email" id="add-bank-email" style="width:100%" placeholder="e.g. recoveries@zenithbank.com.gh" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Contact Phone Number</span>
+          <div class="ctl">
+            <input type="tel" id="add-bank-phone" style="width:100%" placeholder="e.g. +233 30 211 4455">
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Default Commission Rate (%)</span>
+          <div class="ctl">
+            <input type="number" id="add-bank-commission" style="width:100%" value="4.0" step="0.5" min="1" max="15">
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Primary Branch Name</span>
+          <div class="ctl">
+            <input id="add-bank-branch" style="width:100%" placeholder="e.g. Head Office - Accra">
+          </div>
+        </div>
+      </div>
+    `;
+
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn primary" onclick="AdminPortal.submitAddBank()">Register Bank Partner</button>
+    `;
+
+    UI.modal('Onboard New Partner Bank', bodyHtml, footerHtml, false);
+  },
+
+  async submitAddBank() {
+    const legal_name = document.getElementById('add-bank-legal-name')?.value?.trim();
+    const short_code = document.getElementById('add-bank-short-code')?.value?.trim().toUpperCase();
+    const contact_email = document.getElementById('add-bank-email')?.value?.trim();
+    const contact_phone = document.getElementById('add-bank-phone')?.value?.trim() || '+233 30 000 0000';
+    const default_commission_rate = Number(document.getElementById('add-bank-commission')?.value) || 4.0;
+    const initial_branch = document.getElementById('add-bank-branch')?.value?.trim() || 'Head Office - Accra';
+
+    if (!legal_name || !short_code || !contact_email) {
+      return UI.toast('Please fill in legal name, short code, and contact email.', 'error');
+    }
+
+    const ok = await Store.createBank({
+      legal_name,
+      short_code,
+      contact_email,
+      contact_phone,
+      default_commission_rate,
+      initial_branch
+    });
+
+    if (ok) {
+      UI.closeModal();
+      this.activeBankTab = 'banks';
+      this.render();
+    }
+  },
+
+  // Modal: Add Staff User & Assign Username/Password
+  modalAddStaff(preselectedBankId = '') {
+    const banks = Store.banks || [];
+    const generatedPass = 'Surge@' + Math.floor(1000 + Math.random() * 9000);
+
+    const bodyHtml = `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <p style="margin:0 0 4px;font-size:12.5px;color:var(--text-2)">
+          Create a bank officer account and set their initial username and password for platform access.
+        </p>
+
+        <div class="field">
+          <span class="lbl">Assign to Partner Bank <span class="req">*</span></span>
+          <div class="ctl">
+            <select id="add-staff-bank" style="width:100%">
+              ${banks.map(b => `<option value="${b.id}" ${(preselectedBankId === b.id || (!preselectedBankId && b.id === 'bank-mtb')) ? 'selected' : ''}>${b.name} (${b.code})</option>`).join('')}
+              <option value="">Surge Solutions (Platform Administrator)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Staff Full Name <span class="req">*</span></span>
+          <div class="ctl">
+            <input id="add-staff-name" style="width:100%" placeholder="e.g. Abena Owusu" oninput="AdminPortal.suggestUsername(this.value)" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Assigned Username <span class="req">*</span></span>
+          <div class="ctl">
+            <div style="position:relative">
+              <span style="position:absolute;left:8px;top:6px;color:var(--text-2);font-family:Consolas,monospace">@</span>
+              <input id="add-staff-username" style="width:100%;padding-left:24px;font-family:Consolas,monospace" placeholder="e.g. a.owusu" required>
+            </div>
+            <small style="font-size:10.5px;color:var(--text-2)">Used by staff member to log in to the portal</small>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Assign Initial Password <span class="req">*</span></span>
+          <div class="ctl">
+            <div style="display:flex;gap:6px">
+              <input type="text" id="add-staff-password" value="${generatedPass}" style="flex:1;font-family:Consolas,monospace;font-weight:600" required>
+              <button type="button" class="btn small" onclick="document.getElementById('add-staff-password').value = 'Surge@' + Math.floor(1000 + Math.random() * 9000); UI.toast('Generated new secure password', 'info');">
+                Regenerate
+              </button>
+            </div>
+            <small style="font-size:10.5px;color:var(--text-2)">Staff member can change this upon initial login</small>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Official Email Address <span class="req">*</span></span>
+          <div class="ctl">
+            <input type="email" id="add-staff-email" style="width:100%" placeholder="e.g. a.owusu@meridiantrust.com.gh" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="lbl">System Role &amp; Permissions <span class="req">*</span></span>
+          <div class="ctl">
+            <select id="add-staff-role" style="width:100%">
+              <option value="BA">Bank Administrator — User management and institutional settings</option>
+              <option value="LRO" selected>Legal / Recovery Officer — Asset creation, documents &amp; legal workflow</option>
+              <option value="AO">Asset Officer — Draft asset preparation and specifications</option>
+              <option value="AP">Approver — High-level review and offer acceptance authority</option>
+              <option value="BFO">Finance Officer (Bank) — Invoices, commission reconciliations</option>
+              <option value="VW">Auditor / Viewer — Read-only observation</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn primary" onclick="AdminPortal.submitAddStaff()">Create Staff Account &amp; Assign Password</button>
+    `;
+
+    UI.modal('Add Bank Staff & Provision Credentials', bodyHtml, footerHtml, false);
+  },
+
+  suggestUsername(fullName) {
+    const unEl = document.getElementById('add-staff-username');
+    if (!unEl || !fullName) return;
+    const parts = fullName.trim().toLowerCase().split(/\s+/);
+    if (parts.length >= 2) {
+      unEl.value = (parts[0][0] + '.' + parts[parts.length - 1]).replace(/[^a-z0-9.]/g, '');
+    } else if (parts.length === 1) {
+      unEl.value = parts[0].replace(/[^a-z0-9]/g, '');
+    }
+  },
+
+  async submitAddStaff() {
+    const bank_id = document.getElementById('add-staff-bank')?.value || null;
+    const full_name = document.getElementById('add-staff-name')?.value?.trim();
+    const username = document.getElementById('add-staff-username')?.value?.trim().toLowerCase().replace(/^@/, '');
+    const password = document.getElementById('add-staff-password')?.value?.trim();
+    const email = document.getElementById('add-staff-email')?.value?.trim().toLowerCase();
+    const role_code = document.getElementById('add-staff-role')?.value;
+
+    if (!full_name || !username || !password || !email || !role_code) {
+      return UI.toast('Please complete all required fields.', 'error');
+    }
+
+    const ok = await Store.createUser({
+      bank_id,
+      full_name,
+      username,
+      password,
+      email,
+      role_code
+    });
+
+    if (ok) {
+      UI.closeModal();
+      this.activeBankTab = 'staff';
+      this.render();
+    }
+  },
+
+  // Modal: Reset / Assign New Password
+  modalResetPassword(userId) {
+    const user = Store.users.find(u => u.id === userId);
+    if (!user) return;
+    const newPass = 'Surge@' + Math.floor(1000 + Math.random() * 9000);
+
+    const bodyHtml = `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="background:#F7F9FB;border:1px solid #E8EEF5;border-radius:4px;padding:12px">
+          <div style="font-weight:700;font-size:14px;margin-bottom:2px">${user.fullName}</div>
+          <div style="font-size:12px;color:var(--text-2);display:flex;gap:12px">
+            <span>Username: <b style="font-family:Consolas,monospace;color:var(--blue)">@${user.username}</b></span>
+            <span>Bank: <b>${user.bankName}</b></span>
+          </div>
+        </div>
+
+        <p style="margin:4px 0 0;font-size:12.5px;color:var(--text-2)">
+          Assign a new password for this staff member. The password will be immediately effective across all platform logins.
+        </p>
+
+        <div class="field">
+          <span class="lbl">New Password <span class="req">*</span></span>
+          <div class="ctl">
+            <div style="display:flex;gap:6px">
+              <input type="text" id="reset-staff-password" value="${newPass}" style="flex:1;font-family:Consolas,monospace;font-weight:600" required>
+              <button type="button" class="btn small" onclick="document.getElementById('reset-staff-password').value = 'Surge@' + Math.floor(1000 + Math.random() * 9000); UI.toast('Generated password', 'info');">
+                Regenerate
+              </button>
+            </div>
+            <small style="font-size:10.5px;color:var(--text-2)">Minimum 6 characters. Must contain letters and numbers.</small>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn ok" onclick="AdminPortal.submitResetPassword('${user.id}')">Update Password</button>
+    `;
+
+    UI.modal('Reset Staff Password', bodyHtml, footerHtml, false);
+  },
+
+  async submitResetPassword(userId) {
+    const password = document.getElementById('reset-staff-password')?.value?.trim();
+    if (!password || password.length < 6) {
+      return UI.toast('Password must be at least 6 characters long.', 'error');
+    }
+
+    const ok = await Store.resetUserPassword(userId, password);
+    if (ok) {
+      UI.closeModal();
+      this.render();
+    }
   }
 };
 
