@@ -667,7 +667,8 @@ const BankPortal = {
         </div>
         ${tabContent}
         <div class="form-actions" style="margin-top:14px;padding-top:14px;border-top:1px solid #E0E0E0">
-          ${canEdit ? `<button class="btn primary" onclick="BankPortal.submitForReview()">Submit for Review</button>` : ''}
+          ${canEdit ? `<button class="btn primary" onclick="BankPortal.saveOverview()">Save Asset Details</button>` : ''}
+          ${canEdit ? `<button class="btn" onclick="BankPortal.submitForReview()">Submit for Review</button>` : ''}
           ${a.status === 'Changes Required' ? `<button class="btn primary" onclick="BankPortal.resubmitAsset()">Resubmit</button>` : ''}
           ${a.status === 'Draft' ? `<button class="btn danger" onclick="BankPortal.deleteAsset('${a.id}')">Delete Draft</button>` : ''}
           <button class="btn" onclick="BankPortal.closeAsset()">Close</button>
@@ -677,42 +678,134 @@ const BankPortal = {
   },
 
   renderOverviewTab(a) {
+    const canEdit = ['Draft', 'Changes Required', 'Submitted'].includes(a.status);
+    if (!canEdit) {
+      return `
+        <div class="grid2">
+          <div class="group">
+            <div class="caption">Identification</div>
+            <div class="body">
+              <div class="field"><span class="lbl">Public Reference</span><div class="ctl"><input value="${a.ref}" readonly></div></div>
+              <div class="field"><span class="lbl">Category</span><div class="ctl"><input value="${a.category}" readonly></div></div>
+              <div class="field"><span class="lbl">Asset Type</span><div class="ctl"><input value="${a.assetType || '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Internal Bank Ref</span><div class="ctl"><input value="${a.caseRef || '—'}" readonly></div></div>
+            </div>
+          </div>
+          <div class="group">
+            <div class="caption">Location</div>
+            <div class="body">
+              <div class="field"><span class="lbl">Region</span><div class="ctl"><input value="${a.region || '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">District</span><div class="ctl"><input value="${a.district || '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Public Location</span><div class="ctl"><input value="${a.publicLocation || '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Exact Address</span><div class="ctl"><input value="${a.exactAddress || '—'}" readonly></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="group">
+            <div class="caption">Pricing</div>
+            <div class="body">
+              <div class="field"><span class="lbl">Reserve Price (GHS)</span><div class="ctl"><input class="money" value="${Number(a.reserve).toLocaleString('en-GH', { minimumFractionDigits: 2 })}" readonly></div></div>
+              <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input class="money" value="${Number(a.minOffer).toLocaleString('en-GH', { minimumFractionDigits: 2 })}" readonly></div></div>
+              <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl"><input value="${a.showReserve ? 'Yes' : 'No — Price on Application'}" readonly></div></div>
+            </div>
+          </div>
+          <div class="group">
+            <div class="caption">Valuation</div>
+            <div class="body">
+              <div class="field"><span class="lbl">Valuation Amount</span><div class="ctl"><input class="money" value="${a.valuationAmount ? UI.fmtMoney(a.valuationAmount) : 'Not recorded'}" readonly></div></div>
+              <div class="field"><span class="lbl">Valuation Date</span><div class="ctl"><input value="${a.valuationDate ? UI.fmtDateShort(a.valuationDate) : '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Expiry Status</span><div class="ctl"><input value="${a.valuationExpiry && new Date(a.valuationExpiry) > new Date() ? 'Valid' : 'REVIEW REQUIRED'}" readonly style="color:${a.valuationExpiry && new Date(a.valuationExpiry) > new Date() ? 'var(--success)' : 'var(--danger)'};font-weight:600"></div></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const regions = ['Greater Accra','Ashanti','Central','Western','Eastern','Northern','Volta','Upper East','Upper West','Bono','Bono East','Ahafo','Oti','Savannah','North East','Western North'];
+    const categories = ['House','Apartment','Commercial','Land','Vehicle','Equipment'];
+
     return `
       <div class="grid2">
         <div class="group">
-          <div class="caption">Identification <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-basics')">Edit</button></div>
+          <div class="caption">Asset Particulars <span style="font-size:11px;color:var(--text-2);font-weight:normal;margin-left:auto">Draft details editable</span></div>
           <div class="body">
-            <div class="field"><span class="lbl">Public Reference</span><div class="ctl"><input value="${a.ref}" readonly></div></div>
-            <div class="field"><span class="lbl">Category</span><div class="ctl"><input value="${a.category}" readonly></div></div>
-            <div class="field"><span class="lbl">Asset Type</span><div class="ctl"><input value="${a.assetType}" readonly></div></div>
-            <div class="field"><span class="lbl">Internal Bank Ref <span class="restricted-tag">Restricted</span></span><div class="ctl"><input value="${a.caseRef}" readonly></div></div>
+            <div class="field"><span class="lbl">Public Reference</span><div class="ctl"><input value="${a.ref}" readonly style="background:#F0F0F0;color:var(--text-2)"></div></div>
+            <div class="field"><span class="lbl">Category <span class="req">*</span></span><div class="ctl">
+              <select id="edit-ov-category">
+                ${categories.map(c => `<option value="${c}" ${a.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+            </div></div>
+            <div class="field"><span class="lbl">Asset Type <span class="req">*</span></span><div class="ctl">
+              <input id="edit-ov-assetType" value="${a.assetType || ''}" placeholder="e.g. 4-bedroom detached house, Toyota Hilux">
+            </div></div>
+            <div class="field"><span class="lbl">Internal Bank Reference <span class="req">*</span></span><div class="ctl">
+              <input id="edit-ov-caseRef" value="${a.caseRef || ''}" placeholder="e.g. BNK-LN-88214">
+            </div></div>
+            <div class="field"><span class="lbl">Enforcement Basis</span><div class="ctl">
+              <select id="edit-ov-enforcementBasis">
+                <option value="">— Select Basis —</option>
+                <option ${a.enforcementBasis === 'Court Judgment' ? 'selected' : ''}>Court Judgment</option>
+                <option ${a.enforcementBasis === 'Default Notice' ? 'selected' : ''}>Default Notice</option>
+                <option ${a.enforcementBasis === 'Memorandum of Agreement' ? 'selected' : ''}>Memorandum of Agreement</option>
+                <option ${a.enforcementBasis === 'Settlement Agreement' ? 'selected' : ''}>Settlement Agreement</option>
+              </select>
+            </div></div>
           </div>
         </div>
+
         <div class="group">
-          <div class="caption">Location</div>
+          <div class="caption">Location Particulars</div>
           <div class="body">
-            <div class="field"><span class="lbl">Region</span><div class="ctl"><input value="${a.region}" readonly></div></div>
-            <div class="field"><span class="lbl">District</span><div class="ctl"><input value="${a.district}" readonly></div></div>
-            <div class="field"><span class="lbl">Public Location</span><div class="ctl"><input value="${a.publicLocation}" readonly></div></div>
-            <div class="field"><span class="lbl">Exact Address <span class="restricted-tag">Restricted</span></span><div class="ctl"><input value="${a.exactAddress}" readonly></div></div>
+            <div class="field"><span class="lbl">Region <span class="req">*</span></span><div class="ctl">
+              <select id="edit-ov-region">
+                ${regions.map(r => `<option value="${r}" ${a.region === r ? 'selected' : ''}>${r}</option>`).join('')}
+              </select>
+            </div></div>
+            <div class="field"><span class="lbl">District</span><div class="ctl">
+              <input id="edit-ov-district" value="${a.district || ''}" placeholder="e.g. Tema West Metropolitan">
+            </div></div>
+            <div class="field"><span class="lbl">Town / Neighborhood</span><div class="ctl">
+              <input id="edit-ov-town" value="${a.town || ''}" placeholder="e.g. Community 25">
+            </div></div>
+            <div class="field"><span class="lbl">Public Location <span class="req">*</span></span><div class="ctl">
+              <input id="edit-ov-publicLocation" value="${a.publicLocation || ''}" placeholder="e.g. Tema, Greater Accra (shown to public)">
+            </div></div>
+            <div class="field"><span class="lbl">Exact Address <span class="restricted-tag">Restricted</span></span><div class="ctl">
+              <input id="edit-ov-exactAddress" value="${a.exactAddress || ''}" placeholder="e.g. Plot 14, Block C (hidden until KYC/Viewing)">
+            </div></div>
           </div>
         </div>
       </div>
+
       <div class="grid2">
         <div class="group">
-          <div class="caption">Pricing <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-basics')">Edit</button></div>
+          <div class="caption">Pricing &amp; Commercial Terms</div>
           <div class="body">
-            <div class="field"><span class="lbl">Reserve Price (GHS)</span><div class="ctl"><input class="money" value="${Number(a.reserve).toLocaleString('en-GH', { minimumFractionDigits: 2 })}" readonly></div></div>
-            <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input class="money" value="${Number(a.minOffer).toLocaleString('en-GH', { minimumFractionDigits: 2 })}" readonly></div></div>
-            <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl"><input value="${a.showReserve ? 'Yes' : 'No — Price on Application'}" readonly></div></div>
+            <div class="field"><span class="lbl">Reserve Price (GHS) <span class="req">*</span></span><div class="ctl">
+              <input id="edit-ov-reserve" class="money" type="number" value="${a.reserve || 0}" min="0" placeholder="0.00">
+            </div></div>
+            <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl">
+              <input id="edit-ov-minOffer" class="money" type="number" value="${a.minOffer || 0}" min="0" placeholder="0.00">
+            </div></div>
+            <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
+              <select id="edit-ov-showReserve">
+                <option value="true" ${a.showReserve ? 'selected' : ''}>Yes — display reserve price</option>
+                <option value="false" ${!a.showReserve ? 'selected' : ''}>No — Price on Application</option>
+              </select>
+            </div></div>
           </div>
         </div>
+
         <div class="group">
-          <div class="caption">Valuation <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-valuation')">Edit</button></div>
+          <div class="caption">Description &amp; Overview</div>
           <div class="body">
-            <div class="field"><span class="lbl">Valuation Amount</span><div class="ctl"><input class="money" value="${a.valuationAmount ? UI.fmtMoney(a.valuationAmount) : 'Not recorded'}" readonly></div></div>
-            <div class="field"><span class="lbl">Valuation Date</span><div class="ctl"><input value="${a.valuationDate ? UI.fmtDateShort(a.valuationDate) : '—'}" readonly></div></div>
-            <div class="field"><span class="lbl">Expiry Status</span><div class="ctl"><input value="${a.valuationExpiry && new Date(a.valuationExpiry) > new Date() ? 'Valid' : 'REVIEW REQUIRED'}" readonly style="color:${a.valuationExpiry && new Date(a.valuationExpiry) > new Date() ? 'var(--success)' : 'var(--danger)'};font-weight:600"></div></div>
+            <div class="field"><span class="lbl">Property Description <span class="req">*</span></span><div class="ctl">
+              <textarea id="edit-ov-description" rows="5" placeholder="Detailed description of features, building specifications, condition, and disposition circumstances (minimum 20 characters)...">${a.description || ''}</textarea>
+            </div></div>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+              <button class="btn primary" onclick="BankPortal.saveOverview()">Save Information</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1411,7 +1504,78 @@ const BankPortal = {
     UI.toast(`Draft asset ${a.ref} deleted successfully.`, 'success');
   },
 
-  saveCurrent() { if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn'); UI.toast('Asset saved', 'success'); },
+  saveOverview() {
+    const a = Store.getAsset(this.selectedAssetId);
+    if (!a) return;
+    const catEl = document.getElementById('edit-ov-category');
+    if (!catEl) return;
+    
+    const category = catEl.value;
+    const assetType = document.getElementById('edit-ov-assetType')?.value?.trim() || '';
+    const caseRef = document.getElementById('edit-ov-caseRef')?.value?.trim() || a.caseRef;
+    const enforcementBasis = document.getElementById('edit-ov-enforcementBasis')?.value || a.enforcementBasis;
+    const region = document.getElementById('edit-ov-region')?.value || a.region;
+    const district = document.getElementById('edit-ov-district')?.value?.trim() || '';
+    const town = document.getElementById('edit-ov-town')?.value?.trim() || '';
+    const publicLocation = document.getElementById('edit-ov-publicLocation')?.value?.trim() || '';
+    const exactAddress = document.getElementById('edit-ov-exactAddress')?.value?.trim() || '';
+    const reserve = Number(document.getElementById('edit-ov-reserve')?.value) || 0;
+    const minOffer = Number(document.getElementById('edit-ov-minOffer')?.value) || 0;
+    const showReserve = document.getElementById('edit-ov-showReserve')?.value === 'true';
+    const description = document.getElementById('edit-ov-description')?.value?.trim() || '';
+
+    a.category = category;
+    a.assetType = assetType;
+    a.caseRef = caseRef;
+    a.enforcementBasis = enforcementBasis;
+    a.region = region;
+    a.district = district;
+    a.town = town;
+    a.publicLocation = publicLocation;
+    a.exactAddress = exactAddress;
+    a.reserve = reserve;
+    a.minOffer = minOffer;
+    a.showReserve = showReserve;
+    a.description = description;
+    a.updatedAt = new Date().toISOString();
+
+    Store.addAudit('J. Mensah', 'UPDATE', 'Asset', a.ref, null, null, 'Asset details updated');
+    Store.persist();
+
+    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+      fetch('/api/v1/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah' },
+        body: JSON.stringify({
+          bankId: 'bank-mtb',
+          internalBankRef: a.caseRef,
+          categoryCode: a.category,
+          assetType: a.assetType,
+          description: a.description,
+          region: a.region,
+          district: a.district,
+          town: a.town,
+          publicLocation: a.publicLocation,
+          exactAddress: a.exactAddress,
+          reservePrice: a.reserve,
+          minimumOffer: a.minOffer,
+          showReservePublicly: a.showReserve
+        })
+      }).catch(() => {});
+    }
+
+    UI.toast('Asset details saved successfully.', 'success');
+    this.render();
+  },
+
+  saveCurrent() {
+    if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn');
+    if (document.getElementById('edit-ov-category')) {
+      this.saveOverview();
+    } else {
+      UI.toast('Asset record saved', 'success');
+    }
+  },
   submitCurrent() { this.submitForReview(); },
 
   submitForReview() {
