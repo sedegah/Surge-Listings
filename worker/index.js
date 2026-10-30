@@ -1,11 +1,20 @@
 /**
- * Surge Solutions — Cloudflare Workers Native Modular Monolith API
- * Single Monolithic Backend Serving 3 Distinct Isolated Portals:
- * 1. Admin API (/api/admin/*) — Highest-privilege platform oversight, 5 statutory gates, bank & user management
- * 2. Bank API (/api/bank/*) — Bank-tenant isolated asset registration, legal workflows, offers, and reports
- * 3. Marketplace API (/api/marketplace/* & /api/public/*) — Public sanitized listings, buyer KYC, viewings & offers
- * 4. Unified /api/v1/* backward-compatible aliases
- * 
+ * Surge Solutions — Cloudflare Workers Monolith API v2.2.0
+ * Centralized Authentication + Role-Based Authorization
+ *
+ * Auth Architecture:
+ * - ONE central login: /api/auth/login
+ * - Server-side sessions stored in D1 (sessions table)
+ * - Session token sent via Authorization: Bearer <token> header
+ * - bankId is NEVER trusted from the client — always derived from the authenticated session
+ * - Every /api/bank/* route calls requireBankAuth() — unauthorized requests return 401/403
+ * - Invitation-only bank employee registration
+ *
+ * Portals & Required Scopes:
+ * - /api/admin/* → scope: 'surge' (Surge Administrators only)
+ * - /api/bank/*  → scope: 'bank' or 'surge'
+ * - /api/marketplace/* → public (no auth required, except offer/KYC submission)
+ *
  * Direct Bindings:
  * - env.DB: Cloudflare D1 Database (surge-solutions-db)
  * - env.ASSETS_BUCKET: Cloudflare R2 Bucket (surge-assets)
@@ -81,8 +90,89 @@ export default {
       }
     }
 
-    // Context & Tenant Isolation Headers
-    const bankId = request.headers.get('x-bank-id') || url.searchParams.get('bank_id') || 'bank-mtb';
+    // ============================================================
+    // SESSION AUTH MIDDLEWARE
+    // Validates the session token from Authorization: Bearer <token>
+    // or X-Session-Token header. Enriches the request context.
+    // NEVER trusts client-supplied bank_id headers.
+    // ============================================================
+    const SESSION_TTL_HOURS = 8; // sessions expire after 8 hours of inactivity
+
+    async function generateToken(bytes = 32) {
+      const arr = new Uint8Array(bytes);
+      crypto.getRandomValues(arr);
+      return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Resolve session from Authorization header or X-Session-Token
+    async function resolveSession() {
+      const authHeader = request.headers.get('Authorization') || '';
+      const tokenHeader = request.headers.get('X-Session-Token') || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : tokenHeader.trim();
+      if (!token) return null;
+
+      const session = await env.DB.prepare(`
+        SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
+               b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status
+        FROM sessions s
+        JOIN users u ON s.user_id = u.id
+        LEFT JOIN banks b ON s.bank_id = b.id
+        WHERE s.id = ? AND s.revoked = 0
+          AND datetime(s.expires_at) > datetime('now')
+      `).bind(token).first();
+
+      if (!session) return null;
+      if (session.user_status !== 'Active') return null;
+
+      // Touch last_active (non-blocking)
+      ctx.waitUntil(env.DB.prepare(`UPDATE sessions SET last_active = datetime('now') WHERE id = ?`).bind(token).run());
+      return session;
+    }
+
+    // Require authentication — returns session or sends 401
+    async function requireAuth() {
+      const session = await resolveSession();
+      if (!session) {
+        throw new Response(JSON.stringify({ success: false, error: 'Authentication required. Please sign in.', code: 'UNAUTHENTICATED' }), { status: 401, headers: corsHeaders });
+      }
+      return session;
+    }
+
+    // Require bank-level authentication — scope must be 'bank' or 'surge'
+    async function requireBankAuth() {
+      const session = await requireAuth();
+      if (session.scope !== 'bank' && session.scope !== 'surge') {
+        throw new Response(JSON.stringify({ success: false, error: 'Bank Portal access denied. This account does not have bank portal permissions.', code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
+      }
+      if (!session.bank_id) {
+        throw new Response(JSON.stringify({ success: false, error: 'No bank organisation is associated with this account.', code: 'NO_BANK' }), { status: 403, headers: corsHeaders });
+      }
+      if (session.bank_status && session.bank_status !== 'Active') {
+        throw new Response(JSON.stringify({ success: false, error: 'Your bank organisation is suspended.', code: 'BANK_SUSPENDED' }), { status: 403, headers: corsHeaders });
+      }
+      return session;
+    }
+
+    // Require Surge admin authentication
+    async function requireAdminAuth() {
+      const session = await requireAuth();
+      if (session.scope !== 'surge') {
+        throw new Response(JSON.stringify({ success: false, error: 'Surge Admin access denied.', code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
+      }
+      return session;
+    }
+
+    // Check recent failed login attempts (rate limiting)
+    async function checkLoginRateLimit(username, ipAddress) {
+      const window = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const attempts = await env.DB.prepare(`
+        SELECT COUNT(*) as c FROM login_attempts
+        WHERE username = ? AND success = 0 AND attempted_at > ?
+      `).bind(username.trim().toLowerCase(), window).first();
+      return (attempts?.c || 0) >= 5;
+    }
+
+    // Legacy context (used by non-auth-gated routes only)
     const actorName = request.headers.get('x-actor-name') || 'Authorized User';
     const actorRole = request.headers.get('x-actor-role') || 'User';
 
@@ -94,13 +184,16 @@ export default {
         return json({
           platform: 'Surge Solutions Institutional Disposition API',
           status: 'online',
-          version: '2.0.0',
+          version: '2.1.0',
           engine: 'Cloudflare Workers + D1 Database + R2 Object Storage',
           cors_allowed_frontend: 'https://surge-listings.vercel.app',
           namespaces: {
             admin: '/api/admin/*',
             bank: '/api/bank/*',
             marketplace: '/api/marketplace/*',
+            branches: '/api/admin/branches, /api/bank/branches',
+            regions: '/api/regions',
+            encrypted: '/api/enc/*',
             legacy_v1: '/api/v1/*'
           },
           documentation: '/api/health'
@@ -119,58 +212,168 @@ export default {
       }
 
       // ============================================================
-      // 1. AUTHENTICATION & SESSION
+      // 1. CENTRALIZED AUTHENTICATION
+      // POST /api/auth/login   — Central login for all portals
+      // POST /api/auth/logout  — Revoke current session
+      // GET  /api/auth/me      — Validate session + get profile
+      // POST /api/auth/accept-invitation — Activate account from invite
       // ============================================================
-      if (['/api/v1/auth/login', '/api/auth/login', '/api/admin/auth/login', '/api/bank/auth/login', '/api/marketplace/buyers/login'].includes(pathname) && method === 'POST') {
+
+      if (['/api/auth/login', '/api/v1/auth/login', '/api/bank/auth/login', '/api/admin/auth/login'].includes(pathname) && method === 'POST') {
         const body = await getBody();
         const { username, password } = body;
-        if (!username) return err('Username or email is required', 400);
+        if (!username || !password) return err('Username and password are required.', 400);
+
+        const ipAddress = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+        const uname = username.trim().toLowerCase();
+
+        // Rate limit: 5 failures per 15 min
+        const locked = await checkLoginRateLimit(uname, ipAddress);
+        if (locked) {
+          await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, failure_reason, attempted_at) VALUES (?, ?, ?, 0, 'RATE_LIMITED', datetime('now'))`)
+            .bind('la-' + Date.now(), uname, ipAddress).run();
+          return err('Too many failed attempts. Wait 15 minutes before trying again.', 429);
+        }
 
         const user = await env.DB.prepare(`
-          SELECT u.*, r.name as role_name, r.scope, o.name as org_name, b.legal_name as bank_name
+          SELECT u.*, r.name as role_name, r.scope, o.name as org_name,
+                 b.id as bank_id, b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status
           FROM users u
           JOIN roles r ON u.role_code = r.code
           JOIN organizations o ON u.organization_id = o.id
           LEFT JOIN banks b ON u.bank_id = b.id
-          WHERE u.username = ? OR u.email = ?
-        `).bind(username.trim().toLowerCase(), username.trim().toLowerCase()).first();
+          WHERE (u.username = ? OR u.email = ?) AND u.status = 'Active'
+        `).bind(uname, uname).first();
 
-        if (!user) return err('Invalid username or credentials', 401);
-        if (user.password_hash && password && user.password_hash !== password.trim()) {
-          return err('Invalid password', 401);
-        }
+        const recordFailure = async (reason) => {
+          await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, failure_reason, attempted_at) VALUES (?, ?, ?, 0, ?, datetime('now'))`)
+            .bind('la-' + Date.now() + Math.random().toString(36).slice(2), uname, ipAddress, reason).run();
+        };
 
-        await auditLog(user.full_name, user.role_name, user.org_name, 'LOGIN', 'User', user.id, 'User authenticated successfully');
+        if (!user) { await recordFailure('USER_NOT_FOUND'); return err('The username or password is incorrect.', 401); }
+        if (!user.password_hash) { await recordFailure('NO_PASSWORD'); return err('This account has not been activated. Accept your invitation first.', 403); }
+        if (user.password_hash !== password.trim()) { await recordFailure('WRONG_PASSWORD'); return err('The username or password is incorrect.', 401); }
+
+        // Create session
+        const token = await generateToken(32);
+        const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 3600 * 1000).toISOString();
+        await env.DB.prepare(`
+          INSERT INTO sessions (id, user_id, organization_id, bank_id, branch_id, role_code, scope, ip_address, user_agent, created_at, expires_at, last_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
+        `).bind(token, user.id, user.organization_id, user.bank_id || null, user.branch_id || null,
+          user.role_code, user.scope, ipAddress,
+          (request.headers.get('User-Agent') || '').substring(0, 250),
+          expiresAt).run();
+
+        // Record success & update last_login
+        await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, attempted_at) VALUES (?, ?, ?, 1, datetime('now'))`)
+          .bind('la-' + Date.now(), uname, ipAddress).run();
+        await env.DB.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).bind(user.id).run();
+        await auditLog(user.full_name, user.role_name, user.org_name, 'LOGIN', 'User', user.id, `Signed in from ${ipAddress}`);
+
         return json({
           success: true,
-          message: 'Authentication successful',
+          token,
+          expiresAt,
           user: {
-            id: user.id,
-            username: user.username,
-            fullName: user.full_name,
-            email: user.email,
-            roleCode: user.role_code,
-            roleName: user.role_name,
-            scope: user.scope,
-            bankId: user.bank_id,
-            bankName: user.bank_name,
-            organizationId: user.organization_id,
-            mfaEnabled: !!user.mfa_enabled
+            id: user.id, username: user.username, fullName: user.full_name,
+            email: user.email, roleCode: user.role_code, roleName: user.role_name,
+            scope: user.scope, bankId: user.bank_id, bankName: user.bank_name,
+            bankCode: user.bank_code, organizationId: user.organization_id,
+            branchId: user.branch_id, mfaEnabled: !!user.mfa_enabled
           }
         });
       }
 
-      if (pathname === '/api/auth/me' || pathname === '/api/v1/auth/me') {
-        const user = await env.DB.prepare(`
-          SELECT u.id, u.username, u.full_name, u.email, u.role_code, r.name as role_name, r.scope,
-                 b.legal_name as bank_name, u.bank_id
-          FROM users u
-          JOIN roles r ON u.role_code = r.code
-          LEFT JOIN banks b ON u.bank_id = b.id
-          WHERE u.id = ? OR u.username = ?
-        `).bind(actorName, actorName).first();
+      // POST /api/auth/logout — Revoke session
+      if (pathname === '/api/auth/logout' && method === 'POST') {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+        if (token) {
+          await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'USER_LOGOUT' WHERE id = ?`).bind(token).run();
+        }
+        return json({ success: true, message: 'Signed out successfully.' });
+      }
 
-        return json({ success: true, user: user || { id: 'anon', username: 'guest', scope: 'public' } });
+      // GET /api/auth/me — Validate session and return user profile
+      if ((pathname === '/api/auth/me' || pathname === '/api/v1/auth/me') && method === 'GET') {
+        const session = await resolveSession();
+        if (!session) return json({ success: true, authenticated: false, user: null });
+        return json({
+          success: true, authenticated: true,
+          user: {
+            id: session.user_id, username: session.username, fullName: session.full_name,
+            email: session.email, roleCode: session.role_code, scope: session.scope,
+            bankId: session.bank_id, bankName: session.bank_name, bankCode: session.bank_code,
+            branchId: session.branch_id, organizationId: session.organization_id
+          }
+        });
+      }
+
+      // POST /api/auth/accept-invitation — Activate account from invitation link
+      if (pathname === '/api/auth/accept-invitation' && method === 'POST') {
+        const body = await getBody();
+        const { token, password, full_name } = body;
+        if (!token || !password) return err('Invitation token and password are required.', 400);
+        if (password.length < 8) return err('Password must be at least 8 characters.', 400);
+
+        const invite = await env.DB.prepare(`
+          SELECT * FROM invitations WHERE token = ? AND status = 'Pending' AND datetime(expires_at) > datetime('now')
+        `).bind(token).first();
+        if (!invite) return err('This invitation link is invalid or has expired.', 404);
+
+        // Check if user already exists with this email
+        let userId;
+        const existing = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`).bind(invite.email).first();
+        if (existing) {
+          userId = existing.id;
+          await env.DB.prepare(`UPDATE users SET password_hash = ?, full_name = COALESCE(?, full_name), status = 'Active' WHERE id = ?`)
+            .bind(password.trim(), full_name || null, userId).run();
+        } else {
+          userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+          const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(invite.bank_id).first();
+          const username = invite.email.split('@')[0].replace(/[^a-z0-9.]/gi, '').toLowerCase();
+          await env.DB.prepare(`
+            INSERT INTO users (id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Active', datetime('now'))
+          `).bind(userId, bank?.organization_id || 'org-surge', invite.bank_id, invite.branch_id || null,
+            username, full_name || invite.full_name || invite.email.split('@')[0],
+            invite.email, invite.role_code, password.trim()).run();
+        }
+
+        // Add organization membership
+        const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(invite.bank_id).first();
+        if (bank) {
+          await env.DB.prepare(`INSERT OR IGNORE INTO organization_members (id, user_id, organization_id, bank_id, branch_id, role_code, status, joined_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 'Active', datetime('now'), datetime('now'))`)
+            .bind('om-' + Date.now(), userId, bank.organization_id, invite.bank_id, invite.branch_id || null, invite.role_code).run();
+        }
+
+        await env.DB.prepare(`UPDATE invitations SET status = 'Accepted', accepted_at = datetime('now') WHERE id = ?`).bind(invite.id).run();
+        await auditLog(invite.email, invite.role_code, invite.bank_id, 'INVITATION_ACCEPTED', 'User', userId, `Account activated via invitation`);
+        return json({ success: true, message: 'Account activated. You can now sign in.' });
+      }
+
+      // POST /api/auth/invite — Send bank employee invitation (Bank Admin or Surge Admin)
+      if (pathname === '/api/auth/invite' && method === 'POST') {
+        const session = await requireBankAuth();
+        const body = await getBody();
+        const { email, full_name, role_code, branch_id } = body;
+        if (!email) return err('Email address is required.', 400);
+
+        const inviteToken = await generateToken(24);
+        const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 days
+        const inviteId = 'inv-' + Date.now().toString(36);
+
+        await env.DB.prepare(`
+          INSERT INTO invitations (id, token, email, full_name, bank_id, branch_id, role_code, invited_by, status, expires_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, datetime('now'))
+        `).bind(inviteId, inviteToken, email.trim().toLowerCase(), full_name || null,
+          session.bank_id, branch_id || session.branch_id || null,
+          role_code || 'bank-recovery', session.user_id, expiresAt).run();
+
+        await auditLog(session.full_name, session.role_code, session.bank_id, 'INVITATION_SENT', 'Invitation', inviteId, `Invitation sent to ${email}`);
+        const acceptUrl = `https://surge-listings.vercel.app/accept-invitation?token=${inviteToken}`;
+        return json({ success: true, inviteId, token: inviteToken, acceptUrl, expiresAt, message: `Invitation created for ${email}. Share the accept URL with them.` }, 201);
       }
 
       // =========================================================================
@@ -241,8 +444,8 @@ export default {
         const branchId = 'br-' + cleanCode.toLowerCase() + '-hq';
         const branchName = initial_branch ? initial_branch.trim() : (cleanCode + ' Head Office - Accra');
         await env.DB.prepare(`
-          INSERT INTO bank_branches (id, bank_id, name, branch_code, region, status, created_at)
-          VALUES (?, ?, ?, 'HQ', 'Greater Accra', 'Active', datetime('now'))
+          INSERT INTO bank_branches (id, bank_id, name, branch_code, region, district, town, status, created_at)
+          VALUES (?, ?, ?, 'HQ', 'Greater Accra', 'Accra Metropolitan', 'Accra', 'Active', datetime('now'))
         `).bind(branchId, bId, branchName).run();
 
         await auditLog(actorName, actorRole, 'Surge Solutions', 'ADD_BANK', 'Bank', bId, `Registered partner bank: ${legal_name} (${cleanCode})`);
@@ -434,11 +637,14 @@ export default {
 
       // =========================================================================
       // 3. BANK PORTAL API (/api/bank/*)
-      // Tenant-Isolated by bank_id: Dashboard, Assets, Documents, Legal, Decisions
+      // ALL routes below require a valid bank session.
+      // bankId is derived from the authenticated session ONLY — never from the client.
       // =========================================================================
 
       // GET /api/bank/dashboard
       if (pathname === '/api/bank/dashboard' && method === 'GET') {
+        const session = await requireBankAuth();
+        const sid = session.bank_id;
         const stats = await env.DB.prepare(`
           SELECT 
             (SELECT COUNT(*) FROM assets WHERE bank_id = ?) as totalAssets,
@@ -448,47 +654,95 @@ export default {
             (SELECT COUNT(*) FROM assets WHERE bank_id = ? AND legal_hold_active = 1) as legalHolds,
             (SELECT COUNT(*) FROM assets WHERE bank_id = ? AND status = 'Sold') as completedSales,
             (SELECT COUNT(*) FROM offers o JOIN assets a ON o.asset_id = a.id WHERE a.bank_id = ? AND o.status = 'Under Bank Review') as activeOffers
-        `).bind(bankId, bankId, bankId, bankId, bankId, bankId, bankId).first();
+        `).bind(sid, sid, sid, sid, sid, sid, sid).first();
 
         const recentActivity = await env.DB.prepare(`
           SELECT * FROM audit_logs 
           WHERE organization = ? OR delta_summary LIKE ?
           ORDER BY created_at DESC LIMIT 8
-        `).bind(bankId, `%${bankId}%`).all();
+        `).bind(sid, `%${sid}%`).all();
 
         return json({ success: true, data: { ...stats, recentActivity: recentActivity.results } });
       }
 
       // GET /api/bank/profile
       if (pathname === '/api/bank/profile' && method === 'GET') {
-        const bank = await env.DB.prepare(`SELECT * FROM banks WHERE id = ?`).bind(bankId).first();
+        const session = await requireBankAuth();
+        const bank = await env.DB.prepare(`SELECT * FROM banks WHERE id = ?`).bind(session.bank_id).first();
         if (!bank) return err('Bank not found', 404);
-        const branches = await env.DB.prepare(`SELECT * FROM bank_branches WHERE bank_id = ?`).bind(bankId).all();
+        const branches = await env.DB.prepare(`SELECT * FROM bank_branches WHERE bank_id = ? ORDER BY region, district, name`).bind(session.bank_id).all();
         return json({ success: true, data: { ...bank, branches: branches.results } });
       }
 
-      // Bank Branches
+      // GET /api/bank/branches
       if ((pathname === '/api/bank/branches' || pathname === '/api/v1/branches') && method === 'GET') {
+        const session = await requireBankAuth();
         const branches = await env.DB.prepare(`
           SELECT b.*, (SELECT COUNT(*) FROM assets WHERE branch_id = b.id) as asset_count
           FROM bank_branches b
           WHERE b.bank_id = ?
-          ORDER BY b.region ASC, b.name ASC
-        `).bind(bankId).all();
+          ORDER BY b.region ASC, b.district ASC, b.name ASC
+        `).bind(session.bank_id).all();
         return json({ success: true, count: branches.results.length, data: branches.results });
       }
 
-      // Bank Documents (/api/bank/documents)
+      // GET /api/bank/documents
       if ((pathname === '/api/bank/documents' || pathname === '/api/v1/documents') && method === 'GET') {
+        const session = await requireBankAuth();
         const docs = await env.DB.prepare(`
           SELECT d.*, a.public_ref as asset_ref, a.title as asset_title
           FROM documents d
           JOIN assets a ON d.asset_id = a.id
           WHERE a.bank_id = ?
           ORDER BY d.uploaded_at DESC
-        `).bind(bankId).all();
+        `).bind(session.bank_id).all();
         return json({ success: true, count: docs.results.length, data: docs.results });
       }
+
+      // GET /api/bank/enquiries
+      if (pathname === '/api/bank/enquiries' && method === 'GET') {
+        const session = await requireBankAuth();
+        const enquiries = await env.DB.prepare(`
+          SELECT e.*, a.public_ref as asset_ref, a.title as asset_title
+          FROM enquiries e
+          JOIN assets a ON e.asset_id = a.id
+          WHERE a.bank_id = ?
+          ORDER BY e.created_at DESC
+        `).bind(session.bank_id).all();
+        return json({ success: true, count: enquiries.results.length, data: enquiries.results });
+      }
+
+      // GET /api/bank/staff — List all staff for authenticated bank
+      if (pathname === '/api/bank/staff' && method === 'GET') {
+        const session = await requireBankAuth();
+        const staff = await env.DB.prepare(`
+          SELECT u.id, u.username, u.full_name, u.email, u.role_code, u.status,
+                 u.branch_id, u.last_login, u.created_at,
+                 r.name as role_name, r.scope,
+                 br.name as branch_name, br.region as branch_region
+          FROM users u
+          LEFT JOIN roles r ON u.role_code = r.code
+          LEFT JOIN bank_branches br ON u.branch_id = br.id
+          WHERE u.bank_id = ?
+          ORDER BY u.full_name ASC
+        `).bind(session.bank_id).all();
+        return json({ success: true, count: staff.results.length, data: staff.results });
+      }
+
+      // GET /api/bank/invitations — List pending invitations
+      if (pathname === '/api/bank/invitations' && method === 'GET') {
+        const session = await requireBankAuth();
+        const invites = await env.DB.prepare(`
+          SELECT i.*, br.name as branch_name
+          FROM invitations i
+          LEFT JOIN bank_branches br ON i.branch_id = br.id
+          WHERE i.bank_id = ?
+          ORDER BY i.created_at DESC
+        `).bind(session.bank_id).all();
+        return json({ success: true, count: invites.results.length, data: invites.results });
+      }
+
+
 
       // =========================================================================
       // 4. PUBLIC MARKETPLACE API (/api/marketplace/* & /api/public/*)
@@ -1008,11 +1262,344 @@ export default {
         return json({ success: true, count: logs.results.length, data: logs.results });
       }
 
+      // =========================================================================
+      // 7. BRANCH MANAGEMENT (CRUD) — Region + District + Town Isolation
+      // Each branch operates as a sub-system under its parent bank.
+      // =========================================================================
+
+      // GET /api/admin/branches (all branches across all banks)
+      if (pathname === '/api/admin/branches' && method === 'GET') {
+        const filterBankId = url.searchParams.get('bank_id');
+        const filterRegion = url.searchParams.get('region');
+        const filterDistrict = url.searchParams.get('district');
+
+        let sql = `
+          SELECT br.*, b.legal_name as bank_name, b.short_code as bank_code,
+            (SELECT COUNT(*) FROM assets WHERE branch_id = br.id) as asset_count,
+            (SELECT COUNT(*) FROM users WHERE branch_id = br.id) as staff_count
+          FROM bank_branches br
+          JOIN banks b ON br.bank_id = b.id
+          WHERE 1=1
+        `;
+        const params = [];
+        if (filterBankId) { sql += ` AND br.bank_id = ?`; params.push(filterBankId); }
+        if (filterRegion) { sql += ` AND br.region = ?`; params.push(filterRegion); }
+        if (filterDistrict) { sql += ` AND br.district = ?`; params.push(filterDistrict); }
+        sql += ` ORDER BY br.region ASC, br.district ASC, br.name ASC`;
+
+        const stmt = params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql);
+        const branches = await stmt.all();
+        return json({ success: true, count: branches.results.length, data: branches.results });
+      }
+
+      // POST /api/admin/branches — Create a branch for any bank
+      if (pathname === '/api/admin/branches' && method === 'POST') {
+        const body = await getBody();
+        const { bank_id, name, branch_code, region, district, town, address, phone, email, manager_name } = body;
+        if (!bank_id || !name || !region) return err('Bank ID, branch name, and region are required.', 400);
+
+        const bank = await env.DB.prepare(`SELECT id, short_code FROM banks WHERE id = ?`).bind(bank_id).first();
+        if (!bank) return err('Bank not found', 404);
+
+        const branchId = 'br-' + bank.short_code.toLowerCase() + '-' + Date.now().toString(36);
+        const code = branch_code || name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
+
+        await env.DB.prepare(`
+          INSERT INTO bank_branches (id, bank_id, name, branch_code, region, district, town, address, phone, email, manager_name, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+        `).bind(branchId, bank_id, name.trim(), code, region, district || '', town || '', address || '', phone || '', email || '', manager_name || '').run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'CREATE_BRANCH', 'Branch', branchId, `Created branch: ${name} (${region}/${district || 'N/A'})`);
+        const created = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
+        return json({ success: true, message: 'Branch created successfully.', data: created }, 201);
+      }
+
+      // PUT /api/admin/branches/:id — Update a branch
+      if (pathname.match(/^\/api\/admin\/branches\/[a-zA-Z0-9_-]+$/) && method === 'PUT') {
+        const id = pathname.split('/').pop();
+        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(id).first();
+        if (!branch) return err('Branch not found', 404);
+
+        const body = await getBody();
+        const updates = [];
+        const binds = [];
+        const branchFields = { name: 'name', branch_code: 'branch_code', region: 'region', district: 'district', town: 'town', address: 'address', phone: 'phone', email: 'email', manager_name: 'manager_name', status: 'status' };
+
+        for (const [key, col] of Object.entries(branchFields)) {
+          if (body[key] !== undefined) { updates.push(`${col} = ?`); binds.push(body[key]); }
+        }
+        if (updates.length === 0) return err('No fields to update', 400);
+
+        const sql = `UPDATE bank_branches SET ${updates.join(', ')} WHERE id = ?`;
+        binds.push(id);
+        await env.DB.prepare(sql).bind(...binds).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'UPDATE_BRANCH', 'Branch', id, `Updated branch: ${Object.keys(body).join(', ')}`);
+        const updated = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(id).first();
+        return json({ success: true, data: updated });
+      }
+
+      // DELETE /api/admin/branches/:id
+      if (pathname.match(/^\/api\/admin\/branches\/[a-zA-Z0-9_-]+$/) && method === 'DELETE') {
+        const id = pathname.split('/').pop();
+        const branch = await env.DB.prepare(`SELECT name FROM bank_branches WHERE id = ?`).bind(id).first();
+        if (!branch) return err('Branch not found', 404);
+
+        await env.DB.prepare(`UPDATE users SET branch_id = NULL WHERE branch_id = ?`).bind(id).run();
+        await env.DB.prepare(`UPDATE assets SET branch_id = NULL WHERE branch_id = ?`).bind(id).run();
+        await env.DB.prepare(`DELETE FROM bank_branches WHERE id = ?`).bind(id).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'DELETE_BRANCH', 'Branch', id, `Deleted branch: ${branch.name}`);
+        return json({ success: true, message: `Branch '${branch.name}' deleted.` });
+      }
+
+      // POST /api/bank/branches — Bank creates its own branch
+      if (pathname === '/api/bank/branches' && method === 'POST') {
+        const body = await getBody();
+        const { name, branch_code, region, district, town, address, phone, email, manager_name } = body;
+        if (!name || !region) return err('Branch name and region are required.', 400);
+
+        const bank = await env.DB.prepare(`SELECT id, short_code FROM banks WHERE id = ?`).bind(bankId).first();
+        if (!bank) return err('Bank not found. Ensure X-Bank-ID header is set.', 404);
+
+        const branchId = 'br-' + bank.short_code.toLowerCase() + '-' + Date.now().toString(36);
+        const code = branch_code || name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
+
+        await env.DB.prepare(`
+          INSERT INTO bank_branches (id, bank_id, name, branch_code, region, district, town, address, phone, email, manager_name, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+        `).bind(branchId, bankId, name.trim(), code, region, district || '', town || '', address || '', phone || '', email || '', manager_name || '').run();
+
+        await auditLog(actorName, actorRole, bankId, 'CREATE_BRANCH', 'Branch', branchId, `Created branch: ${name} in ${region}/${district || 'N/A'}`);
+        const created = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
+        return json({ success: true, message: 'Branch created.', data: created }, 201);
+      }
+
+      // GET /api/bank/branches/:id/assets — Branch-scoped asset isolation
+      if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/assets$/) && method === 'GET') {
+        const parts = pathname.split('/');
+        const branchId = parts[4];
+
+        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        if (!branch) return err('Branch not found or does not belong to your bank.', 404);
+
+        const assets = await env.DB.prepare(`
+          SELECT a.*, b.legal_name as bank_name, br.name as branch_name, br.region as branch_region, br.district as branch_district
+          FROM assets a
+          JOIN banks b ON a.bank_id = b.id
+          LEFT JOIN bank_branches br ON a.branch_id = br.id
+          WHERE a.branch_id = ?
+          ORDER BY a.updated_at DESC
+        `).bind(branchId).all();
+
+        return json({ success: true, branch: { id: branch.id, name: branch.name, region: branch.region, district: branch.district }, count: assets.results.length, data: assets.results });
+      }
+
+      // GET /api/bank/branches/:id/staff — Branch-scoped staff listing
+      if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/staff$/) && method === 'GET') {
+        const parts = pathname.split('/');
+        const branchId = parts[4];
+
+        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        if (!branch) return err('Branch not found or does not belong to your bank.', 404);
+
+        const staff = await env.DB.prepare(`
+          SELECT u.id, u.username, u.full_name, u.email, u.role_code, u.status,
+                 r.name as role_name, r.scope
+          FROM users u
+          LEFT JOIN roles r ON u.role_code = r.code
+          WHERE u.branch_id = ?
+          ORDER BY u.full_name ASC
+        `).bind(branchId).all();
+
+        return json({ success: true, branch: { id: branch.id, name: branch.name, region: branch.region, district: branch.district }, count: staff.results.length, data: staff.results });
+      }
+
+      // =========================================================================
+      // 8. REGIONS & DISTRICTS LOOKUP
+      // Ghana administrative boundaries for branch creation and asset registration
+      // =========================================================================
+      if (['/api/regions', '/api/v1/regions', '/api/admin/regions', '/api/bank/regions'].includes(pathname) && method === 'GET') {
+        const ghanaRegions = {
+          'Greater Accra': ['Accra Metropolitan', 'Tema Metropolitan', 'Ga East', 'Ga West', 'Ga South', 'Ga Central', 'Ga North', 'Ledzokuku', 'Krowor', 'La Dade Kotopon', 'La Nkwantanang Madina', 'Adentan', 'Ablekuma North', 'Ablekuma West', 'Ablekuma Central', 'Ayawaso East', 'Ayawaso West', 'Ayawaso North', 'Ayawaso Central', 'Okaikwei North', 'Korle Klottey', 'Weija Gbawe', 'Ada East', 'Ada West', 'Ningo Prampram', 'Shai Osudoku'],
+          'Ashanti': ['Kumasi Metropolitan', 'Oforikrom', 'Asokwa', 'Suame', 'Bantama', 'Kwadaso', 'Old Tafo', 'Manhyia North', 'Manhyia South', 'Atwima Nwabiagya North', 'Atwima Nwabiagya South', 'Atwima Kwanwoma', 'Bosomtwe', 'Ejisu', 'Juaben', 'Kwabre East', 'Afigya Kwabre North', 'Afigya Kwabre South', 'Bekwai', 'Bosome Freho', 'Adansi North', 'Adansi South', 'Obuasi', 'Amansie Central', 'Amansie South', 'Amansie West', 'Ahafo Ano North', 'Ahafo Ano South East', 'Ahafo Ano South West', 'Mampong', 'Sekyere East', 'Sekyere South', 'Sekyere Central', 'Sekyere Afram Plains', 'Offinso North', 'Offinso South', 'Asante Akim North', 'Asante Akim South', 'Asante Akim Central', 'Ejura Sekyedumase'],
+          'Western': ['Sekondi-Takoradi Metropolitan', 'Effia Kwesimintsim', 'Essikado-Ketan', 'Shama', 'Ahanta West', 'Nzema East', 'Ellembelle', 'Jomoro', 'Tarkwa-Nsuaem', 'Prestea-Huni Valley', 'Wassa Amenfi East', 'Wassa Amenfi Central', 'Wassa Amenfi West', 'Mpohor'],
+          'Western North': ['Sefwi Wiawso', 'Sefwi Akontombra', 'Sefwi Bibiani-Anhwiaso-Bekwai', 'Juaboso', 'Bia East', 'Bia West', 'Bodi', 'Suaman', 'Aowin'],
+          'Central': ['Cape Coast Metropolitan', 'Komenda-Edina-Eguafo-Abirem', 'Mfantsiman', 'Abura-Asebu-Kwamankese', 'Ajumako-Enyan-Essiam', 'Gomoa East', 'Gomoa West', 'Gomoa Central', 'Effutu', 'Awutu Senya East', 'Awutu Senya West', 'Agona East', 'Agona West', 'Asikuma-Odoben-Brakwa', 'Assin North', 'Assin South', 'Twifo-Atti Morkwa', 'Twifo Hemang Lower Denkyira', 'Upper Denkyira East', 'Upper Denkyira West', 'Ekumfi'],
+          'Eastern': ['New Juaben South', 'New Juaben North', 'Koforidua', 'Suhum', 'Nsawam-Adoagyiri', 'Akuapim South', 'Akuapim North', 'Abuakwa South', 'Abuakwa North', 'Denkyembour', 'Kwaebibirem', 'Atiwa East', 'Atiwa West', 'Birim North', 'Birim South', 'Birim Central', 'West Akim', 'Achiase', 'Upper West Akim', 'Ayensuano', 'Lower Manya Krobo', 'Upper Manya Krobo', 'Yilo Krobo', 'Fanteakwa North', 'Fanteakwa South', 'Kwahu East', 'Kwahu West', 'Kwahu South', 'Kwahu Afram Plains North', 'Kwahu Afram Plains South', 'Akyemansa'],
+          'Volta': ['Ho Municipal', 'Ho West', 'South Dayi', 'North Dayi', 'Keta', 'Ketu South', 'Ketu North', 'Akatsi South', 'Akatsi North', 'South Tongu', 'North Tongu', 'Adaklu', 'Afadzato South', 'Central Tongu', 'Anloga', 'Hohoe'],
+          'Oti': ['Krachi East', 'Krachi West', 'Krachi Nchumuru', 'Nkwanta South', 'Nkwanta North', 'Biakoye', 'Jasikan', 'Kadjebi', 'Guan'],
+          'Northern': ['Tamale Metropolitan', 'Sagnarigu', 'Mion', 'Yendi', 'Nanumba North', 'Nanumba South', 'Zabzugu', 'Tatale-Sanguli', 'Saboba', 'Gushegu', 'Karaga', 'Kpandai', 'Tolon', 'Kumbungu', 'Savelugu', 'Nanton'],
+          'Savannah': ['Damongo', 'West Gonja', 'Central Gonja', 'East Gonja', 'North Gonja', 'North East Gonja', 'Bole', 'Sawla-Tuna-Kalba'],
+          'North East': ['Nalerigu-Gambaga', 'East Mamprusi', 'West Mamprusi', 'Mamprugu-Moagduri', 'Bunkpurugu-Nyankpanduri', 'Yunyoo-Nasuan', 'Chereponi'],
+          'Upper East': ['Bolgatanga Municipal', 'Bolgatanga East', 'Bongo', 'Talensi', 'Nabdam', 'Kassena-Nankana West', 'Kassena-Nankana East', 'Bawku Municipal', 'Bawku West', 'Garu', 'Tempane', 'Pusiga', 'Binduri', 'Builsa North', 'Builsa South'],
+          'Upper West': ['Wa Municipal', 'Wa East', 'Wa West', 'Daffiama-Bussie-Issa', 'Nadowli-Kaleo', 'Jirapa', 'Lambussie-Karni', 'Lawra', 'Nandom', 'Sissala East', 'Sissala West'],
+          'Bono': ['Sunyani Municipal', 'Sunyani West', 'Dormaa East', 'Dormaa Central', 'Dormaa West', 'Berekum East', 'Berekum West', 'Jaman North', 'Jaman South', 'Tain', 'Banda', 'Wenchi'],
+          'Bono East': ['Techiman Municipal', 'Techiman North', 'Nkoranza North', 'Nkoranza South', 'Kintampo North', 'Kintampo South', 'Atebubu-Amantin', 'Sene East', 'Sene West', 'Pru East', 'Pru West'],
+          'Ahafo': ['Goaso', 'Asunafo North', 'Asunafo South', 'Asutifi North', 'Asutifi South', 'Tano North', 'Tano South']
+        };
+        return json({ success: true, data: ghanaRegions });
+      }
+
+      // =========================================================================
+      // 9. ENCRYPTED / HASHED ENDPOINT ROUTING
+      // Sensitive portal pages use SHA-256 hashed route tokens.
+      // Frontend generates: hash = SHA256("portal:page:context")
+      // Backend resolves the hash to the real internal handler.
+      // =========================================================================
+
+      // POST /api/enc/resolve — Resolve a hashed route token to its internal handler
+      if (pathname === '/api/enc/resolve' && method === 'POST') {
+        const body = await getBody();
+        const { token, context } = body;
+        if (!token) return err('Encrypted route token is required.', 400);
+
+        // Verify the token against known route hashes
+        const routeMap = {
+          // Admin portal pages
+          'admin:dashboard': '/api/admin/dashboard',
+          'admin:banks': '/api/admin/banks',
+          'admin:users': '/api/admin/users',
+          'admin:assets': '/api/admin/assets',
+          'admin:legal': '/api/admin/legal',
+          'admin:titles': '/api/admin/titles',
+          'admin:valuations': '/api/admin/valuations',
+          'admin:settings': '/api/admin/settings',
+          'admin:branches': '/api/admin/branches',
+          'admin:audit': '/api/admin/audit-logs',
+          // Bank portal pages
+          'bank:dashboard': '/api/bank/dashboard',
+          'bank:profile': '/api/bank/profile',
+          'bank:assets': '/api/bank/assets',
+          'bank:branches': '/api/bank/branches',
+          'bank:documents': '/api/bank/documents',
+          'bank:enquiries': '/api/bank/enquiries',
+          'bank:viewings': '/api/bank/viewings',
+          'bank:offers': '/api/bank/offers',
+          // Marketplace pages
+          'marketplace:listings': '/api/marketplace/assets',
+          'marketplace:categories': '/api/marketplace/categories',
+          'marketplace:detail': '/api/marketplace/assets',
+        };
+
+        // Hash the known routes and find match
+        let resolvedRoute = null;
+        let resolvedKey = null;
+
+        for (const [key, route] of Object.entries(routeMap)) {
+          const encoder = new TextEncoder();
+          const data = encoder.encode(key);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+          if (hashHex === token) {
+            resolvedRoute = route;
+            resolvedKey = key;
+            break;
+          }
+        }
+
+        if (!resolvedRoute) return err('Invalid or expired encrypted route token.', 403);
+
+        await auditLog(actorName, actorRole, 'System', 'ENC_RESOLVE', 'Route', resolvedKey, `Encrypted route resolved: ${resolvedKey}`);
+        return json({ success: true, route: resolvedRoute, key: resolvedKey, context: context || null });
+      }
+
+      // GET /api/enc/tokens — Generate hashed tokens for all portal routes (admin use only)
+      if (pathname === '/api/enc/tokens' && method === 'GET') {
+        const routeKeys = [
+          'admin:dashboard', 'admin:banks', 'admin:users', 'admin:assets',
+          'admin:legal', 'admin:titles', 'admin:valuations', 'admin:settings',
+          'admin:branches', 'admin:audit',
+          'bank:dashboard', 'bank:profile', 'bank:assets', 'bank:branches',
+          'bank:documents', 'bank:enquiries', 'bank:viewings', 'bank:offers',
+          'marketplace:listings', 'marketplace:categories', 'marketplace:detail'
+        ];
+
+        const tokens = {};
+        for (const key of routeKeys) {
+          const encoder = new TextEncoder();
+          const data = encoder.encode(key);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          tokens[key] = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        return json({ success: true, data: tokens });
+      }
+
+      // =========================================================================
+      // 10. BRANCH-SCOPED STATISTICS (Dashboard per branch)
+      // =========================================================================
+      if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/dashboard$/) && method === 'GET') {
+        const parts = pathname.split('/');
+        const branchId = parts[4];
+
+        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        if (!branch) return err('Branch not found or access denied.', 404);
+
+        const stats = await env.DB.prepare(`
+          SELECT 
+            (SELECT COUNT(*) FROM assets WHERE branch_id = ?) as totalAssets,
+            (SELECT COALESCE(SUM(reserve_price), 0) FROM assets WHERE branch_id = ?) as totalPortfolioValue,
+            (SELECT COUNT(*) FROM assets WHERE branch_id = ? AND status = 'Live') as liveListings,
+            (SELECT COUNT(*) FROM assets WHERE branch_id = ? AND status IN ('Submitted by Bank', 'Submitted', 'Under Review')) as pendingReview,
+            (SELECT COUNT(*) FROM assets WHERE branch_id = ? AND legal_hold_active = 1) as legalHolds,
+            (SELECT COUNT(*) FROM assets WHERE branch_id = ? AND status = 'Sold') as completedSales,
+            (SELECT COUNT(*) FROM users WHERE branch_id = ?) as staffCount
+        `).bind(branchId, branchId, branchId, branchId, branchId, branchId, branchId).first();
+
+        return json({
+          success: true,
+          branch: { id: branch.id, name: branch.name, region: branch.region, district: branch.district, town: branch.town },
+          data: stats
+        });
+      }
+
+      // GET /api/regions — All 16 Ghana regions with their constituencies (used as districts)
+      // District dropdown MUST be filtered by region selection
+      if (pathname === '/api/regions' && method === 'GET') {
+        const requestedRegion = url.searchParams.get('region');
+        const GHANA_REGIONS = {
+          'Ahafo': ['Asunafo North','Asunafo South','Asutifi North','Asutifi South','Tano North','Tano South'],
+          'Ashanti': ['Adansi-Asokwa','Fomena','New Edubiase','Afigya Kwabre North','Afigya Kwabre South','Ahafo Ano North','Ahafo Ano South East','Ahafo Ano South West','Akrofuom','Odotobri','Manso Nkwanta','Manso Edubia','Asante Akim Central','Asante Akim North','Asante Akim South','Asawase','Asokwa','Atwima-Kwanwoma','Atwima Mponua','Atwima-Nwabiagya South','Atwima-Nwabiagya North','Bekwai','Bosome-Freho','Bosomtwe','Ejisu','Ejura-Sekyedumase','Juaben','Bantama','Manhyia North','Manhyia South','Nhyiaeso','Subin','Kwabre East','Kwadaso','Mampong','Obuasi East','Obuasi West','Offinso South','Offinso North','Oforikrom','Old Tafo','Sekyere Afram Plains','Nsuta-Kwamang-Beposo','Afigya Sekyere East','Kumawu','Effiduase-Asokore','Suame'],
+          'Bono': ['Banda','Berekum East','Berekum West','Dormaa Central','Dormaa East','Dormaa West','Jaman North','Jaman South','Sunyani East','Sunyani West','Tain','Wenchi'],
+          'Bono East': ['Atebubu-Amantin','Kintampo North','Kintampo South','Nkoranza North','Nkoranza South','Pru East','Pru West','Sene East','Sene West','Techiman South','Techiman North'],
+          'Central': ['Abura-Asebu-Kwamankese','Agona East','Agona West','Ajumako-Enyan-Essiam','Asikuma-Odoben-Brakwa','Assin Central','Assin North','Assin South','Awutu-Senya East','Awutu-Senya West','Cape Coast North','Cape Coast South','Effutu','Ekumfi','Gomoa East','Gomoa Central','Gomoa West','Komenda-Edina-Eguafo-Abirem','Mfantseman','Twifo-Atii Morkwaa','Hemang Lower Denkyira','Upper Denkyira East','Upper Denkyira West'],
+          'Eastern': ['Abuakwa North','Abuakwa South','Achiase','Akropong','Akuapem South','Ofoase-Ayirebi','Asene Akroso Manso','Asuogyaman','Atiwa East','Atiwa West','Ayensuano','Akim Oda','Abirem','Akim Swedru','Akwatia','Fanteakwa North','Fanteakwa South','Kade','Afram Plains North','Afram Plains South','Abetifi','Mpraeso','Nkawkaw','Lower Manya Krobo','New Juaben North','New Juaben South','Nsawam Adoagyiri','Okere','Suhum','Upper Manya Krobo','Upper West Akim','Lower West Akim','Yilo Krobo'],
+          'Greater Accra': ['Ablekuma Central','Ablekuma North','Ablekuma West','Ablekuma South','Odododiodioo','Okaikwei Central','Okaikwei South','Ada','Sege','Adenta','Ashaiman','Ayawaso Central','Ayawaso East','Ayawaso North','Ayawaso West Wuogon','Anyaa-Sowutuom','Dome-Kwabenya','Trobu','Bortianor-Ngleshie-Amanfro','Amasaman','Korle Klottey','Kpone-Katamanso','Krowor','Dade Kotopon','Abokobi-Madina','Ledzokuku','Ningo-Prampram','Okaikwei North','Shai-Osudoku','Tema East','Tema Central','Tema West','Weija-Gbawe','Domeabra-Obom'],
+          'North East': ['Bunkpurugu','Chereponi','Nalerigu','Yagaba-Kubori','Walewale','Yunyoo'],
+          'Northern': ['Gushegu','Karaga','Kpandai','Kumbungu','Mion','Nanton','Bimbilla','Wulensi','Saboba','Sagnarigu','Savelugu','Tamale Central','Tamale North','Tamale South','Tatale-Sanguli','Tolon','Yendi','Zabzugu'],
+          'Oti': ['Biakoye','Guan','Buem','Akan','Krachi East','Krachi Nchumuru','Krachi West','Nkwanta North','Nkwanta South'],
+          'Savannah': ['Bole','Yapei-Kusawgu','Salaga South','Salaga North','Daboya-Mankarigu','Sawla-Tuna-Kalba','Damongo'],
+          'Upper East': ['Bawku Central','Zebilla','Binduri','Bolgatanga East','Bolgatanga Central','Bongo','Builsa North','Builsa South','Garu','Navrongo Central','Chiana-Paga','Nabdam','Pusiga','Talensi','Tempane'],
+          'Upper West': ['Daffiama-Bussie-Issa','Jirapa','Lambussie','Lawra','Nadowli-Kaleo','Nandom','Sissala East','Sissala West','Wa East','Wa Central','Wa West'],
+          'Volta': ['Adaklu','Afadjato South','Agotime-Ziope','Akatsi North','Akatsi South','Anlo','Central Tongu','Ho Central','Ho West','Hohoe','Keta','Ketu North','Ketu South','Kpando','North Dayi','North Tongu','South Dayi','South Tongu'],
+          'Western': ['Ahanta West','Amenfi Central','Amenfi West','Amenfi East','Effia','Kwesimintsim','Ellembelle','Jomoro','Mpohor','Evalue Gwira','Prestea-Huni Valley','Essikado-Ketan','Sekondi','Takoradi','Shama','Tarkwa-Nsuaem','Wassa East'],
+          'Western North': ['Aowin','Bia East','Bia West','Bibiani-Anhwiaso-Bekwai','Bodi','Juaboso','Sefwi-Akontombra','Sefwi-Wiawso','Suaman']
+        };
+
+        if (requestedRegion) {
+          const constituencies = GHANA_REGIONS[requestedRegion];
+          if (!constituencies) return err(`Unknown region: ${requestedRegion}`, 404);
+          return json({ success: true, region: requestedRegion, constituencies, count: constituencies.length });
+        }
+
+        // Return all regions with summary
+        const summary = Object.entries(GHANA_REGIONS).map(([region, constituencies]) => ({
+          region, constituency_count: constituencies.length, constituencies
+        }));
+        return json({ success: true, total_regions: 16, total_constituencies: 276, data: summary });
+      }
+
       // 404 Route Fallback
       return err(`Route '${pathname}' with method '${method}' not found on Surge API. Check / for endpoint documentation.`, 404);
     } catch (error) {
+      // Auth guards throw Response objects directly — pass them through unchanged
+      if (error instanceof Response) return error;
       console.error('Unhandled API Error:', error);
-      return json({ success: false, error: error.message }, 500);
+      return json({ success: false, error: error.message || 'An internal server error occurred.' }, 500);
     }
   }
 };

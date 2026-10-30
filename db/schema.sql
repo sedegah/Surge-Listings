@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS bank_branches (
   name TEXT NOT NULL,
   branch_code TEXT,
   region TEXT NOT NULL,
+  district TEXT,
   town TEXT,
   address TEXT,
   phone TEXT,
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   role_code TEXT NOT NULL,
+  password_hash TEXT,
   mfa_enabled INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'Active',
   last_login TEXT,
@@ -489,3 +491,83 @@ CREATE TABLE IF NOT EXISTS system_settings (
   value TEXT NOT NULL,
   description TEXT
 );
+
+-- ============================================================
+-- AUTH EXTENSION TABLES (Centralized Authentication & RBAC)
+-- ============================================================
+
+-- 36. Sessions — Secure server-side session store
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,                       -- session token (random 64-char hex)
+  user_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+  bank_id TEXT,
+  branch_id TEXT,
+  role_code TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'bank',        -- 'surge', 'bank', 'public'
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  last_active TEXT NOT NULL DEFAULT (datetime('now')),
+  revoked INTEGER NOT NULL DEFAULT 0,
+  revoke_reason TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 37. Invitations — Invitation-only bank employee registration
+CREATE TABLE IF NOT EXISTS invitations (
+  id TEXT PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,                -- secure random token sent in email link
+  email TEXT NOT NULL,
+  full_name TEXT,
+  bank_id TEXT NOT NULL,
+  branch_id TEXT,
+  role_code TEXT NOT NULL DEFAULT 'bank-recovery',
+  invited_by TEXT NOT NULL,                  -- user_id of the inviter
+  status TEXT NOT NULL DEFAULT 'Pending',    -- 'Pending', 'Accepted', 'Expired', 'Cancelled'
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (bank_id) REFERENCES banks(id) ON DELETE CASCADE
+);
+
+-- 38. Login Attempts — Security monitoring and rate limiting
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  ip_address TEXT,
+  success INTEGER NOT NULL DEFAULT 0,
+  failure_reason TEXT,
+  attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 39. Password Resets — Reset tokens (admin-issued)
+CREATE TABLE IF NOT EXISTS password_resets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  created_by TEXT NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 40. Organization Members — Links users to organizations with RBAC roles
+CREATE TABLE IF NOT EXISTS organization_members (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+  bank_id TEXT,
+  branch_id TEXT,
+  role_code TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Active',    -- 'Active', 'Suspended', 'Revoked'
+  invited_by TEXT,
+  joined_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, organization_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
