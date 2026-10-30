@@ -11,261 +11,180 @@ const Store = {
   assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
   LEGACY_KEYS: ['surge_platform_v2_store', 'surge_platform_store'],
+  API_BASE: '', // relative — same origin when served from Cloudflare Workers
 
   init() {
     try {
       if (typeof localStorage !== 'undefined') {
         (this.LEGACY_KEYS || []).forEach(k => localStorage.removeItem(k));
+        // Clear stale local mock data
+        localStorage.removeItem(this.STORAGE_KEY);
       }
     } catch (e) {}
-    this.load();
+    // Start with empty state — API is the single source of truth
+    this.assets = [];
+    this.auditLog = [];
+    this.leads = [];
+    this.offers = [];
+    this.viewings = [];
+    this.invoices = [];
     this.fetchRemote();
   },
 
   persist() {
-    try {
-      const state = {
-        assets: this.assets,
-        auditLog: this.auditLog,
-        leads: this.leads,
-        offers: this.offers,
-        viewings: this.viewings,
-        invoices: this.invoices
-      };
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      console.warn('LocalStorage persist failed:', e);
-    }
+    // No-op — Cloudflare D1 is the persistence layer
   },
 
   load() {
-    try {
-      const raw = localStorage.getItem(this.STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        this.assets = parsed.assets || [];
-        this.auditLog = parsed.auditLog || [];
-        this.leads = parsed.leads || [];
-        this.offers = parsed.offers || [];
-        this.viewings = parsed.viewings || [];
-        this.invoices = parsed.invoices || [];
-        return;
-      }
-    } catch (e) {
-      console.warn('LocalStorage load failed:', e);
-    }
-    this.seed();
-    this.persist();
+    // No-op — data comes exclusively from fetchRemote()
   },
 
   async fetchRemote() {
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      try {
-        const res = await fetch('/api/v1/assets?scope=all');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.data)) {
-            if (json.data.length > 0) {
-              this.assets = json.data.map(d => ({
-                id: d.id,
-                ref: d.public_ref,
-                bankId: d.bank_id,
-                bankName: d.bank_name || 'Meridian Trust Bank',
-                category: d.category_code,
-                assetType: d.asset_type,
-                region: d.region,
-                district: d.district || '',
-                town: d.town || '',
-                publicLocation: d.public_location,
-                exactAddress: d.exact_address,
-                description: d.description,
-                reserve: d.reserve_price,
-                minOffer: d.minimum_offer,
-                showReserve: !!d.show_reserve_publicly,
-                status: d.status,
-                publicationStatus: d.status === 'Live' ? 'Published' : 'Unpublished',
-                legalStatus: 'Cleared',
-                valuationAmount: d.reserve_price,
-                valuationDate: d.created_at,
-                valuationExpiry: null,
-                landSearchValid: true,
-                injunctionActive: false,
-                legalHold: !!d.legal_hold_active,
-                exteriorImage: true,
-                titleVerified: true,
-                titleDetails: true,
-                enforcementBasis: 'Court Judgment',
-                caseRef: d.internal_bank_ref,
-                images: d.image_count || 0,
-                documents: d.document_count || 0,
-                createdAt: d.created_at,
-                updatedAt: d.updated_at,
-                createdBy: d.created_by || 'Officer',
-                activity: [{ when: d.created_at, who: d.created_by || 'Officer', what: 'Asset created' }]
-              }));
-            } else {
-              this.assets = [];
-            }
-            this.persist();
-            if (typeof BankPortal !== 'undefined' && BankPortal.render) BankPortal.render();
-            if (typeof AdminPortal !== 'undefined' && AdminPortal.render) AdminPortal.render();
-            if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
-          }
+    try {
+      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes] = await Promise.allSettled([
+        fetch(this.API_BASE + '/api/v1/assets?scope=all'),
+        fetch(this.API_BASE + '/api/v1/leads'),
+        fetch(this.API_BASE + '/api/v1/offers'),
+        fetch(this.API_BASE + '/api/v1/viewings'),
+        fetch(this.API_BASE + '/api/v1/invoices'),
+        fetch(this.API_BASE + '/api/v1/audit-logs'),
+      ]);
+
+      // Assets
+      if (assetsRes.status === 'fulfilled' && assetsRes.value.ok) {
+        const json = await assetsRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.assets = json.data.map(d => ({
+            id: d.id,
+            ref: d.public_ref,
+            bankId: d.bank_id,
+            bankName: d.bank_name || '',
+            category: d.category_code,
+            assetType: d.asset_type,
+            region: d.region,
+            district: d.district || '',
+            town: d.town || '',
+            publicLocation: d.public_location,
+            exactAddress: d.exact_address,
+            description: d.description,
+            reserve: d.reserve_price,
+            minOffer: d.minimum_offer,
+            showReserve: !!d.show_reserve_publicly,
+            status: d.status,
+            publicationStatus: d.status === 'Live' ? 'Published' : (d.status === 'Approved' ? 'Pending Approval' : 'Unpublished'),
+            legalStatus: d.legal_hold_active ? 'On Hold' : (d.status === 'Live' || d.status === 'Approved' ? 'Cleared' : (d.status === 'Draft' ? 'Not Started' : 'Pending')),
+            valuationAmount: d.reserve_price,
+            valuationDate: d.created_at,
+            valuationExpiry: null,
+            landSearchValid: !d.legal_hold_active,
+            injunctionActive: !!d.legal_hold_active,
+            legalHold: !!d.legal_hold_active,
+            legalHoldReason: d.legal_hold_reason || '',
+            exteriorImage: (d.image_count || 0) > 0,
+            titleVerified: d.status === 'Live' || d.status === 'Approved',
+            titleDetails: d.status !== 'Draft',
+            enforcementBasis: d.internal_bank_ref ? 'Court Judgment' : '',
+            caseRef: d.internal_bank_ref || '',
+            images: d.image_count || 0,
+            documents: d.document_count || 0,
+            createdAt: d.created_at,
+            updatedAt: d.updated_at,
+            createdBy: d.created_by || 'Officer',
+            legalSubstate: {
+              enforcementRecorded: d.status !== 'Draft',
+              instrumentsVerified: d.status === 'Live' || d.status === 'Approved',
+              injunctionClear: !d.legal_hold_active,
+              clearanceIssued: d.status === 'Live' || d.status === 'Approved'
+            },
+            legalNotes: [],
+            instruments: [],
+            activity: [{ when: d.created_at, who: d.created_by || 'Officer', what: 'Asset created' }]
+          }));
         }
-      } catch (e) {
-        // Local storage resilience fallback
       }
+
+      // Leads
+      if (leadsRes.status === 'fulfilled' && leadsRes.value.ok) {
+        const json = await leadsRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.leads = json.data.map(l => ({
+            id: l.id, ref: l.lead_ref, assetId: l.asset_id, assetRef: l.asset_ref || '',
+            name: l.buyer_name, phone: l.phone || '', email: l.email || '',
+            status: l.stage || 'New', source: 'Public Enquiry',
+            createdAt: l.created_at
+          }));
+        }
+      }
+
+      // Offers
+      if (offersRes.status === 'fulfilled' && offersRes.value.ok) {
+        const json = await offersRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.offers = json.data.map(o => ({
+            id: o.id, ref: o.offer_ref, assetId: o.asset_id, assetRef: o.asset_ref || '',
+            buyer: o.buyer_name, amount: o.amount, status: o.status,
+            belowReserve: !!o.below_reserve, date: o.created_at,
+            validity: o.validity_date, notes: o.notes || ''
+          }));
+        }
+      }
+
+      // Viewings
+      if (viewingsRes.status === 'fulfilled' && viewingsRes.value.ok) {
+        const json = await viewingsRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.viewings = json.data.map(v => ({
+            id: v.id, ref: v.id, assetId: v.asset_id, assetRef: v.asset_ref || '',
+            buyer: v.buyer_name, phone: v.phone || '',
+            scheduledAt: v.viewing_date, status: v.status,
+            notes: v.notes || ''
+          }));
+        }
+      }
+
+      // Invoices
+      if (invoicesRes.status === 'fulfilled' && invoicesRes.value.ok) {
+        const json = await invoicesRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.invoices = json.data.map(i => ({
+            id: i.id, ref: i.invoice_ref || i.id, bankId: i.bank_id,
+            bankName: i.bank_name || '', description: i.description || '',
+            amount: i.total_amount || i.amount || 0, status: i.status,
+            issuedAt: i.created_at, paidAt: i.paid_at
+          }));
+        }
+      }
+
+      // Audit Log
+      if (auditRes.status === 'fulfilled' && auditRes.value.ok) {
+        const json = await auditRes.value.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.auditLog = json.data.map(a => ({
+            id: a.id, when: a.created_at, who: a.actor_name,
+            action: a.action_type, entity: a.entity_type,
+            entityRef: a.entity_id, detail: a.delta_summary
+          }));
+        }
+      }
+
+      // Re-render all active portals
+      if (typeof BankPortal !== 'undefined' && BankPortal.render) BankPortal.render();
+      if (typeof AdminPortal !== 'undefined' && AdminPortal.render) AdminPortal.render();
+      if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
+    } catch (e) {
+      console.warn('API fetch failed — UI will show empty state:', e);
     }
   },
 
+
   seed() {
-    const now = new Date();
-    const d = (daysAgo) => { const dt = new Date(now); dt.setDate(dt.getDate() - daysAgo); return dt.toISOString(); };
-    const future = (days) => { const dt = new Date(now); dt.setDate(dt.getDate() + days); return dt.toISOString(); };
-
-    this.assets = [
-      { id: 'a1', ref: 'SS-RE-2026-00241', bankId: 'bank1', bankName: 'Meridian Trust Bank',
-        category: 'House', assetType: '4 bedroom detached', region: 'Greater Accra', district: 'Tema West',
-        town: 'Community 25', publicLocation: 'Tema, Greater Accra', exactAddress: 'Plot 14, Block C, Community 25, Tema',
-        description: 'Spacious 4-bedroom detached house with a large garden, 2-car garage, and servant quarters. Located in a quiet residential area.',
-        reserve: 950000, minOffer: 900000, showReserve: true,
-        status: 'Live', publicationStatus: 'Published', legalStatus: 'Cleared',
-        valuationAmount: 980000, valuationDate: d(30), valuationExpiry: future(335),
-        landSearchValid: true, landSearchExpiry: future(180), injunctionActive: false, legalHold: false,
-        exteriorImage: true, titleVerified: true,
-        enforcementBasis: 'Court Judgment', caseRef: 'BNK-LN-88213',
-        borrowerRef: 'John Doe (borrower)', loanAmount: 1200000,
-        images: 4, documents: 5,
-        createdAt: d(60), updatedAt: d(2), createdBy: 'K. Asante',
-        legalSubstate: { enforcementRecorded: true, instrumentsVerified: true, injunctionClear: true, clearanceIssued: true },
-        legalNotes: [{ when: d(50), who: 'S. Adjei', decision: 'verified', note: 'Court judgment verified — enforceable' }],
-        instruments: [
-          { id: 'i1', type: 'Court Judgment', ref: 'JUD-2025-0142', status: 'Verified', uploadedBy: 'K. Asante', uploadedAt: d(55) },
-          { id: 'i2', type: 'Default Notice', ref: 'DN-2025-0088', status: 'Verified', uploadedBy: 'K. Asante', uploadedAt: d(55) },
-        ],
-        activity: [
-          { when: d(60), who: 'K. Asante', what: 'Asset created as Draft' },
-          { when: d(58), who: 'K. Asante', what: 'Submitted for review' },
-          { when: d(50), who: 'S. Adjei', what: 'Legal verification completed' },
-          { when: d(45), who: 'A. Boateng', what: 'Title and valuation verified' },
-          { when: d(40), who: 'A. Boateng', what: 'Listing approved' },
-          { when: d(38), who: 'A. Boateng', what: 'Published to Marketplace' },
-        ],
-      },
-      { id: 'a2', ref: 'SS-RE-2026-00242', bankId: 'bank1', bankName: 'Meridian Trust Bank',
-        category: 'Apartment', assetType: '2 bedroom flat', region: 'Greater Accra', district: 'Accra Metropolitan',
-        town: 'East Legon', publicLocation: 'East Legon, Accra', exactAddress: 'Flat 3B, Palm Court, East Legon',
-        description: 'Modern 2-bedroom apartment in a gated complex with pool and gym access.',
-        reserve: 420000, minOffer: 380000, showReserve: false,
-        status: 'Submitted', publicationStatus: 'Unpublished', legalStatus: 'Pending',
-        valuationAmount: 450000, valuationDate: d(10), valuationExpiry: future(355),
-        landSearchValid: true, landSearchExpiry: future(180), injunctionActive: false, legalHold: false,
-        exteriorImage: true, titleVerified: false,
-        enforcementBasis: 'Memorandum of Agreement', caseRef: 'BNK-LN-88214',
-        borrowerRef: 'Jane Smith (borrower)', loanAmount: 500000,
-        images: 2, documents: 3,
-        createdAt: d(5), updatedAt: d(1), createdBy: 'J. Mensah',
-        legalSubstate: { enforcementRecorded: true, instrumentsVerified: false, injunctionClear: true, clearanceIssued: false },
-        legalNotes: [],
-        instruments: [
-          { id: 'i1', type: 'Memorandum of Agreement', ref: 'MOA-2025-0044', status: 'Pending', uploadedBy: 'J. Mensah', uploadedAt: d(4) },
-        ],
-        activity: [
-          { when: d(5), who: 'J. Mensah', what: 'Asset created as Draft' },
-          { when: d(1), who: 'J. Mensah', what: 'Submitted for review' },
-        ],
-      },
-      { id: 'a3', ref: 'SS-RE-2026-00243', bankId: 'bank1', bankName: 'Meridian Trust Bank',
-        category: 'House', assetType: '3 bedroom semi-detached', region: 'Ashanti', district: 'Kumasi Metropolitan',
-        town: 'Asokwa', publicLocation: 'Kumasi, Ashanti', exactAddress: 'House 22, Asokwa Extension, Kumasi',
-        description: 'Well-maintained 3-bedroom semi-detached home with a spacious compound.',
-        reserve: 680000, minOffer: 620000, showReserve: true,
-        status: 'Legal Hold', publicationStatus: 'Suspended', legalStatus: 'On Hold',
-        valuationAmount: 700000, valuationDate: d(20), valuationExpiry: future(345),
-        landSearchValid: true, landSearchExpiry: future(180), injunctionActive: true, legalHold: true, legalHoldReason: 'Injunction filed by third party',
-        exteriorImage: true, titleVerified: true,
-        enforcementBasis: 'Court Judgment', caseRef: 'BNK-LN-88215',
-        borrowerRef: 'Kofi Anane (borrower)', loanAmount: 750000,
-        images: 3, documents: 6,
-        createdAt: d(30), updatedAt: d(3), createdBy: 'K. Asante',
-        legalSubstate: { enforcementRecorded: true, instrumentsVerified: true, injunctionClear: false, clearanceIssued: false },
-        legalNotes: [],
-        instruments: [
-          { id: 'i1', type: 'Court Judgment', ref: 'JUD-2025-0155', status: 'Verified', uploadedBy: 'K. Asante', uploadedAt: d(28) },
-        ],
-        activity: [
-          { when: d(30), who: 'K. Asante', what: 'Asset created as Draft' },
-          { when: d(25), who: 'K. Asante', what: 'Submitted for review' },
-          { when: d(20), who: 'S. Adjei', what: 'Legal verification completed' },
-          { when: d(15), who: 'A. Boateng', what: 'Published to Marketplace' },
-          { when: d(3), who: 'S. Adjei', what: 'Legal hold placed: Injunction filed by third party' },
-        ],
-      },
-      { id: 'a4', ref: 'SS-RE-2026-00244', bankId: 'bank1', bankName: 'Meridian Trust Bank',
-        category: 'Commercial', assetType: 'Retail shop', region: 'Greater Accra', district: 'Accra Metropolitan',
-        town: 'Osu', publicLocation: 'Osu, Accra', exactAddress: 'Shop 7, Oxford Street, Osu',
-        description: 'Prime retail space on Oxford Street with high foot traffic.',
-        reserve: 1500000, minOffer: 1400000, showReserve: true,
-        status: 'Approved', publicationStatus: 'Pending Approval', legalStatus: 'Cleared',
-        valuationAmount: 1600000, valuationDate: d(15), valuationExpiry: future(350),
-        landSearchValid: true, landSearchExpiry: future(180), injunctionActive: false, legalHold: false,
-        exteriorImage: false, titleVerified: true,
-        enforcementBasis: 'Settlement Agreement', caseRef: 'BNK-LN-88216',
-        borrowerRef: 'Ama Serwaa (borrower)', loanAmount: 1800000,
-        images: 1, documents: 4,
-        createdAt: d(40), updatedAt: d(1), createdBy: 'K. Asante',
-        legalSubstate: { enforcementRecorded: true, instrumentsVerified: true, injunctionClear: true, clearanceIssued: true },
-        legalNotes: [],
-        instruments: [
-          { id: 'i1', type: 'Settlement Agreement', ref: 'STL-2025-0033', status: 'Verified', uploadedBy: 'K. Asante', uploadedAt: d(38) },
-        ],
-        activity: [
-          { when: d(40), who: 'K. Asante', what: 'Asset created as Draft' },
-          { when: d(35), who: 'K. Asante', what: 'Submitted for review' },
-          { when: d(28), who: 'S. Adjei', what: 'Legal verification completed' },
-          { when: d(1), who: 'A. Boateng', what: 'Approved — awaiting exterior image for publication' },
-        ],
-      },
-      { id: 'a5', ref: 'SS-RE-2026-00245', bankId: 'bank1', bankName: 'Meridian Trust Bank',
-        category: 'House', assetType: '5 bedroom detached', region: 'Central', district: 'Cape Coast Metropolitan',
-        town: 'Pedu', publicLocation: 'Cape Coast, Central', exactAddress: 'House 8, Pedu Estate, Cape Coast',
-        description: 'Luxurious 5-bedroom detached house with ocean view.',
-        reserve: 2200000, minOffer: 2000000, showReserve: false,
-        status: 'Draft', publicationStatus: 'Unpublished', legalStatus: 'Not Started',
-        valuationAmount: 2400000, valuationDate: d(2), valuationExpiry: future(363),
-        landSearchValid: false, landSearchExpiry: null, injunctionActive: false, legalHold: false,
-        exteriorImage: false, titleVerified: false,
-        enforcementBasis: '', caseRef: 'BNK-LN-88217',
-        borrowerRef: '', loanAmount: 2500000,
-        images: 0, documents: 1,
-        createdAt: d(2), updatedAt: d(2), createdBy: 'J. Mensah',
-        legalSubstate: { enforcementRecorded: false, instrumentsVerified: false, injunctionClear: true, clearanceIssued: false },
-        legalNotes: [],
-        instruments: [],
-        activity: [{ when: d(2), who: 'J. Mensah', what: 'Asset created as Draft' }],
-      },
-    ];
-
-    this.leads = [
-      { id: 'l1', ref: 'SL-LEAD-2026-000101', assetId: 'a1', assetRef: 'SS-RE-2026-00241', name: 'Kwame Nkrumah', phone: '+233 24 555 0101', email: 'kwame.n@email.com', status: 'KYC Verified', source: 'Public Enquiry', assignedTo: 'A. Boateng', createdAt: d(10) },
-      { id: 'l2', ref: 'SL-LEAD-2026-000102', assetId: 'a1', assetRef: 'SS-RE-2026-00241', name: 'Akosua Agyeman', phone: '+233 20 555 0102', email: 'akosua.a@email.com', status: 'Contacted', source: 'Public Enquiry', assignedTo: 'A. Boateng', createdAt: d(7) },
-    ];
-
-    this.offers = [
-      { id: 'o1', ref: 'OFF-2026-000501', assetId: 'a1', assetRef: 'SS-RE-2026-00241', buyer: 'Kwame Nkrumah', amount: 950000, status: 'Under Review', belowReserve: false, date: d(5), validity: future(25), notes: 'Cash purchase, ready to complete in 30 days.' },
-      { id: 'o2', ref: 'OFF-2026-000502', assetId: 'a1', assetRef: 'SS-RE-2026-00241', buyer: 'Akosua Agyeman', amount: 880000, status: 'Submitted', belowReserve: true, date: d(3), validity: future(27), notes: 'Mortgage pre-approved.' },
-    ];
-
-    this.invoices = [
-      { id: 'inv1', ref: 'INV-2026-000201', bankId: 'bank1', bankName: 'Meridian Trust Bank', assetRef: 'SS-RE-2025-00189', description: 'Commission — 4% of GHS 950,000.00', amount: 38000, status: 'Paid', issuedAt: d(45), paidAt: d(30) },
-      { id: 'inv2', ref: 'INV-2026-000202', bankId: 'bank1', bankName: 'Meridian Trust Bank', assetRef: 'SS-RE-2025-00192', description: 'Commission — 4% of GHS 720,000.00', amount: 28800, status: 'Issued', issuedAt: d(12), paidAt: null },
-    ];
-
-    this.auditLog = [
-      { id: 'au1', when: d(38), who: 'A. Boateng', action: 'PUBLISH', entity: 'Asset', entityRef: 'SS-RE-2026-00241', oldValue: 'Approved', newValue: 'Live', detail: 'Listing published' },
-      { id: 'au2', when: d(3), who: 'S. Adjei', action: 'LEGAL_HOLD', entity: 'Asset', entityRef: 'SS-RE-2026-00243', oldValue: 'Live', newValue: 'Legal Hold', detail: 'Injunction filed by third party' },
-      { id: 'au3', when: d(1), who: 'A. Boateng', action: 'APPROVE', entity: 'Asset', entityRef: 'SS-RE-2026-00244', oldValue: 'Under Review', newValue: 'Approved', detail: 'Approved pending exterior image' },
-    ];
+    // No mock data — Cloudflare D1 is the single source of truth
+    this.assets = [];
+    this.leads = [];
+    this.offers = [];
+    this.invoices = [];
+    this.auditLog = [];
+    this.viewings = [];
   },
 
   getAsset(id) { return this.assets.find(a => a.id === id); },
@@ -1449,36 +1368,44 @@ const BankPortal = {
     return `<div class="page-head"><h1>Notifications</h1></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.filter(a => Store.getBankAssets().some(x => x.ref === a.entityRef)).slice(0, 10).map(n => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(n.when)}</div><div class="ae-what"><b>${n.action}</b> on ${n.entityRef} — ${n.detail || ''}</div></div>`).join('')}</div></div>`;
   },
 
-  newAsset() {
-    const id = 'a' + Date.now();
-    const ref = 'SS-RE-2026-' + String(Store.assets.length + 241).padStart(5, '0');
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch('/api/v1/assets', {
+  async newAsset() {
+    UI.toast('Creating new asset...', 'info');
+    try {
+      const res = await fetch(Store.API_BASE + '/api/v1/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah', 'x-actor-role': 'Recovery Officer' },
         body: JSON.stringify({ bankId: 'bank-mtb', categoryCode: 'House', assetType: 'Property', reservePrice: 0 })
-      }).catch(() => {});
+      });
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        UI.toast('Failed to create asset: ' + (json.error || 'Unknown error'), 'error');
+        return;
+      }
+      const d = json.data;
+      const asset = {
+        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || '',
+        category: d.category_code, assetType: d.asset_type || '', region: d.region || 'Greater Accra',
+        district: d.district || '', town: d.town || '', publicLocation: d.public_location || '',
+        exactAddress: d.exact_address || '', description: d.description || '',
+        reserve: d.reserve_price || 0, minOffer: d.minimum_offer || 0, showReserve: !!d.show_reserve_publicly,
+        status: d.status || 'Draft', publicationStatus: 'Unpublished', legalStatus: 'Not Started',
+        valuationAmount: 0, valuationDate: null, valuationExpiry: null,
+        landSearchValid: false, injunctionActive: false, legalHold: false,
+        exteriorImage: false, titleVerified: false, titleDetails: false,
+        enforcementBasis: '', caseRef: d.internal_bank_ref || '',
+        images: 0, documents: 0,
+        createdAt: d.created_at, updatedAt: d.updated_at, createdBy: d.created_by || 'J. Mensah',
+        legalSubstate: { enforcementRecorded: false, instrumentsVerified: false, injunctionClear: true, clearanceIssued: false },
+        legalNotes: [], instruments: [],
+        activity: [{ when: d.created_at, who: d.created_by || 'J. Mensah', what: 'Asset created as Draft' }],
+      };
+      Store.assets.unshift(asset);
+      UI.toast('Draft asset created: ' + d.public_ref, 'success');
+      this.openAsset(d.id);
+    } catch (e) {
+      console.error('Create asset failed:', e);
+      UI.toast('Network error creating asset. Check your connection.', 'error');
     }
-    Store.assets.unshift({
-      id, ref, bankId: 'bank-mtb', bankName: 'Meridian Trust Bank',
-      category: 'House', assetType: '', region: 'Greater Accra', district: '',
-      town: '', publicLocation: '', exactAddress: '',
-      description: '', reserve: 0, minOffer: 0, showReserve: false,
-      status: 'Draft', publicationStatus: 'Unpublished', legalStatus: 'Not Started',
-      valuationAmount: 0, valuationDate: null, valuationExpiry: null,
-      landSearchValid: false, injunctionActive: false, legalHold: false,
-      exteriorImage: false, titleVerified: false, titleDetails: false,
-      enforcementBasis: '', caseRef: 'BNK-LN-' + Math.floor(10000 + Math.random() * 90000),
-      borrowerRef: '', loanAmount: 0,
-      images: 0, documents: 0,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: 'J. Mensah',
-      legalSubstate: { enforcementRecorded: false, instrumentsVerified: false, injunctionClear: true, clearanceIssued: false },
-      legalNotes: [], instruments: [],
-      activity: [{ when: new Date().toISOString(), who: 'J. Mensah', what: 'Asset created as Draft' }],
-    });
-    Store.addAudit('J. Mensah', 'CREATE', 'Asset', ref, null, 'Draft', 'Asset record created');
-    UI.toast('Draft asset created: ' + ref, 'success');
-    this.openAsset(id);
   },
 
   deleteAsset(id) {

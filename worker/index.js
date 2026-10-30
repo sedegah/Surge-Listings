@@ -353,6 +353,66 @@ export default {
         });
       }
 
+      // Update Asset (PUT)
+      if (pathname.match(/^\/api\/v1\/assets\/[a-zA-Z0-9_-]+$/) && method === 'PUT') {
+        const id = pathname.split('/').pop();
+        const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
+        if (!asset) return err('Asset not found', 404);
+
+        const body = await getBody();
+        const updates = [];
+        const binds = [];
+
+        const fieldMap = {
+          categoryCode: 'category_code',
+          assetType: 'asset_type',
+          title: 'title',
+          description: 'description',
+          region: 'region',
+          district: 'district',
+          town: 'town',
+          publicLocation: 'public_location',
+          exactAddress: 'exact_address',
+          reservePrice: 'reserve_price',
+          minimumOffer: 'minimum_offer',
+          showReservePublicly: 'show_reserve_publicly',
+          internalBankRef: 'internal_bank_ref',
+          occupancyStatus: 'occupancy_status',
+          landGuardRisk: 'land_guard_risk',
+          status: 'status',
+          beds: 'beds',
+          baths: 'baths',
+          year: 'year',
+          mileage: 'mileage',
+          fuel: 'fuel',
+        };
+
+        for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
+          if (body[jsKey] !== undefined) {
+            updates.push(`${dbCol} = ?`);
+            if (dbCol === 'show_reserve_publicly') {
+              binds.push(body[jsKey] ? 1 : 0);
+            } else if (['reserve_price', 'minimum_offer', 'beds', 'baths', 'year', 'mileage'].includes(dbCol)) {
+              binds.push(Number(body[jsKey]) || 0);
+            } else {
+              binds.push(body[jsKey]);
+            }
+          }
+        }
+
+        if (updates.length === 0) return err('No fields to update', 400);
+
+        updates.push(`updated_at = datetime('now')`);
+        const sql = `UPDATE assets SET ${updates.join(', ')} WHERE id = ?`;
+        binds.push(asset.id);
+
+        await env.DB.prepare(sql).bind(...binds).run();
+        await auditLog(actorName, actorRole, 'Bank', 'UPDATE', 'Asset', asset.public_ref, `Asset updated: ${Object.keys(body).join(', ')}`);
+
+        const updated = await env.DB.prepare(`SELECT * FROM assets WHERE id = ?`).bind(asset.id).first();
+        return json({ success: true, data: updated });
+      }
+
       // Delete Draft Asset
       if (pathname.match(/^\/api\/v1\/assets\/[a-zA-Z0-9_-]+$/) && method === 'DELETE') {
         const id = pathname.split('/').pop();
