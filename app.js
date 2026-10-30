@@ -755,12 +755,68 @@ const UI = {
 const BankPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview',
   subPage: null,
+  branches: [],
+  branchStats: null,
 
-  init() {
+  async init() {
+    const authed = await Auth.checkAuth('bank');
+    if (!authed) return;
+
+    await this.loadBranches();
+
     document.querySelectorAll('#bank-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });
     this.render();
+  },
+
+  async loadBranches() {
+    try {
+      const headers = Store.getAuthHeaders();
+      const res = await fetch(Store.API_BASE + '/api/bank/branches', { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.branches = json.data;
+          this.updateBranchSelect();
+        }
+      }
+    } catch(e) {}
+  },
+
+  updateBranchSelect() {
+    const sel = document.getElementById('bank-branch-select');
+    if (!sel) return;
+    const current = Auth.selectedBranchId || '';
+    sel.innerHTML = `<option value="">All Branches (${this.branches.length} Registered)</option>` +
+      this.branches.map(b => `<option value="${b.id}" ${b.id === current ? 'selected' : ''}>${b.name} (${b.region})</option>`).join('');
+  },
+
+  async switchBranch(branchId) {
+    Auth.selectedBranchId = branchId || null;
+    if (branchId) {
+      try {
+        const res = await fetch(Store.API_BASE + `/api/bank/branches/${branchId}/dashboard`, {
+          headers: Store.getAuthHeaders()
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) {
+            this.branchStats = json.data;
+          }
+        }
+      } catch(e) {}
+    } else {
+      this.branchStats = null;
+    }
+    this.render();
+  },
+
+  onRegionChange(region) {
+    const distEl = document.getElementById('edit-ov-district');
+    if (distEl) {
+      distEl.innerHTML = GhanaGeo.renderDistrictOptions(region, '');
+    }
   },
 
   nav(view) {
@@ -774,6 +830,7 @@ const BankPortal = {
 
   render() {
     this.renderDoctabs();
+    this.updateBranchSelect();
     const el = document.getElementById('bank-work');
     if (!el) return;
     if (this.subPage) { el.innerHTML = this.renderSubPage(); return; }
@@ -810,26 +867,33 @@ const BankPortal = {
 
   renderDashboard() {
     const assets = Store.getBankAssets();
-    const live = assets.filter(a => a.status === 'Live').length;
-    const pending = assets.filter(a => ['Submitted', 'Under Review'].includes(a.status)).length;
-    const holds = assets.filter(a => a.legalHold).length;
+    const user = Auth.getUser();
+    const bankName = user?.bankName || 'Partner Bank';
+    const activeBranch = this.branches.find(b => b.id === Auth.selectedBranchId);
+    const branchLabel = activeBranch ? `${activeBranch.name} (${activeBranch.region} / ${activeBranch.district || 'Hub'})` : 'All Branches (Whole Bank Portfolio)';
+
+    const totalCount = this.branchStats ? this.branchStats.totalAssets : assets.length;
+    const live = this.branchStats ? this.branchStats.liveListings : assets.filter(a => a.status === 'Live').length;
+    const pending = this.branchStats ? this.branchStats.pendingReview : assets.filter(a => ['Submitted', 'Under Review'].includes(a.status)).length;
+    const holds = this.branchStats ? this.branchStats.legalHolds : assets.filter(a => a.legalHold).length;
     const activeOffers = Store.offers.filter(o => ['Submitted', 'Under Review'].includes(o.status)).length;
     return `
       <div class="page-head">
         <h1>Dashboard</h1>
-        <span class="crumb">Partner Bank · ${assets.length} assets</span>
+        <span class="crumb">${bankName} · ${branchLabel} · ${totalCount} records</span>
         <span class="spacer"></span>
-        <span class="badge info">Tenant: Partner Bank</span>
+        <span class="badge info">Tenant: ${bankName}</span>
+        ${activeBranch ? `<span class="badge ok">Branch: ${activeBranch.name}</span>` : ''}
       </div>
       <div class="kpis">
-        <div class="kpi" onclick="BankPortal.nav('assets')"><div class="k">Total Assets</div><div class="v">${assets.length}</div><div class="d">All bank-owned records</div></div>
+        <div class="kpi" onclick="BankPortal.nav('assets')"><div class="k">Total Assets</div><div class="v">${totalCount}</div><div class="d">${activeBranch ? 'This branch workspace' : 'All bank-owned records'}</div></div>
         <div class="kpi ok" onclick="BankPortal.nav('assets')"><div class="k">Live Listings</div><div class="v">${live}</div><div class="d">Published to Marketplace</div></div>
         <div class="kpi warn" onclick="BankPortal.nav('assets')"><div class="k">Pending Review</div><div class="v">${pending}</div><div class="d">Awaiting Surge review</div></div>
         <div class="kpi alert" onclick="BankPortal.nav('legal')"><div class="k">Legal Holds</div><div class="v">${holds}</div><div class="d">Blocked from publication</div></div>
         <div class="kpi" onclick="BankPortal.nav('offers')"><div class="k">Active Offers</div><div class="v">${activeOffers}</div><div class="d">Awaiting decision</div></div>
       </div>
       <div class="gridwrap">
-        <div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div>
+        <div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity ${activeBranch ? '— ' + activeBranch.name : ''}</strong></div>
         <div style="padding:10px 14px">
           <ul class="timeline">
             ${Store.auditLog.filter(a => assets.some(x => x.ref === a.entityRef)).slice(0, 6).map(a => `
@@ -1031,12 +1095,14 @@ const BankPortal = {
           <div class="caption">Location Particulars</div>
           <div class="body">
             <div class="field"><span class="lbl">Region <span class="req">*</span></span><div class="ctl">
-              <select id="edit-ov-region">
-                ${regions.map(r => `<option value="${r}" ${a.region === r ? 'selected' : ''}>${r}</option>`).join('')}
+              <select id="edit-ov-region" onchange="BankPortal.onRegionChange(this.value)">
+                ${GhanaGeo.renderRegionOptions(a.region || 'Greater Accra')}
               </select>
             </div></div>
-            <div class="field"><span class="lbl">District</span><div class="ctl">
-              <input id="edit-ov-district" value="${a.district || ''}" placeholder="e.g. Tema West Metropolitan">
+            <div class="field"><span class="lbl">District / Constituency <span class="req">*</span></span><div class="ctl">
+              <select id="edit-ov-district">
+                ${GhanaGeo.renderDistrictOptions(a.region || 'Greater Accra', a.district)}
+              </select>
             </div></div>
             <div class="field"><span class="lbl">Town / Neighborhood</span><div class="ctl">
               <input id="edit-ov-town" value="${a.town || ''}" placeholder="e.g. Community 25">
@@ -1725,10 +1791,15 @@ const BankPortal = {
   async newAsset() {
     UI.toast('Creating new asset...', 'info');
     try {
+      const user = Auth.getUser();
+      const bankId = user?.bankId || user?.bank_id || 'bank-mtb';
+      const branchId = Auth.selectedBranchId || user?.branchId || user?.branch_id || null;
+      const actorName = user?.fullName || user?.full_name || user?.username || 'Officer';
+
       const res = await fetch(Store.API_BASE + '/api/v1/assets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah', 'x-actor-role': 'Recovery Officer' },
-        body: JSON.stringify({ bankId: 'bank-mtb', categoryCode: 'House', assetType: 'Property', reservePrice: 0 })
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ bankId, branchId, categoryCode: 'House', assetType: 'Property', reservePrice: 0 })
       });
       const json = await res.json();
       if (!json.success || !json.data) {
@@ -1737,7 +1808,8 @@ const BankPortal = {
       }
       const d = json.data;
       const asset = {
-        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || '',
+        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || (user?.bankName || ''),
+        branchId: d.branch_id || branchId,
         category: d.category_code, assetType: d.asset_type || '', region: d.region || 'Greater Accra',
         district: d.district || '', town: d.town || '', publicLocation: d.public_location || '',
         exactAddress: d.exact_address || '', description: d.description || '',
@@ -1748,10 +1820,10 @@ const BankPortal = {
         exteriorImage: false, titleVerified: false, titleDetails: false,
         enforcementBasis: '', caseRef: d.internal_bank_ref || '',
         images: 0, documents: 0,
-        createdAt: d.created_at, updatedAt: d.updated_at, createdBy: d.created_by || 'J. Mensah',
+        createdAt: d.created_at, updatedAt: d.updated_at, createdBy: d.created_by || actorName,
         legalSubstate: { enforcementRecorded: false, instrumentsVerified: false, injunctionClear: true, clearanceIssued: false },
         legalNotes: [], instruments: [],
-        activity: [{ when: d.created_at, who: d.created_by || 'J. Mensah', what: 'Asset created as Draft' }],
+        activity: [{ when: d.created_at, who: d.created_by || actorName, what: 'Asset created as Draft' }],
       };
       Store.assets.unshift(asset);
       UI.toast('Draft asset created: ' + d.public_ref, 'success');
@@ -1908,11 +1980,21 @@ const AdminPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
   activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '',
 
-  init() {
+  async init() {
+    const authed = await Auth.checkAuth('surge');
+    if (!authed) return;
+
     document.querySelectorAll('#admin-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });
     this.render();
+  },
+
+  onBankRegionChange(region) {
+    const distEl = document.getElementById('add-bank-district');
+    if (distEl) {
+      distEl.innerHTML = GhanaGeo.renderDistrictOptions(region, '');
+    }
   },
 
   nav(view) {
@@ -3074,15 +3156,19 @@ const AdminPortal = {
             </div>
 
             <div class="field" style="margin:0">
-              <span class="lbl" style="font-weight:600">Regional Jurisdiction</span>
+              <span class="lbl" style="font-weight:600">Regional Jurisdiction <span class="req">*</span></span>
               <div class="ctl">
-                <select id="add-bank-region" style="width:100%">
-                  <option value="Greater Accra" selected>Greater Accra Enclave</option>
-                  <option value="Ashanti">Ashanti (Kumasi Central)</option>
-                  <option value="Western">Western (Takoradi Hub)</option>
-                  <option value="Central">Central (Cape Coast)</option>
-                  <option value="Eastern">Eastern Region</option>
-                  <option value="Northern">Northern (Tamale)</option>
+                <select id="add-bank-region" style="width:100%" onchange="AdminPortal.onBankRegionChange(this.value)">
+                  ${GhanaGeo.renderRegionOptions('Greater Accra')}
+                </select>
+              </div>
+            </div>
+
+            <div class="field" style="margin:0">
+              <span class="lbl" style="font-weight:600">Head Office District / Constituency</span>
+              <div class="ctl">
+                <select id="add-bank-district" style="width:100%">
+                  ${GhanaGeo.renderDistrictOptions('Greater Accra', 'Ayawaso West Wuogon')}
                 </select>
               </div>
             </div>
