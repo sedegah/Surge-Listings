@@ -5,16 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surge Solutions — Bank Partner Portal</title>
 <meta name="description" content="Surge Solutions Bank Portal — Multi-tenant loan recovery and asset management platform for Ghanaian financial institutions.">
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body data-portal="bank">
-
-<nav class="switcher" aria-label="Portal Navigation">
+<nav class="switcher">
   <span class="brandmark">SURGE <span>&#9632;</span></span>
-  <a href="/bank" class="active">Bank Portal</a>
-  <a href="/admin">Surge Admin</a>
-  <a href="/marketplace">Public Marketplace</a>
-  <span class="note"><span class="env-dot"></span>Meridian Trust Bank · Ghana D1 Sync</span>
+  <button data-app="bank" class="active">Bank Portal</button>
+  <button data-app="admin">Surge Admin</button>
+  <button data-app="public">Public Marketplace</button>
+  <span class="note"><span class="env-dot"></span>Shared D1 Data Layer · Live Sync</span>
 </nav>
 
 <div class="viewport">
@@ -67,6 +66,71 @@
       </div>
     </div>
   </section>
+
+  <!-- SURGE ADMIN -->
+  <section class="app" id="app-admin">
+    <div class="window">
+      <div class="menubar">
+        <span class="app-title"><span class="sq"></span>Surge Solutions — Administration</span>
+        <span class="menu-item" onclick="AdminPortal.nav('assets')"><u>A</u>ssets</span>
+        <span class="menu-item" onclick="AdminPortal.nav('review')"><u>R</u>eview</span>
+        <span class="menu-item" onclick="AdminPortal.nav('legal')"><u>L</u>egal</span>
+        <span class="menu-item" onclick="AdminPortal.nav('audit')"><u>U</u>dit</span>
+        <span class="menu-spacer"></span>
+        <span class="menu-env">SURGE ADMIN · PROD</span>
+      </div>
+      <div class="toolbar">
+        <button class="tbtn" onclick="AdminPortal.nav('review')"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Review Queue</button>
+        <button class="tbtn" onclick="AdminPortal.publishCurrent()"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Publish</button>
+        <button class="tbtn" onclick="AdminPortal.holdCurrent()"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>Legal Hold</button>
+        <span class="tsep"></span>
+        <button class="tbtn" onclick="AdminPortal.nav('audit')"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Audit Log</button>
+      </div>
+      <div class="mainrow">
+        <nav class="navpane" id="admin-nav">
+          <div class="navitem" data-view="dashboard"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</div>
+          <div class="navitem active" data-view="assets"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/></svg>Assets</div>
+          <div class="navitem" data-view="review"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Review Queue</div>
+          <div class="navitem" data-view="legal"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>Legal Verification</div>
+          <div class="navitem" data-view="title"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l7-2 9-9-5-5-9 9z"/></svg>Title &amp; Valuation</div>
+          <div class="navitem" data-view="offers"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>Offers</div>
+          <div class="navitem" data-view="audit"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Audit Log</div>
+        </nav>
+        <div class="workspace">
+          <div class="doctabs" id="admin-doctabs"></div>
+          <main class="work" id="admin-work"></main>
+          <footer class="statusbar">
+            <span class="cell">User: <b>a.boateng</b></span>
+            <span class="cell">Role: <b>Property Manager</b></span>
+            <span class="cell">Org: <b>Surge Solutions</b></span>
+            <span class="cell">Env: <b>PROD</b></span>
+            <span class="cell grow" id="clock-admin"></span>
+          </footer>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PUBLIC -->
+  <section class="app" id="app-public">
+    <div class="window" style="background:var(--win-bg)">
+      <div class="pub">
+        <header class="pub-header">
+          <div class="pub-logo" onclick="PublicMarket.goHome()"><span class="sq"></span>Surge Solutions <small>Marketplace</small></div>
+          <nav class="pub-nav" id="pub-nav">
+            <a data-page="home" class="active" onclick="PublicMarket.goHome()">Buy Assets</a>
+            <a data-page="how" onclick="PublicMarket.goHow()">How It Works</a>
+            <a data-page="kyc" onclick="PublicMarket.goKyc()">KYC &amp; Verification</a>
+            <a data-page="faq" onclick="PublicMarket.goFaq()">FAQ</a>
+            <a data-page="contact" onclick="PublicMarket.goContact()">Contact</a>
+          </nav>
+          <span class="spacer"></span>
+          <div class="contact"><b>Listed and managed by Surge Solutions</b><br>Buyer enquiries only · No direct seller contact</div>
+        </header>
+        <div class="pub-body" id="public-work"></div>
+      </div>
+    </div>
+  </section>
 </div>
 
 <div class="surge-toast" id="toast"></div>
@@ -81,6 +145,6 @@
   </div>
 </div>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
