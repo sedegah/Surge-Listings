@@ -203,6 +203,167 @@ router.delete('/branches/:branchId', async (req, res) => {
 });
 
 /**
+ * ============================================================
+ * BANK STAFF & CREDENTIAL MANAGEMENT
+ * ============================================================
+ */
+
+/**
+ * GET /api/admin/users
+ * List staff across banks or platform
+ */
+router.get('/users', async (req, res) => {
+  try {
+    const { bank_id, role } = req.query;
+    let sql = `
+      SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
+             u.status, u.mfa_enabled, u.last_login, u.created_at,
+             CASE WHEN u.password_hash IS NOT NULL AND length(u.password_hash) > 0 THEN 1 ELSE 0 END as has_password,
+             r.name as role_name, r.scope as role_scope,
+             b.legal_name as bank_name, b.short_code as bank_code,
+             br.name as branch_name
+      FROM users u
+      LEFT JOIN roles r ON u.role_code = r.code
+      LEFT JOIN banks b ON u.bank_id = b.id
+      LEFT JOIN bank_branches br ON u.branch_id = br.id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (bank_id) {
+      sql += ` AND u.bank_id = ?`;
+      params.push(bank_id);
+    }
+    if (role) {
+      sql += ` AND u.role_code = ?`;
+      params.push(role);
+    }
+    sql += ` ORDER BY u.created_at DESC, u.full_name ASC`;
+    const users = await d1.all(sql, params);
+    res.json({ success: true, count: users.length, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/users
+ * Register staff user and assign username & password
+ */
+router.post('/users', async (req, res) => {
+  try {
+    const { bank_id, branch_id, username, full_name, email, role_code, password, mfa_enabled } = req.body;
+    if (!username || !full_name || !email || !role_code) {
+      return res.status(400).json({ success: false, error: 'Username, full name, email, and role are required.' });
+    }
+
+    const existing = await d1.get(`SELECT id FROM users WHERE username = ? OR email = ?`, username.trim().toLowerCase(), email.trim().toLowerCase());
+    if (existing) {
+      return res.status(400).json({ success: false, error: 'A user with this username or email already exists.' });
+    }
+
+    let orgId = 'org-surge';
+    if (bank_id) {
+      const bank = await d1.get(`SELECT organization_id, legal_name FROM banks WHERE id = ?`, bank_id);
+      if (bank) orgId = bank.organization_id;
+    }
+
+    const userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    const assignedPassword = password ? password.trim() : 'Surge@2026!';
+
+    await d1.run(`
+      INSERT INTO users (id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+    `, userId, orgId, bank_id || null, branch_id || null, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), role_code, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1);
+
+    await logAdminAudit(req, 'Create User', 'User', userId, `Created staff member ${full_name} (${username}) with role ${role_code}`);
+
+    const createdUser = await d1.get(`
+      SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
+             u.status, u.mfa_enabled, u.created_at, b.legal_name as bank_name
+      FROM users u
+      LEFT JOIN banks b ON u.bank_id = b.id
+      WHERE u.id = ?
+    `, userId);
+
+    res.status(201).json({ success: true, message: 'Staff user created successfully.', data: createdUser });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/users/:id/reset-password
+ * Reset / assign new password for staff user
+ */
+router.post('/users/:id/reset-password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password || password.trim().length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+    }
+
+    const user = await d1.get(`SELECT username, full_name FROM users WHERE id = ?`, id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    await d1.run(`UPDATE users SET password_hash = ? WHERE id = ?`, password.trim(), id);
+    await logAdminAudit(req, 'Reset Password', 'User', id, `Password reset for user ${user.username} (${user.full_name})`);
+
+    res.json({ success: true, message: `Password reset successfully for ${user.username}.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PUT /api/admin/users/:id
+ * Update staff profile or status
+ */
+router.put('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await d1.get(`SELECT * FROM users WHERE id = ?`, id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const { full_name, email, role_code, status, bank_id, branch_id } = req.body;
+
+    await d1.run(`
+      UPDATE users
+      SET full_name = COALESCE(?, full_name),
+          email = COALESCE(?, email),
+          role_code = COALESCE(?, role_code),
+          status = COALESCE(?, status),
+          bank_id = COALESCE(?, bank_id),
+          branch_id = COALESCE(?, branch_id)
+      WHERE id = ?
+    `, full_name || null, email ? email.toLowerCase() : null, role_code || null, status || null, bank_id || null, branch_id || null, id);
+
+    await logAdminAudit(req, 'Update User', 'User', id, `Updated staff profile for ${user.username}`);
+    res.json({ success: true, message: 'User updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/users/:id
+ * Remove staff user
+ */
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await d1.get(`SELECT username, full_name FROM users WHERE id = ?`, id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    await d1.run(`DELETE FROM users WHERE id = ?`, id);
+    await logAdminAudit(req, 'Delete User', 'User', id, `Deleted user ${user.username} (${user.full_name})`);
+    res.json({ success: true, message: `User ${user.username} deleted successfully.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/admin/assets
  * Global portfolio view with bank name and branch info
  */

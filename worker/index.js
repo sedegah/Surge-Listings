@@ -108,17 +108,151 @@ export default {
         });
       }
 
-      if (pathname === '/api/v1/users' || pathname === '/api/v1/users/') {
-        const users = await env.DB.prepare(`
-          SELECT u.id, u.username, u.full_name, u.email, u.role_code, u.status, u.last_login,
-                 r.name as role_name, r.scope, o.name as org_name, b.legal_name as bank_name
+      // ============================================================
+      // 2. USERS & STAFF MANAGEMENT (/api/v1/users, /api/admin/users)
+      // ============================================================
+      if ((pathname === '/api/v1/users' || pathname === '/api/admin/users' || pathname === '/api/v1/users/' || pathname === '/api/admin/users/') && method === 'GET') {
+        const filterBankId = url.searchParams.get('bank_id');
+        const filterRole = url.searchParams.get('role');
+        let sql = `
+          SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
+                 u.status, u.mfa_enabled, u.last_login, u.created_at,
+                 CASE WHEN u.password_hash IS NOT NULL AND length(u.password_hash) > 0 THEN 1 ELSE 0 END as has_password,
+                 r.name as role_name, r.scope, o.name as org_name,
+                 b.legal_name as bank_name, b.short_code as bank_code,
+                 br.name as branch_name
           FROM users u
-          JOIN roles r ON u.role_code = r.code
-          JOIN organizations o ON u.organization_id = o.id
+          LEFT JOIN roles r ON u.role_code = r.code
+          LEFT JOIN organizations o ON u.organization_id = o.id
           LEFT JOIN banks b ON u.bank_id = b.id
-          ORDER BY u.full_name ASC
-        `).all();
+          LEFT JOIN bank_branches br ON u.branch_id = br.id
+          WHERE 1=1
+        `;
+        const params = [];
+        if (filterBankId) {
+          sql += ` AND u.bank_id = ?`;
+          params.push(filterBankId);
+        }
+        if (filterRole) {
+          sql += ` AND u.role_code = ?`;
+          params.push(filterRole);
+        }
+        sql += ` ORDER BY u.created_at DESC, u.full_name ASC`;
+        const stmt = params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql);
+        const users = await stmt.all();
         return json({ success: true, count: users.results.length, data: users.results });
+      }
+
+      if ((pathname === '/api/v1/users' || pathname === '/api/admin/users') && method === 'POST') {
+        const body = await getBody();
+        const { bank_id, branch_id, username, full_name, email, role_code, password, mfa_enabled } = body;
+        if (!username || !full_name || !email || !role_code) {
+          return err('Username, full name, email, and role are required.', 400);
+        }
+
+        const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ? OR email = ?`).bind(username.trim().toLowerCase(), email.trim().toLowerCase()).first();
+        if (existing) {
+          return err('A user with this username or email already exists.', 400);
+        }
+
+        let orgId = 'org-surge';
+        if (bank_id) {
+          const bank = await env.DB.prepare(`SELECT organization_id, legal_name FROM banks WHERE id = ?`).bind(bank_id).first();
+          if (bank) orgId = bank.organization_id;
+        }
+
+        const userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+        const assignedPassword = password ? password.trim() : 'Surge@2026!';
+
+        await env.DB.prepare(`
+          INSERT INTO users (id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+        `).bind(
+          userId,
+          orgId,
+          bank_id || null,
+          branch_id || null,
+          username.trim().toLowerCase(),
+          full_name.trim(),
+          email.trim().toLowerCase(),
+          role_code,
+          assignedPassword,
+          mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1
+        ).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'CREATE_USER', 'User', userId, `Created staff member ${full_name} (${username}) with role ${role_code} for ${bank_id || 'Platform'}`);
+
+        const createdUser = await env.DB.prepare(`
+          SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
+                 u.status, u.mfa_enabled, u.created_at, b.legal_name as bank_name
+          FROM users u
+          LEFT JOIN banks b ON u.bank_id = b.id
+          WHERE u.id = ?
+        `).bind(userId).first();
+
+        return json({ success: true, message: 'Staff user created successfully.', data: createdUser }, 201);
+      }
+
+      // Password Reset for Staff User
+      if ((pathname.match(/^\/api\/v1\/users\/[a-zA-Z0-9_-]+\/reset-password$/) || pathname.match(/^\/api\/admin\/users\/[a-zA-Z0-9_-]+\/reset-password$/)) && method === 'POST') {
+        const parts = pathname.split('/');
+        const id = parts[parts.length - 2];
+        const body = await getBody();
+        const { password } = body;
+        if (!password || password.trim().length < 6) {
+          return err('Password must be at least 6 characters.', 400);
+        }
+
+        const user = await env.DB.prepare(`SELECT username, full_name FROM users WHERE id = ?`).bind(id).first();
+        if (!user) return err('User not found', 404);
+
+        await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(password.trim(), id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'RESET_PASSWORD', 'User', id, `Admin reset password for user ${user.username} (${user.full_name})`);
+
+        return json({ success: true, message: `Password reset successfully for ${user.username}.` });
+      }
+
+      // Update Staff User (PUT)
+      if ((pathname.match(/^\/api\/v1\/users\/[a-zA-Z0-9_-]+$/) || pathname.match(/^\/api\/admin\/users\/[a-zA-Z0-9_-]+$/)) && method === 'PUT') {
+        const id = pathname.split('/').pop();
+        const user = await env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first();
+        if (!user) return err('User not found', 404);
+
+        const body = await getBody();
+        const { full_name, email, role_code, status, bank_id, branch_id } = body;
+
+        await env.DB.prepare(`
+          UPDATE users
+          SET full_name = COALESCE(?, full_name),
+              email = COALESCE(?, email),
+              role_code = COALESCE(?, role_code),
+              status = COALESCE(?, status),
+              bank_id = COALESCE(?, bank_id),
+              branch_id = COALESCE(?, branch_id)
+          WHERE id = ?
+        `).bind(
+          full_name || null,
+          email ? email.toLowerCase() : null,
+          role_code || null,
+          status || null,
+          bank_id || null,
+          branch_id || null,
+          id
+        ).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'UPDATE_USER', 'User', id, `Updated staff profile for ${user.username}`);
+        return json({ success: true, message: 'User updated successfully.' });
+      }
+
+      // Delete Staff User
+      if ((pathname.match(/^\/api\/v1\/users\/[a-zA-Z0-9_-]+$/) || pathname.match(/^\/api\/admin\/users\/[a-zA-Z0-9_-]+$/)) && method === 'DELETE') {
+        const id = pathname.split('/').pop();
+        const user = await env.DB.prepare(`SELECT username, full_name FROM users WHERE id = ?`).bind(id).first();
+        if (!user) return err('User not found', 404);
+
+        await env.DB.prepare(`DELETE FROM users WHERE id = ?`).bind(id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'DELETE_USER', 'User', id, `Deleted user ${user.username} (${user.full_name})`);
+        return json({ success: true, message: `User ${user.username} deleted successfully.` });
       }
 
       // ============================================================
@@ -129,16 +263,109 @@ export default {
         return json({ success: true, count: orgs.results.length, data: orgs.results });
       }
 
-      if (pathname === '/api/v1/banks' || pathname === '/api/admin/banks') {
+      if ((pathname === '/api/v1/banks' || pathname === '/api/admin/banks') && method === 'GET') {
         const banks = await env.DB.prepare(`
           SELECT b.*,
             (SELECT COUNT(*) FROM bank_branches WHERE bank_id = b.id) as branch_count,
             (SELECT COUNT(*) FROM assets WHERE bank_id = b.id) as asset_count,
+            (SELECT COUNT(*) FROM users WHERE bank_id = b.id) as staff_count,
             (SELECT COALESCE(SUM(reserve_price), 0) FROM assets WHERE bank_id = b.id) as total_portfolio_value
           FROM banks b
           ORDER BY b.legal_name ASC
         `).all();
         return json({ success: true, count: banks.results.length, data: banks.results });
+      }
+
+      if ((pathname === '/api/v1/banks' || pathname === '/api/admin/banks') && method === 'POST') {
+        const body = await getBody();
+        const { legal_name, short_code, contact_email, contact_phone, default_commission_rate, initial_branch } = body;
+        if (!legal_name || !short_code || !contact_email) {
+          return err('Legal name, short code, and contact email are required.', 400);
+        }
+
+        const cleanCode = short_code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const orgId = 'org-' + cleanCode.toLowerCase();
+        const bankId = 'bank-' + cleanCode.toLowerCase();
+
+        // Check if bank code already exists
+        const existing = await env.DB.prepare(`SELECT id FROM banks WHERE id = ? OR short_code = ?`).bind(bankId, cleanCode).first();
+        if (existing) {
+          return err(`A bank with code '${cleanCode}' already exists.`, 400);
+        }
+
+        await env.DB.prepare(`
+          INSERT INTO organizations (id, name, code, type, status, created_at)
+          VALUES (?, ?, ?, 'bank', 'Active', datetime('now'))
+        `).bind(orgId, legal_name.trim(), cleanCode).run();
+
+        await env.DB.prepare(`
+          INSERT INTO banks (id, organization_id, legal_name, short_code, contact_email, contact_phone, default_commission_rate, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+        `).bind(
+          bankId,
+          orgId,
+          legal_name.trim(),
+          cleanCode,
+          contact_email.trim().toLowerCase(),
+          contact_phone ? contact_phone.trim() : '+233 30 000 0000',
+          default_commission_rate ? Number(default_commission_rate) : 4.0
+        ).run();
+
+        // Create default head office branch
+        const branchId = 'br-' + cleanCode.toLowerCase() + '-hq';
+        const branchName = initial_branch ? initial_branch.trim() : (cleanCode + ' Head Office - Accra');
+        await env.DB.prepare(`
+          INSERT INTO bank_branches (id, bank_id, name, branch_code, region, status, created_at)
+          VALUES (?, ?, ?, 'HQ', 'Greater Accra', 'Active', datetime('now'))
+        `).bind(branchId, bankId, branchName).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'ADD_BANK', 'Bank', bankId, `Registered partner bank: ${legal_name} (${cleanCode})`);
+
+        const createdBank = await env.DB.prepare(`SELECT * FROM banks WHERE id = ?`).bind(bankId).first();
+        return json({ success: true, message: 'Bank partner registered successfully.', data: createdBank }, 201);
+      }
+
+      if ((pathname.match(/^\/api\/v1\/banks\/[a-zA-Z0-9_-]+$/) || pathname.match(/^\/api\/admin\/banks\/[a-zA-Z0-9_-]+$/)) && method === 'PUT') {
+        const id = pathname.split('/').pop();
+        const bank = await env.DB.prepare(`SELECT * FROM banks WHERE id = ?`).bind(id).first();
+        if (!bank) return err('Bank not found', 404);
+
+        const body = await getBody();
+        const { legal_name, contact_email, contact_phone, default_commission_rate, status } = body;
+
+        await env.DB.prepare(`
+          UPDATE banks
+          SET legal_name = COALESCE(?, legal_name),
+              contact_email = COALESCE(?, contact_email),
+              contact_phone = COALESCE(?, contact_phone),
+              default_commission_rate = COALESCE(?, default_commission_rate),
+              status = COALESCE(?, status)
+          WHERE id = ?
+        `).bind(
+          legal_name || null,
+          contact_email ? contact_email.toLowerCase() : null,
+          contact_phone || null,
+          default_commission_rate !== undefined ? Number(default_commission_rate) : null,
+          status || null,
+          id
+        ).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'UPDATE_BANK', 'Bank', id, `Updated bank details for ${legal_name || bank.legal_name}`);
+        return json({ success: true, message: 'Bank partner updated successfully.' });
+      }
+
+      if ((pathname.match(/^\/api\/v1\/banks\/[a-zA-Z0-9_-]+$/) || pathname.match(/^\/api\/admin\/banks\/[a-zA-Z0-9_-]+$/)) && method === 'DELETE') {
+        const id = pathname.split('/').pop();
+        const bank = await env.DB.prepare(`SELECT legal_name FROM banks WHERE id = ?`).bind(id).first();
+        if (!bank) return err('Bank not found', 404);
+
+        // Delete branches, users, and bank
+        await env.DB.prepare(`DELETE FROM users WHERE bank_id = ?`).bind(id).run();
+        await env.DB.prepare(`DELETE FROM bank_branches WHERE bank_id = ?`).bind(id).run();
+        await env.DB.prepare(`DELETE FROM banks WHERE id = ?`).bind(id).run();
+
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'DELETE_BANK', 'Bank', id, `Removed bank partner: ${bank.legal_name}`);
+        return json({ success: true, message: `Bank ${bank.legal_name} and associated staff removed.` });
       }
 
       if (pathname === '/api/v1/branches' || pathname === '/api/bank/branches') {
