@@ -281,13 +281,22 @@ const UI = {
     el._timer = setTimeout(() => el.classList.remove('show'), duration);
   },
   modal(title, bodyHtml, footerHtml, wide) {
-    document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-body').innerHTML = bodyHtml;
-    document.getElementById('modal-footer').innerHTML = footerHtml || '<button class="btn" onclick="UI.closeModal()">Close</button>';
-    document.getElementById('modal-window').className = 'surge-modal-window' + (wide ? ' wide' : '');
-    document.getElementById('modal-backdrop').classList.add('open');
+    const mb = document.getElementById('modal-backdrop');
+    if (!mb) return;
+    const mt = document.getElementById('modal-title');
+    if (mt) mt.textContent = title;
+    const body = document.getElementById('modal-body');
+    if (body) body.innerHTML = bodyHtml;
+    const foot = document.getElementById('modal-footer');
+    if (foot) foot.innerHTML = footerHtml || '<button class="btn" onclick="UI.closeModal()">Close</button>';
+    const win = document.getElementById('modal-window');
+    if (win) win.className = 'surge-modal-window' + (wide ? ' wide' : '');
+    mb.classList.add('open');
   },
-  closeModal() { document.getElementById('modal-backdrop').classList.remove('open'); },
+  closeModal() {
+    const mb = document.getElementById('modal-backdrop');
+    if (mb) mb.classList.remove('open');
+  },
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
   fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
   fmtDateShort(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
@@ -341,6 +350,7 @@ const BankPortal = {
   render() {
     this.renderDoctabs();
     const el = document.getElementById('bank-work');
+    if (!el) return;
     if (this.subPage) { el.innerHTML = this.renderSubPage(); return; }
     switch (this.currentView) {
       case 'dashboard': el.innerHTML = this.renderDashboard(); break;
@@ -356,6 +366,7 @@ const BankPortal = {
 
   renderDoctabs() {
     const el = document.getElementById('bank-doctabs');
+    if (!el) return;
     if (this.selectedAssetId) {
       const a = Store.getAsset(this.selectedAssetId);
       el.innerHTML = `
@@ -1250,6 +1261,7 @@ const AdminPortal = {
   render() {
     this.renderDoctabs();
     const el = document.getElementById('admin-work');
+    if (!el) return;
     if (this.subPage) { el.innerHTML = this.renderSubPage(); return; }
     switch (this.currentView) {
       case 'dashboard': el.innerHTML = this.renderDashboard(); break;
@@ -1265,6 +1277,7 @@ const AdminPortal = {
 
   renderDoctabs() {
     const el = document.getElementById('admin-doctabs');
+    if (!el) return;
     if (this.selectedAssetId) {
       const a = Store.getAsset(this.selectedAssetId);
       el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('assets')">Assets</div><div class="dtab active">${a.ref}<span class="x" onclick="event.stopPropagation();AdminPortal.closeAsset()">×</span></div>`;
@@ -1733,6 +1746,7 @@ const PublicMarket = {
 
   render() {
     const el = document.getElementById('public-work');
+    if (!el) return;
     switch (this.currentPage) {
       case 'home': el.innerHTML = this.selectedAssetId ? this.renderDetail() : this.renderHome(); break;
       case 'how': el.innerHTML = this.renderHow(); break;
@@ -1858,7 +1872,8 @@ document.querySelectorAll('.switcher button[data-app]').forEach(btn => {
     document.querySelectorAll('.switcher button[data-app]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.querySelectorAll('.app').forEach(a => a.classList.remove('active'));
-    document.getElementById('app-' + btn.dataset.app).classList.add('active');
+    const target = document.getElementById('app-' + btn.dataset.app);
+    if (target) target.classList.add('active');
     if (btn.dataset.app === 'public') PublicMarket.render();
     if (btn.dataset.app === 'bank') BankPortal.render();
     if (btn.dataset.app === 'admin') AdminPortal.render();
@@ -1866,9 +1881,18 @@ document.querySelectorAll('.switcher button[data-app]').forEach(btn => {
 });
 
 Store.init();
-BankPortal.init();
-AdminPortal.init();
-PublicMarket.init();
+
+const bodyPortal = document.body ? document.body.dataset.portal : null;
+if (document.getElementById('bank-work') || bodyPortal === 'bank') {
+  BankPortal.init();
+}
+if (document.getElementById('admin-work') || bodyPortal === 'admin') {
+  AdminPortal.init();
+}
+if (document.getElementById('public-work') || bodyPortal === 'public' || (!document.getElementById('bank-work') && !document.getElementById('admin-work'))) {
+  PublicMarket.init();
+}
+
 UI.clock('clock-bank');
 UI.clock('clock-admin');
 
