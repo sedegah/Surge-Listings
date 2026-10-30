@@ -57,15 +57,15 @@ const Store = {
   async fetchRemote() {
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
       try {
-        const res = await fetch('/api/public/listings');
+        const res = await fetch('/api/v1/marketplace');
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            console.log('[Surge Platform] Live Cloudflare D1 listings synchronized:', json.data.length);
+            console.log('[Surge Platform] Live Cloudflare D1 marketplace synchronized:', json.data.length);
           }
         }
       } catch (e) {
-        // Fallback to local storage
+        // Local storage resilience fallback
       }
     }
   },
@@ -2019,6 +2019,13 @@ const PublicMarket = {
     });
     Store.addAudit(name, 'VIEWING_REQUEST', 'Viewing', ref, null, 'Requested', `Viewing appointment requested for ${a.ref} on ${date} (${time})`);
     Store.persist();
+    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+      fetch('/api/v1/viewings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetId: id, name, phone, email: document.getElementById('vw-email')?.value?.trim() || '', date, timeSlot: time, notes: document.getElementById('vw-notes')?.value?.trim() || '' })
+      }).catch(() => {});
+    }
     UI.closeModal();
     UI.toast(`Viewing appointment requested. Reference: ${ref}. Surge officer will contact you.`, 'success');
   },
@@ -2093,6 +2100,13 @@ const PublicMarket = {
     });
     Store.addAudit(name, 'OFFER_SUBMISSION', 'Offer', ref, null, 'Under Review', `Formal offer of ${UI.fmtMoney(amount)} submitted by ${name} on ${a.ref}`);
     Store.persist();
+    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+      fetch('/api/v1/offers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetId: id, name, phone, email, amount, ghanaCard, validityDays, paymentMethod: payment })
+      }).catch(() => {});
+    }
     UI.closeModal();
     UI.toast(`Formal offer submitted. Reference: ${ref}. Recovery Bank notified.`, 'success');
   },
