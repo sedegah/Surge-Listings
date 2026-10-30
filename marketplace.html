@@ -9,42 +9,48 @@
 </head>
 <body data-portal="public">
 
+<nav class="switcher" aria-label="Portal Navigation">
+  <span class="brandmark">SURGE <span>&#9632;</span></span>
+  <a href="/bank">Bank Portal</a>
+  <a href="/admin">Surge Admin</a>
+  <a href="/marketplace" class="active">Public Marketplace</a>
+  <span class="note"><span class="env-dot"></span>Public Marketplace · Live Asset Listings</span>
+</nav>
+
 <div class="viewport">
-
-<!-- ==================================================================
-     APP 3 — PUBLIC MARKETPLACE
-     ================================================================== -->
-<section class="app active" id="app-public">
-<div class="window" style="background:var(--win-bg)">
-<div class="pub">
-
-  <header class="pub-header">
-    <div class="pub-logo"><span class="sq"></span>Surge Solutions <small>Marketplace</small></div>
-    <nav class="pub-nav">
-      <a href="#" class="active">Buy Assets</a>
-      <a href="#">How It Works</a>
-      <a href="#">KYC &amp; Verification</a>
-      <a href="#">FAQ</a>
-      <a href="#">Contact</a>
-    </nav>
-    <span class="spacer"></span>
-    <div class="contact">
-      <b>Listed and managed by Surge Solutions</b><br>
-      Buyer enquiries only · No direct seller contact
+  <!-- PUBLIC MARKETPLACE -->
+  <section class="app active" id="app-public">
+    <div class="window" style="background:var(--win-bg)">
+      <div class="pub">
+        <header class="pub-header">
+          <div class="pub-logo" onclick="PublicMarket.goHome()"><span class="sq"></span>Surge Solutions <small>Marketplace</small></div>
+          <nav class="pub-nav" id="pub-nav">
+            <a data-page="home" class="active" onclick="PublicMarket.goHome()">Buy Assets</a>
+            <a data-page="how" onclick="PublicMarket.goHow()">How It Works</a>
+            <a data-page="kyc" onclick="PublicMarket.goKyc()">KYC &amp; Verification</a>
+            <a data-page="faq" onclick="PublicMarket.goFaq()">FAQ</a>
+            <a data-page="contact" onclick="PublicMarket.goContact()">Contact</a>
+          </nav>
+          <span class="spacer"></span>
+          <div class="contact"><b>Listed and managed by Surge Solutions</b><br>Buyer enquiries only · No direct seller contact</div>
+        </header>
+        <div class="pub-body" id="public-work"></div>
+      </div>
     </div>
-  </header>
+  </section>
+</div>
 
-  <div class="pub-body">
-    <div style="padding:40px;text-align:center;color:var(--text-2)">
-      <p>Loading Marketplace…</p>
+<div class="surge-toast" id="toast"></div>
+<div class="surge-modal-backdrop" id="modal-backdrop">
+  <div class="surge-modal-window" id="modal-window">
+    <div class="surge-modal-header">
+      <h3 id="modal-title">Dialog</h3>
+      <button class="surge-modal-close" onclick="UI.closeModal()">&times;</button>
     </div>
+    <div class="surge-modal-body" id="modal-body"></div>
+    <div class="surge-modal-footer" id="modal-footer"></div>
   </div>
-
 </div>
-</div>
-</section>
-
-</div><!-- /viewport -->
 
 <script src="/app.js"></script>
 </body>
