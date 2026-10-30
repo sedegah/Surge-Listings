@@ -251,8 +251,20 @@ export default {
         };
 
         if (!user) { await recordFailure('USER_NOT_FOUND'); return err('The username or password is incorrect.', 401); }
-        if (!user.password_hash) { await recordFailure('NO_PASSWORD'); return err('This account has not been activated. Accept your invitation first.', 403); }
-        if (user.password_hash !== password.trim()) { await recordFailure('WRONG_PASSWORD'); return err('The username or password is incorrect.', 401); }
+        let validPassword = false;
+        if (user.password_hash) {
+          validPassword = (user.password_hash === password.trim());
+        } else {
+          // Uninitialized seed accounts can log in with Surge2026! or password, activating their initial password
+          if (password.trim() === 'Surge2026!' || password.trim() === 'password') {
+            validPassword = true;
+            await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(password.trim(), user.id).run();
+          }
+        }
+        if (!validPassword) {
+          await recordFailure('WRONG_PASSWORD');
+          return err('The username or password is incorrect.', 401);
+        }
 
         // Create session
         const token = await generateToken(32);
@@ -856,6 +868,10 @@ export default {
       // Full Lifecycle: Create Draft, Update, Submit, Approve, Publish, Hold
       // =========================================================================
       if (['/api/v1/assets', '/api/bank/assets', '/api/admin/assets'].includes(pathname)) {
+        const session = await resolveSession();
+        const callerBankId = session?.bank_id || request.headers.get('x-bank-id') || url.searchParams.get('bank_id');
+        const callerBranchId = session?.branch_id || request.headers.get('x-branch-id') || url.searchParams.get('branch_id');
+
         if (method === 'GET') {
           const isSurgeAdmin = request.headers.get('x-actor-role') === 'Surge Admin' ||
             url.searchParams.get('scope') === 'all' ||
@@ -870,9 +886,15 @@ export default {
             LEFT JOIN bank_branches br ON a.branch_id = br.id
           `;
           let stmt;
-          if (!isSurgeAdmin) {
-            sql += ` WHERE a.bank_id = ? ORDER BY a.updated_at DESC`;
-            stmt = env.DB.prepare(sql).bind(bankId);
+          if (!isSurgeAdmin && callerBankId) {
+            let whereClause = ` WHERE a.bank_id = ?`;
+            const params = [callerBankId];
+            if (callerBranchId) {
+              whereClause += ` AND a.branch_id = ?`;
+              params.push(callerBranchId);
+            }
+            sql += whereClause + ` ORDER BY a.updated_at DESC`;
+            stmt = env.DB.prepare(sql).bind(...params);
           } else {
             sql += ` ORDER BY a.updated_at DESC`;
             stmt = env.DB.prepare(sql);
@@ -901,8 +923,8 @@ export default {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 0, 0, ?, datetime('now'), datetime('now'))
           `).bind(
             id,
-            body.bankId || bankId,
-            body.branchId || null,
+            body.bankId || callerBankId || 'bank-mtb',
+            body.branchId || callerBranchId || null,
             publicRef,
             body.internalBankRef || ('BNK-REF-' + Math.floor(10000 + Math.random() * 90000)),
             cat,
@@ -1359,8 +1381,12 @@ export default {
         const { name, branch_code, region, district, town, address, phone, email, manager_name } = body;
         if (!name || !region) return err('Branch name and region are required.', 400);
 
+        const session = await resolveSession();
+        const bankId = session?.bank_id || request.headers.get('x-bank-id') || body.bank_id;
+        if (!bankId) return err('Bank ID is required. Sign in with a bank account or pass X-Bank-ID.', 400);
+
         const bank = await env.DB.prepare(`SELECT id, short_code FROM banks WHERE id = ?`).bind(bankId).first();
-        if (!bank) return err('Bank not found. Ensure X-Bank-ID header is set.', 404);
+        if (!bank) return err('Bank not found.', 404);
 
         const branchId = 'br-' + bank.short_code.toLowerCase() + '-' + Date.now().toString(36);
         const code = branch_code || name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
@@ -1379,8 +1405,15 @@ export default {
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/assets$/) && method === 'GET') {
         const parts = pathname.split('/');
         const branchId = parts[4];
+        const session = await resolveSession();
+        const bankId = session?.bank_id || request.headers.get('x-bank-id');
 
-        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        let branch;
+        if (bankId) {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        } else {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
+        }
         if (!branch) return err('Branch not found or does not belong to your bank.', 404);
 
         const assets = await env.DB.prepare(`
@@ -1399,8 +1432,15 @@ export default {
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/staff$/) && method === 'GET') {
         const parts = pathname.split('/');
         const branchId = parts[4];
+        const session = await resolveSession();
+        const bankId = session?.bank_id || request.headers.get('x-bank-id');
 
-        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        let branch;
+        if (bankId) {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        } else {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
+        }
         if (!branch) return err('Branch not found or does not belong to your bank.', 404);
 
         const staff = await env.DB.prepare(`
@@ -1533,10 +1573,14 @@ export default {
       // 10. BRANCH-SCOPED STATISTICS (Dashboard per branch)
       // =========================================================================
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/dashboard$/) && method === 'GET') {
-        const parts = pathname.split('/');
-        const branchId = parts[4];
-
-        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, bankId).first();
+        const session = await resolveSession();
+        const callerBankId = session?.bank_id || request.headers.get('x-bank-id') || url.searchParams.get('bank_id');
+        let branch;
+        if (callerBankId) {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, callerBankId).first();
+        } else {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
+        }
         if (!branch) return err('Branch not found or access denied.', 404);
 
         const stats = await env.DB.prepare(`

@@ -5,24 +5,198 @@
  */
 
 // ============================================================
+// GHANA GEOGRAPHIC DATA — 16 Administrative Regions & 276 Constituencies
+// ============================================================
+const GhanaGeo = {
+  REGIONS: {
+    'Ahafo': ['Asunafo North','Asunafo South','Asutifi North','Asutifi South','Tano North','Tano South'],
+    'Ashanti': ['Adansi-Asokwa','Fomena','New Edubiase','Afigya Kwabre North','Afigya Kwabre South','Ahafo Ano North','Ahafo Ano South East','Ahafo Ano South West','Akrofuom','Odotobri','Manso Nkwanta','Manso Edubia','Asante Akim Central','Asante Akim North','Asante Akim South','Asawase','Asokwa','Atwima-Kwanwoma','Atwima Mponua','Atwima-Nwabiagya South','Atwima-Nwabiagya North','Bekwai','Bosome-Freho','Bosomtwe','Ejisu','Ejura-Sekyedumase','Juaben','Bantama','Manhyia North','Manhyia South','Nhyiaeso','Subin','Kwabre East','Kwadaso','Mampong','Obuasi East','Obuasi West','Offinso South','Offinso North','Oforikrom','Old Tafo','Sekyere Afram Plains','Nsuta-Kwamang-Beposo','Afigya Sekyere East','Kumawu','Effiduase-Asokore','Suame'],
+    'Bono': ['Banda','Berekum East','Berekum West','Dormaa Central','Dormaa East','Dormaa West','Jaman North','Jaman South','Sunyani East','Sunyani West','Tain','Wenchi'],
+    'Bono East': ['Atebubu-Amantin','Kintampo North','Kintampo South','Nkoranza North','Nkoranza South','Pru East','Pru West','Sene East','Sene West','Techiman South','Techiman North'],
+    'Central': ['Abura-Asebu-Kwamankese','Agona East','Agona West','Ajumako-Enyan-Essiam','Asikuma-Odoben-Brakwa','Assin Central','Assin North','Assin South','Awutu-Senya East','Awutu-Senya West','Cape Coast North','Cape Coast South','Effutu','Ekumfi','Gomoa East','Gomoa Central','Gomoa West','Komenda-Edina-Eguafo-Abirem','Mfantseman','Twifo-Atii Morkwaa','Hemang Lower Denkyira','Upper Denkyira East','Upper Denkyira West'],
+    'Eastern': ['Abuakwa North','Abuakwa South','Achiase','Akropong','Akuapem South','Ofoase-Ayirebi','Asene Akroso Manso','Asuogyaman','Atiwa East','Atiwa West','Ayensuano','Akim Oda','Abirem','Akim Swedru','Akwatia','Fanteakwa North','Fanteakwa South','Kade','Afram Plains North','Afram Plains South','Abetifi','Mpraeso','Nkawkaw','Lower Manya Krobo','New Juaben North','New Juaben South','Nsawam Adoagyiri','Okere','Suhum','Upper Manya Krobo','Upper West Akim','Lower West Akim','Yilo Krobo'],
+    'Greater Accra': ['Ablekuma Central','Ablekuma North','Ablekuma West','Ablekuma South','Odododiodioo','Okaikwei Central','Okaikwei South','Ada','Sege','Adenta','Ashaiman','Ayawaso Central','Ayawaso East','Ayawaso North','Ayawaso West Wuogon','Anyaa-Sowutuom','Dome-Kwabenya','Trobu','Bortianor-Ngleshie-Amanfro','Amasaman','Korle Klottey','Kpone-Katamanso','Krowor','Dade Kotopon','Abokobi-Madina','Ledzokuku','Ningo-Prampram','Okaikwei North','Shai-Osudoku','Tema East','Tema Central','Tema West','Weija-Gbawe','Domeabra-Obom'],
+    'North East': ['Bunkpurugu','Chereponi','Nalerigu','Yagaba-Kubori','Walewale','Yunyoo'],
+    'Northern': ['Gushegu','Karaga','Kpandai','Kumbungu','Mion','Nanton','Bimbilla','Wulensi','Saboba','Sagnarigu','Savelugu','Tamale Central','Tamale North','Tamale South','Tatale-Sanguli','Tolon','Yendi','Zabzugu'],
+    'Oti': ['Biakoye','Guan','Buem','Akan','Krachi East','Krachi Nchumuru','Krachi West','Nkwanta North','Nkwanta South'],
+    'Savannah': ['Bole','Yapei-Kusawgu','Salaga South','Salaga North','Daboya-Mankarigu','Sawla-Tuna-Kalba','Damongo'],
+    'Upper East': ['Bawku Central','Zebilla','Binduri','Bolgatanga East','Bolgatanga Central','Bongo','Builsa North','Builsa South','Garu','Navrongo Central','Chiana-Paga','Nabdam','Pusiga','Talensi','Tempane'],
+    'Upper West': ['Daffiama-Bussie-Issa','Jirapa','Lambussie','Lawra','Nadowli-Kaleo','Nandom','Sissala East','Sissala West','Wa East','Wa Central','Wa West'],
+    'Volta': ['Adaklu','Afadjato South','Agotime-Ziope','Akatsi North','Akatsi South','Anlo','Central Tongu','Ho Central','Ho West','Hohoe','Keta','Ketu North','Ketu South','Kpando','North Dayi','North Tongu','South Dayi','South Tongu'],
+    'Western': ['Ahanta West','Amenfi Central','Amenfi West','Amenfi East','Effia','Kwesimintsim','Ellembelle','Jomoro','Mpohor','Evalue Gwira','Prestea-Huni Valley','Essikado-Ketan','Sekondi','Takoradi','Shama','Tarkwa-Nsuaem','Wassa East'],
+    'Western North': ['Aowin','Bia East','Bia West','Bibiani-Anhwiaso-Bekwai','Bodi','Juaboso','Sefwi-Akontombra','Sefwi-Wiawso','Suaman']
+  },
+  getRegionList() { return Object.keys(this.REGIONS); },
+  getDistricts(region) { return this.REGIONS[region] || []; },
+  renderRegionOptions(selectedRegion) {
+    return this.getRegionList().map(r => `<option value="${r}" ${r === selectedRegion ? 'selected' : ''}>${r}</option>`).join('');
+  },
+  renderDistrictOptions(region, selectedDistrict) {
+    const list = this.getDistricts(region);
+    return `<option value="">Select District / Constituency...</option>` +
+      list.map(d => `<option value="${d}" ${d === selectedDistrict ? 'selected' : ''}>${d}</option>`).join('');
+  }
+};
+
+// ============================================================
+// CENTRALIZED AUTHENTICATION & SEPARATE BANK AUTHORIZATION
+// ============================================================
+const Auth = {
+  token: null,
+  user: null,
+  selectedBranchId: null,
+
+  getToken() {
+    if (this.token) return this.token;
+    try {
+      this.token = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
+    } catch(e) {}
+    return this.token;
+  },
+
+  getUser() {
+    if (this.user) return this.user;
+    try {
+      const u = sessionStorage.getItem('surge_user') || localStorage.getItem('surge_user');
+      if (u) this.user = JSON.parse(u);
+    } catch(e) {}
+    return this.user;
+  },
+
+  setSession(token, user, remember) {
+    this.token = token;
+    this.user = user;
+    this.selectedBranchId = user?.branchId || user?.branch_id || null;
+    try {
+      sessionStorage.setItem('surge_token', token);
+      sessionStorage.setItem('surge_user', JSON.stringify(user));
+      if (remember) {
+        localStorage.setItem('surge_token', token);
+        localStorage.setItem('surge_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('surge_token');
+        localStorage.removeItem('surge_user');
+      }
+    } catch(e) {}
+  },
+
+  logout() {
+    const token = this.getToken();
+    if (token) {
+      fetch(Store.API_BASE + '/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      }).catch(() => {});
+    }
+    this.token = null;
+    this.user = null;
+    this.selectedBranchId = null;
+    try {
+      sessionStorage.removeItem('surge_token');
+      sessionStorage.removeItem('surge_user');
+      localStorage.removeItem('surge_token');
+      localStorage.removeItem('surge_user');
+    } catch(e) {}
+    window.location.href = 'login.html';
+  },
+
+  async checkAuth(requiredScope = 'bank') {
+    const token = this.getToken();
+    if (!token) {
+      const curPage = window.location.pathname.split('/').pop() || (requiredScope === 'surge' ? 'admin.html' : 'bank.html');
+      window.location.href = 'login.html?next=' + encodeURIComponent(curPage);
+      return false;
+    }
+    try {
+      const res = await fetch(Store.API_BASE + '/api/auth/me', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!res.ok) {
+        this.logout();
+        return false;
+      }
+      const data = await res.json();
+      if (!data.authenticated || !data.user) {
+        this.logout();
+        return false;
+      }
+      this.user = data.user;
+      sessionStorage.setItem('surge_user', JSON.stringify(data.user));
+      if (!this.selectedBranchId) {
+        this.selectedBranchId = data.user.branchId || data.user.branch_id || null;
+      }
+
+      // Authorization check
+      if (requiredScope === 'bank') {
+        if (data.user.scope === 'public') {
+          window.location.href = 'login.html?next=bank.html';
+          return false;
+        }
+      } else if (requiredScope === 'surge') {
+        if (data.user.scope !== 'surge') {
+          alert('Access denied. Administrator privileges required.');
+          window.location.href = 'login.html?next=admin.html';
+          return false;
+        }
+      }
+      this.updateUIProfile();
+      return true;
+    } catch(e) {
+      const cached = this.getUser();
+      if (cached) {
+        this.updateUIProfile();
+        return true;
+      }
+      return false;
+    }
+  },
+
+  updateUIProfile() {
+    const u = this.getUser();
+    if (!u) return;
+    const name = u.fullName || u.full_name || u.username || 'Officer';
+    const role = u.roleCode || u.role_code || 'Recovery Officer';
+    const bank = u.bankName || u.bank_name || 'Institutional Bank Portal';
+
+    document.querySelectorAll('.statusbar').forEach(sb => {
+      const cells = sb.querySelectorAll('.cell');
+      cells.forEach(c => {
+        if (c.innerText.includes('User:')) c.innerHTML = `User: <b>${name}</b>`;
+        if (c.innerText.includes('Role:')) c.innerHTML = `Role: <b>${role}</b>`;
+        if (c.innerText.includes('Org:')) c.innerHTML = `Org: <b>${bank}</b>`;
+      });
+    });
+  }
+};
+
+// ============================================================
 // SHARED DATA STORE
 // ============================================================
 const Store = {
-  assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [],
+  assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [], branches: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
   API_BASE: (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.protocol === 'file:'))
     ? 'https://surge-solutions-api.sedegahkimathi.workers.dev'
     : '',
 
+  getAuthHeaders() {
+    const token = Auth.getToken();
+    const h = { 'Content-Type': 'application/json' };
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    const user = Auth.getUser();
+    if (user?.bankId || user?.bank_id) h['x-bank-id'] = user.bankId || user.bank_id;
+    if (user?.roleCode || user?.role_code) h['x-actor-role'] = user.roleCode || user.role_code;
+    if (user?.fullName || user?.full_name || user?.username) h['x-actor-name'] = user.fullName || user.full_name || user.username;
+    return h;
+  },
+
   init() {
     try {
       if (typeof localStorage !== 'undefined') {
         (this.LEGACY_KEYS || []).forEach(k => localStorage.removeItem(k));
-        // Clear stale local mock data
         localStorage.removeItem(this.STORAGE_KEY);
       }
     } catch (e) {}
-    // Start with empty state — API is the single source of truth
     this.assets = [];
     this.auditLog = [];
     this.leads = [];
@@ -31,6 +205,7 @@ const Store = {
     this.invoices = [];
     this.banks = [];
     this.users = [];
+    this.branches = [];
     this.fetchRemote();
   },
 
@@ -44,15 +219,17 @@ const Store = {
 
   async fetchRemote() {
     try {
+      const headers = this.getAuthHeaders();
+      const scopeParam = (Auth.getUser()?.scope === 'surge') ? '?scope=all' : '';
       const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes] = await Promise.allSettled([
-        fetch(this.API_BASE + '/api/v1/assets?scope=all'),
-        fetch(this.API_BASE + '/api/v1/leads'),
-        fetch(this.API_BASE + '/api/v1/offers'),
-        fetch(this.API_BASE + '/api/v1/viewings'),
-        fetch(this.API_BASE + '/api/v1/invoices'),
-        fetch(this.API_BASE + '/api/v1/audit-logs'),
-        fetch(this.API_BASE + '/api/v1/banks'),
-        fetch(this.API_BASE + '/api/v1/users'),
+        fetch(this.API_BASE + '/api/v1/assets' + scopeParam, { headers }),
+        fetch(this.API_BASE + '/api/v1/leads', { headers }),
+        fetch(this.API_BASE + '/api/v1/offers', { headers }),
+        fetch(this.API_BASE + '/api/v1/viewings', { headers }),
+        fetch(this.API_BASE + '/api/v1/invoices', { headers }),
+        fetch(this.API_BASE + '/api/v1/audit-logs', { headers }),
+        fetch(this.API_BASE + '/api/v1/banks', { headers }),
+        fetch(this.API_BASE + '/api/v1/users', { headers }),
       ]);
 
       // Assets
@@ -354,7 +531,20 @@ const Store = {
   getAsset(id) { return this.assets.find(a => a.id === id); },
   getAssetByRef(ref) { return this.assets.find(a => a.ref === ref); },
   getPublicAssets() { return this.assets.filter(a => a.publicationStatus === 'Published' && a.status === 'Live'); },
-  getBankAssets() { return this.assets.filter(a => a.bankId === 'bank1'); },
+  getBankAssets() {
+    const user = Auth.getUser();
+    const bankId = user?.bankId || user?.bank_id;
+    const branchId = Auth.selectedBranchId;
+
+    let list = this.assets;
+    if (bankId) {
+      list = list.filter(a => a.bankId === bankId);
+    }
+    if (branchId && branchId !== 'all') {
+      list = list.filter(a => a.branchId === branchId);
+    }
+    return list;
+  },
 
   updateAsset(id, changes, actor, detail) {
     const asset = this.getAsset(id);

@@ -211,10 +211,13 @@ input[aria-invalid=true] { border-color: var(--danger) }
   (function checkSession() {
     var token = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
     if (!token) return;
+    var params = new URLSearchParams(location.search);
+    var next = params.get('next');
     fetch(ME_URL, { headers: { 'Authorization': 'Bearer ' + token } })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.authenticated) {
+          if (next) { location.href = next; return; }
           var scope = data.user && data.user.scope;
           location.href = (scope === 'surge') ? ADMIN_PAGE : NEXT_PAGE;
         }
@@ -306,8 +309,14 @@ input[aria-invalid=true] { border-color: var(--danger) }
             if (res.json.user) sessionStorage.setItem('surge_user', JSON.stringify(res.json.user));
           } catch (e) {}
           btn.textContent = 'Signed in';
-          var scope = res.json.user && res.json.user.scope;
-          location.href = (scope === 'surge') ? ADMIN_PAGE : NEXT_PAGE;
+          var params = new URLSearchParams(location.search);
+          var next = params.get('next');
+          if (next) {
+            location.href = next;
+          } else {
+            var scope = res.json.user && res.json.user.scope;
+            location.href = (scope === 'surge') ? ADMIN_PAGE : NEXT_PAGE;
+          }
           return;
         }
         tries++; btn.textContent = 'Sign in'; btn.disabled = false; pass.value = '';
