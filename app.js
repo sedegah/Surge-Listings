@@ -9,9 +9,15 @@
 // ============================================================
 const Store = {
   assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [],
-  STORAGE_KEY: 'surge_platform_v2_store',
+  STORAGE_KEY: 'surge_disposition_clean_v1',
+  LEGACY_KEYS: ['surge_platform_v2_store', 'surge_platform_store'],
 
   init() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        (this.LEGACY_KEYS || []).forEach(k => localStorage.removeItem(k));
+      }
+    } catch (e) {}
     this.load();
     this.fetchRemote();
   },
@@ -37,18 +43,16 @@ const Store = {
       const raw = localStorage.getItem(this.STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.assets && parsed.assets.length > 0) {
-          this.assets = parsed.assets;
-          this.auditLog = parsed.auditLog || [];
-          this.leads = parsed.leads || [];
-          this.offers = parsed.offers || [];
-          this.viewings = parsed.viewings || [];
-          this.invoices = parsed.invoices || [];
-          return;
-        }
+        this.assets = parsed.assets || [];
+        this.auditLog = parsed.auditLog || [];
+        this.leads = parsed.leads || [];
+        this.offers = parsed.offers || [];
+        this.viewings = parsed.viewings || [];
+        this.invoices = parsed.invoices || [];
+        return;
       }
     } catch (e) {
-      console.warn('LocalStorage load failed, using seed:', e);
+      console.warn('LocalStorage load failed:', e);
     }
     this.seed();
     this.persist();
@@ -57,11 +61,55 @@ const Store = {
   async fetchRemote() {
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
       try {
-        const res = await fetch('/api/v1/marketplace');
+        const res = await fetch('/api/v1/assets?scope=all');
         if (res.ok) {
           const json = await res.json();
-          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            console.log('[Surge Platform] Live Cloudflare D1 marketplace synchronized:', json.data.length);
+          if (json.success && Array.isArray(json.data)) {
+            if (json.data.length > 0) {
+              this.assets = json.data.map(d => ({
+                id: d.id,
+                ref: d.public_ref,
+                bankId: d.bank_id,
+                bankName: d.bank_name || 'Meridian Trust Bank',
+                category: d.category_code,
+                assetType: d.asset_type,
+                region: d.region,
+                district: d.district || '',
+                town: d.town || '',
+                publicLocation: d.public_location,
+                exactAddress: d.exact_address,
+                description: d.description,
+                reserve: d.reserve_price,
+                minOffer: d.minimum_offer,
+                showReserve: !!d.show_reserve_publicly,
+                status: d.status,
+                publicationStatus: d.status === 'Live' ? 'Published' : 'Unpublished',
+                legalStatus: 'Cleared',
+                valuationAmount: d.reserve_price,
+                valuationDate: d.created_at,
+                valuationExpiry: null,
+                landSearchValid: true,
+                injunctionActive: false,
+                legalHold: !!d.legal_hold_active,
+                exteriorImage: true,
+                titleVerified: true,
+                titleDetails: true,
+                enforcementBasis: 'Court Judgment',
+                caseRef: d.internal_bank_ref,
+                images: d.image_count || 0,
+                documents: d.document_count || 0,
+                createdAt: d.created_at,
+                updatedAt: d.updated_at,
+                createdBy: d.created_by || 'Officer',
+                activity: [{ when: d.created_at, who: d.created_by || 'Officer', what: 'Asset created' }]
+              }));
+            } else {
+              this.assets = [];
+            }
+            this.persist();
+            if (typeof BankPortal !== 'undefined' && BankPortal.render) BankPortal.render();
+            if (typeof AdminPortal !== 'undefined' && AdminPortal.render) AdminPortal.render();
+            if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
           }
         }
       } catch (e) {
@@ -546,7 +594,7 @@ const BankPortal = {
             <th>Reference</th><th>Category</th><th>Location</th><th class="num">Reserve (GHS)</th><th>Status</th><th>Publication</th><th>Updated</th>
           </tr></thead>
           <tbody>
-            ${assets.map(a => `
+            ${assets.length ? assets.map(a => `
               <tr onclick="BankPortal.openAsset('${a.id}')">
                 <td class="ref">${a.ref}</td>
                 <td>${a.category}<span class="sub">${a.assetType}</span></td>
@@ -556,7 +604,7 @@ const BankPortal = {
                 <td>${UI.badge(a.publicationStatus)}</td>
                 <td>${UI.fmtDateShort(a.updatedAt)}</td>
               </tr>
-            `).join('')}
+            `).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:30px">No assets registered yet. Click "+ New Asset" to create your first draft.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -621,6 +669,7 @@ const BankPortal = {
         <div class="form-actions" style="margin-top:14px;padding-top:14px;border-top:1px solid #E0E0E0">
           ${canEdit ? `<button class="btn primary" onclick="BankPortal.submitForReview()">Submit for Review</button>` : ''}
           ${a.status === 'Changes Required' ? `<button class="btn primary" onclick="BankPortal.resubmitAsset()">Resubmit</button>` : ''}
+          ${a.status === 'Draft' ? `<button class="btn danger" onclick="BankPortal.deleteAsset('${a.id}')">Delete Draft</button>` : ''}
           <button class="btn" onclick="BankPortal.closeAsset()">Close</button>
         </div>
       </div>
@@ -1255,7 +1304,7 @@ const BankPortal = {
         <table class="grid">
           <thead><tr><th>Reference</th><th>Enforcement Basis</th><th>Instruments</th><th>Legal Status</th><th>Action</th></tr></thead>
           <tbody>
-            ${assets.map(a => `
+            ${assets.length ? assets.map(a => `
               <tr onclick="BankPortal.openAsset('${a.id}')">
                 <td class="ref">${a.ref}</td>
                 <td>${a.enforcementBasis || '<span style="color:var(--text-2)">Not set</span>'}</td>
@@ -1263,7 +1312,7 @@ const BankPortal = {
                 <td>${UI.badge(a.legalStatus)}</td>
                 <td><button class="btn small" onclick="event.stopPropagation();BankPortal.openAsset('${a.id}');BankPortal.openSubPage('edit-legal')">Edit Legal</button></td>
               </tr>
-            `).join('')}
+            `).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:30px">No assets registered yet. Click "+ New Asset" to create your first draft.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1310,8 +1359,15 @@ const BankPortal = {
   newAsset() {
     const id = 'a' + Date.now();
     const ref = 'SS-RE-2026-' + String(Store.assets.length + 241).padStart(5, '0');
+    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+      fetch('/api/v1/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah', 'x-actor-role': 'Recovery Officer' },
+        body: JSON.stringify({ bankId: 'bank-mtb', categoryCode: 'House', assetType: 'Property', reservePrice: 0 })
+      }).catch(() => {});
+    }
     Store.assets.unshift({
-      id, ref, bankId: 'bank1', bankName: 'Meridian Trust Bank',
+      id, ref, bankId: 'bank-mtb', bankName: 'Meridian Trust Bank',
       category: 'House', assetType: '', region: 'Greater Accra', district: '',
       town: '', publicLocation: '', exactAddress: '',
       description: '', reserve: 0, minOffer: 0, showReserve: false,
@@ -1330,6 +1386,29 @@ const BankPortal = {
     Store.addAudit('J. Mensah', 'CREATE', 'Asset', ref, null, 'Draft', 'Asset record created');
     UI.toast('Draft asset created: ' + ref, 'success');
     this.openAsset(id);
+  },
+
+  deleteAsset(id) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    if (a.status !== 'Draft') {
+      return UI.toast('Only draft assets can be deleted', 'error');
+    }
+    if (!confirm(`Are you sure you want to permanently delete draft asset ${a.ref}?`)) {
+      return;
+    }
+    Store.assets = Store.assets.filter(x => x.id !== id);
+    Store.addAudit('J. Mensah', 'DELETE', 'Asset', a.ref, 'Draft', 'Deleted', `Draft asset ${a.ref} deleted`);
+    Store.persist();
+    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+      fetch(`/api/v1/assets/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah', 'x-actor-role': 'Recovery Officer' }
+      }).catch(() => {});
+    }
+    this.closeAsset();
+    this.render();
+    UI.toast(`Draft asset ${a.ref} deleted successfully.`, 'success');
   },
 
   saveCurrent() { if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn'); UI.toast('Asset saved', 'success'); },
@@ -1434,7 +1513,7 @@ const AdminPortal = {
   },
 
   renderAssetList() {
-    return `<div class="page-head"><h1>All Assets</h1><span class="crumb">${Store.assets.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Category</th><th>Status</th><th>Legal</th><th>Readiness</th></tr></thead><tbody>${Store.assets.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${a.category}</td><td>${UI.badge(a.status)}</td><td>${UI.badge(a.legalStatus)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<div class="page-head"><h1>All Assets</h1><span class="crumb">${Store.assets.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Category</th><th>Status</th><th>Legal</th><th>Readiness</th></tr></thead><tbody>${Store.assets.length ? Store.assets.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${a.category}</td><td>${UI.badge(a.status)}</td><td>${UI.badge(a.legalStatus)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td></tr>`; }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-2);padding:30px">No assets registered in the platform yet.</td></tr>'}</tbody></table></div>`;
   },
 
   openAsset(id) { this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },

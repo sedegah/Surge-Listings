@@ -353,6 +353,24 @@ export default {
         });
       }
 
+      // Delete Draft Asset
+      if (pathname.match(/^\/api\/v1\/assets\/[a-zA-Z0-9_-]+$/) && method === 'DELETE') {
+        const id = pathname.split('/').pop();
+        const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
+        if (!asset) return err('Asset not found', 404);
+        if (asset.status !== 'Draft') return err('Only draft assets can be deleted', 400);
+
+        await env.DB.prepare(`DELETE FROM asset_images WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM documents WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM title_records WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM valuations WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM enforcement_cases WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM assets WHERE id = ?`).bind(asset.id).run();
+
+        await auditLog(actorName, actorRole, 'Bank', 'DELETE', 'Asset', asset.public_ref, `Draft asset ${asset.public_ref} deleted`);
+        return json({ success: true, message: `Draft asset ${asset.public_ref} deleted successfully.` });
+      }
+
       // Asset Workflow Actions: submit, approve, reject, publish, hold, release-hold
       if (pathname.includes('/submit') && method === 'POST') {
         const id = pathname.replace('/api/v1/assets/', '').replace('/submit', '');
