@@ -163,14 +163,11 @@ const Auth = {
       }
       this.updateUIProfile();
       console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
+      document.body.style.visibility = 'visible';
       return true;
     } catch(e) {
-      const cached = this.getUser();
-      if (cached) {
-        this.updateUIProfile();
-        return true;
-      }
       console.error('[Auth Guard] Auth check failed with network error:', e);
+      this.logout();
       return false;
     }
   },
