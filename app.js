@@ -2995,6 +2995,26 @@ const BankPortal = {
       UI.toast(err.message, 'error');
     }
   },
+
+  async rescindOffer(offerId) {
+    const offer = Store.offers.find(o => o.id === offerId);
+    if (!offer) return;
+    if (!confirm(`Are you sure you want to rescind acceptance of offer ${offer.ref}? The asset listing will be restored from Sold back to Live on the marketplace.`)) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/rescind`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ reason: 'Bank rescinded accepted offer' })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to rescind offer');
+      UI.toast(json.message || `Offer acceptance rescinded. Asset listing restored to Live.`, 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
 };
 
 // ============================================================

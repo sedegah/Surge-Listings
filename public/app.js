@@ -517,18 +517,42 @@ const Store = {
       if (offersRes.status === 'fulfilled' && offersRes.value.ok) {
         const json = await offersRes.value.json();
         if (json.success && Array.isArray(json.data)) {
-          this.offers = json.data.map(o => ({
-            id: o.id, ref: o.offer_ref, assetId: o.asset_id, assetRef: o.asset_ref || '',
-            assetTitle: o.asset_title || '',
-            bankName: o.bank_name || '',
-            buyer: o.buyer_name, amount: o.amount, status: o.status,
-            belowReserve: !!o.below_reserve, date: o.created_at,
-            validity: o.validity_date, notes: o.notes || '',
-            surgeVerified: !!o.surge_verified,
-            surgeVerifiedBy: o.surge_verified_by || '',
-            surgeVerifiedAt: o.surge_verified_at || null,
-            rejectionReason: o.rejection_reason || ''
-          }));
+          this.offers = json.data.map(o => {
+            let ghanaCard = '';
+            let phone = '';
+            let email = '';
+            const notes = o.notes || '';
+            const gcMatch = notes.match(/Ghana Card:\s*([^\s·]+)/i);
+            if (gcMatch) ghanaCard = gcMatch[1];
+            const phoneMatch = notes.match(/Contact:\s*([^\s(]+)/i);
+            if (phoneMatch) phone = phoneMatch[1];
+            const emailMatch = notes.match(/\(([^)]+@[^)]+)\)/i);
+            if (emailMatch) email = emailMatch[1];
+
+            return {
+              id: o.id,
+              ref: o.offer_ref,
+              assetId: o.asset_id,
+              assetRef: o.asset_ref || '',
+              assetTitle: o.asset_title || '',
+              bankName: o.bank_name || '',
+              buyer: o.buyer_name,
+              amount: o.amount,
+              status: o.status,
+              belowReserve: !!o.below_reserve,
+              date: o.created_at,
+              validity: o.validity_date,
+              notes: o.notes || '',
+              conditions: o.conditions || 'Cash / Direct Bank Transfer',
+              ghanaCard: ghanaCard || '',
+              phone: phone || '',
+              email: email || '',
+              surgeVerified: !!o.surge_verified,
+              surgeVerifiedBy: o.surge_verified_by || '',
+              surgeVerifiedAt: o.surge_verified_at || null,
+              rejectionReason: o.rejection_reason || ''
+            };
+          });
         }
       }
 
@@ -1187,16 +1211,27 @@ const BankPortal = {
       const a = Store.getAsset(this.selectedAssetId);
       el.innerHTML = `
         <div class="dtab" onclick="BankPortal.nav('assets')">Assets</div>
-        <div class="dtab active">${a.ref}${this.subPage ? ' — ' + this.getSubPageTitle() : ''}<span class="x" onclick="event.stopPropagation();BankPortal.closeAsset()">×</span></div>
+        <div class="dtab active">${a ? a.ref : 'Asset'}${this.subPage ? ' — ' + this.getSubPageTitle() : ''}<span class="x" onclick="event.stopPropagation();BankPortal.closeAsset()">×</span></div>
+      `;
+    } else if (this.subPage === 'offer-detail' && this.selectedOfferId) {
+      const o = Store.offers.find(x => x.id === this.selectedOfferId);
+      el.innerHTML = `
+        <div class="dtab" onclick="BankPortal.nav('offers')">Offers</div>
+        <div class="dtab active">${o ? o.ref : 'Offer'}<span class="x" onclick="event.stopPropagation();BankPortal.closeSubPage()">×</span></div>
       `;
     } else {
-      el.innerHTML = `<div class="dtab active">Assets</div>`;
+      const titleMap = {
+        'dashboard': 'Dashboard', 'assets': 'Assets', 'legal': 'Legal Instruments',
+        'documents': 'Documents', 'offers': 'Offers & Decisions', 'reports': 'Reports',
+        'notifications': 'Notifications'
+      };
+      el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
     }
   },
 
   getSubPageTitle() {
     return { 'edit-basics': 'Edit Basics', 'edit-legal': 'Edit Legal', 'edit-docs': 'Manage Documents',
-      'edit-media': 'Manage Media', 'edit-title': 'Edit Title', 'edit-valuation': 'Edit Valuation' }[this.subPage] || '';
+      'edit-media': 'Listing Photos', 'edit-title': 'Edit Title', 'edit-valuation': 'Edit Valuation', 'offer-detail': 'Offer Decision' }[this.subPage] || '';
   },
 
   renderDashboard() {
@@ -1291,12 +1326,70 @@ const BankPortal = {
     });
   },
 
-  openAsset(id) { this._stagedFile = null; this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },
-  closeAsset() { this._stagedFile = null; this.selectedAssetId = null; this.subPage = null; this.render(); },
-  setTab(t) { this.detailTab = t; this.render(); },
+  openAsset(id) {
+    this._stagedFile = null;
+    this._stagedPhotos = {};
+    this.selectedAssetId = id;
+    this.currentView = 'assets';
+    this.detailTab = 'overview';
+    this.subPage = null;
+    this.render();
+    void this.loadPhotos(id);
+  },
+  closeAsset() {
+    this._stagedFile = null;
+    this._stagedPhotos = {};
+    this.selectedAssetId = null;
+    this.subPage = null;
+    this.render();
+  },
+  setTab(t) {
+    this.detailTab = t;
+    this.render();
+    if (t === 'media' && this.selectedAssetId) {
+      void this.loadPhotos(this.selectedAssetId);
+    }
+  },
 
-  openSubPage(name) { this._stagedFile = null; this.subPage = name; this.render(); },
-  closeSubPage() { this._stagedFile = null; this.subPage = null; this.render(); },
+  openOffer(offerId) {
+    this.selectedOfferId = offerId;
+    this.currentView = 'offers';
+    this.subPage = 'offer-detail';
+    this.render();
+  },
+  openSubPage(name) {
+    this._stagedFile = null;
+    this.subPage = name;
+    this.render();
+    if (name === 'edit-media' && this.selectedAssetId) {
+      void this.loadPhotos(this.selectedAssetId);
+    }
+  },
+  closeSubPage() {
+    this._stagedFile = null;
+    this._stagedPhotos = {};
+    this.selectedOfferId = null;
+    this.subPage = null;
+    this.render();
+  },
+
+  async loadPhotos(assetId) {
+    if (!assetId) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos`, {
+        headers: Store.getAuthHeaders()
+      });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        this._currentPhotos = json.data;
+        if (this.subPage === 'edit-media' || (this.currentView === 'assets' && this.detailTab === 'media')) {
+          this.render();
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load photos:', e);
+    }
+  },
 
   async performAssetAction(action, successMessage, body = {}, assetId = this.selectedAssetId) {
     if (!assetId) {
@@ -1651,13 +1744,26 @@ const BankPortal = {
   },
 
   renderMediaTab(a) {
+    const photos = this._currentPhotos || [];
+    const exterior = photos.find(p => p.caption === 'exterior' || p.is_exterior) || (a.exteriorImage ? { caption: 'exterior' } : null);
+    const interior = photos.find(p => p.caption === 'interior');
+    const street = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
+    const totalCount = photos.length || a.images || 0;
+
     return `
       <div class="group">
-        <div class="caption">Media <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">+ Upload Photo</button></div>
+        <div class="caption">Listing Photographs <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">Manage Photos (3 Required)</button></div>
         <div class="body">
-          <div class="kv-row"><span class="kv-k">Total Photos</span><span class="kv-v">${a.images}</span></div>
-          <div class="kv-row"><span class="kv-k">Exterior Photo</span><span class="kv-v">${a.exteriorImage ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required to publish</span>'}</span></div>
-          ${!a.exteriorImage ? `<div class="banner amber" style="margin-top:12px;margin-bottom:0"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg><div><b>Exterior photo required.</b> At least one exterior photo is mandatory for publication.</div></div>` : ''}
+          <div class="kv-row"><span class="kv-k">Total Photographs</span><span class="kv-v">${totalCount} uploaded</span></div>
+          <div class="kv-row"><span class="kv-k">1. Exterior Front Elevation</span><span class="kv-v">${exterior ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">2. Interior Living Space</span><span class="kv-v">${interior ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">3. Street View &amp; Surroundings</span><span class="kv-v">${street ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
+          ${!exterior || !interior || !street ? `
+            <div class="banner amber" style="margin-top:12px;margin-bottom:0">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg>
+              <div><b>3 Photos Required for Publication.</b> The listing must include exterior front elevation, interior living space, and street surroundings views before it can be published.</div>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1667,6 +1773,11 @@ const BankPortal = {
   // SUB-PAGES (correction pages)
   // ============================================================
   renderSubPage() {
+    if (this.subPage === 'offer-detail' && this.selectedOfferId) {
+      const o = Store.offers.find(record => record.id === this.selectedOfferId);
+      if (!o) return '<div class="empty-state"><p>Offer not found.</p><button class="btn" onclick="BankPortal.closeSubPage()">← Back to Offers</button></div>';
+      return this.renderOfferWorkspace(o);
+    }
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return '<div class="empty-state"><p>Select an asset to continue.</p></div>';
     switch (this.subPage) {
@@ -2030,55 +2141,126 @@ const BankPortal = {
   },
 
   renderEditMedia(a) {
+    const photos = this._currentPhotos || [];
+    const exteriorPhoto = photos.find(p => p.caption === 'exterior' || p.is_exterior) || (a.exteriorImage ? { caption: 'exterior' } : null);
+    const interiorPhoto = photos.find(p => p.caption === 'interior');
+    const streetPhoto = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
+
     return `
       <div class="page-head">
         <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Asset</button>
-        <h1>Manage Media</h1>
-        <span class="crumb">${a.ref}</span>
+        <h1>Listing Photographs</h1>
+        <span class="crumb">${a.ref} · 3 Required Angles</span>
       </div>
-      ${!a.exteriorImage ? `<div class="banner amber"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg><div><b>Exterior photo required for publication.</b> Upload at least one photo showing the exterior of the property.</div></div>` : ''}
+
+      <div class="banner info">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><b>Mandatory 3-Photo Upload.</b> Provide 3 distinct photographs: Exterior Front Elevation (primary marketplace cover), Interior Living Space, and Street View / Surroundings.</div>
+      </div>
+
       <div class="group">
-        <div class="caption">Upload Photo</div>
+        <div class="caption">1. Exterior Front Elevation <span class="hint">Primary marketplace cover</span></div>
         <div class="body">
-          <div class="field"><span class="lbl">Photo Type <span class="req">*</span></span><div class="ctl">
-            <select id="media-type">
-              <option value="exterior">Exterior (required)</option>
-              <option value="interior">Interior</option>
-              <option value="aerial">Aerial</option>
-              <option value="siteplan">Site Plan</option>
-            </select>
-          </div></div>
-          <div class="upload-zone" onclick="document.getElementById('file-photo-input').click()">
-            <input type="file" id="file-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'photo')">
+          ${exteriorPhoto ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+              <div>
+                <b style="font-size:13px">Exterior Front Elevation</b>
+                <div style="font-size:11px;color:var(--text-2)">Public cover image for listing card &amp; search</div>
+              </div>
+              <span class="badge ok">✓ Uploaded</span>
+            </div>
+          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Exterior Front view is required to publish.</p>'}
+          <div class="upload-zone" onclick="document.getElementById('file-photo-exterior').click()">
+            <input type="file" id="file-photo-exterior" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'exterior')">
             <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <div id="photo-status-text">Click to choose photo (JPG, PNG · max 10MB)</div>
-            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">JPEG, PNG, or WebP · 10MB maximum</div>
+            <div id="photo-exterior-status">${exteriorPhoto ? 'Upload replacement Exterior photo (JPG, PNG)' : 'Upload Exterior Front photo (JPG, PNG · max 10MB)'}</div>
           </div>
-          <button class="btn primary" style="margin-top:12px" onclick="BankPortal.uploadPhoto()">+ Upload Photo</button>
         </div>
       </div>
+
+      <div class="group">
+        <div class="caption">2. Interior Living Space <span class="hint">Main hall, living area, or primary room</span></div>
+        <div class="body">
+          ${interiorPhoto ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+              <div>
+                <b style="font-size:13px">Interior Living Space</b>
+                <div style="font-size:11px;color:var(--text-2)">Interior view of primary living area</div>
+              </div>
+              <span class="badge ok">✓ Uploaded</span>
+            </div>
+          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Interior view is required.</p>'}
+          <div class="upload-zone" onclick="document.getElementById('file-photo-interior').click()">
+            <input type="file" id="file-photo-interior" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'interior')">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            <div id="photo-interior-status">${interiorPhoto ? 'Upload replacement Interior photo (JPG, PNG)' : 'Upload Interior Living Space photo (JPG, PNG · max 10MB)'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">3. Street View &amp; Surroundings <span class="hint">Access road, frontage, or neighborhood view</span></div>
+        <div class="body">
+          ${streetPhoto ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+              <div>
+                <b style="font-size:13px">Street View &amp; Surroundings</b>
+                <div style="font-size:11px;color:var(--text-2)">Access road and neighborhood surroundings</div>
+              </div>
+              <span class="badge ok">✓ Uploaded</span>
+            </div>
+          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Street view / surroundings is required.</p>'}
+          <div class="upload-zone" onclick="document.getElementById('file-photo-street').click()">
+            <input type="file" id="file-photo-street" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'street')">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            <div id="photo-street-status">${streetPhoto ? 'Upload replacement Street View photo (JPG, PNG)' : 'Upload Street View / Surroundings photo (JPG, PNG · max 10MB)'}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-actions">
-        <button class="btn" onclick="BankPortal.closeSubPage()">Close</button>
+        <button class="btn" onclick="BankPortal.closeSubPage()">Done / Back to Asset</button>
       </div>
     `;
   },
 
-  async uploadPhoto() {
-    const a = Store.getAsset(this.selectedAssetId);
-    if (!a) return;
-    const type = document.getElementById('media-type').value;
+  async handleSlotPhoto(event, assetId, type) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      UI.toast('Photo must be less than 10MB.', 'error');
+      return;
+    }
+    const statusEl = document.getElementById(`photo-${type}-status`);
+    if (statusEl) statusEl.textContent = `Uploading ${file.name}...`;
+
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('category', type);
+    form.append('caption', type);
+    form.append('is_exterior', type === 'exterior' ? '1' : '0');
+    form.append('is_primary', type === 'exterior' ? '1' : '0');
+
     try {
-      await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/photos/upload`, type, {
-        caption: type,
-        is_exterior: type === 'exterior' ? '1' : '0',
-        is_primary: (a.images || 0) === 0 ? '1' : '0'
-      }, 'photo');
-      a.images = (a.images || 0) + 1;
-      if (type === 'exterior') a.exteriorImage = true;
-      UI.toast(`${type} photo uploaded successfully.`, 'success');
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/upload`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: form
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Upload failed');
+      const label = type === 'exterior' ? 'Exterior Front' : type === 'interior' ? 'Interior' : 'Street view';
+      UI.toast(`${label} photo uploaded successfully.`, 'success');
+      await this.loadPhotos(assetId);
+      const a = Store.getAsset(assetId);
+      if (a) {
+        a.images = (a.images || 0) + 1;
+        if (type === 'exterior') a.exteriorImage = true;
+      }
       this.render();
-    } catch (error) {
-      UI.toast(error.message || 'Photo upload failed.', 'error');
+    } catch (err) {
+      UI.toast(err.message || 'Photo upload failed', 'error');
+      if (statusEl) statusEl.textContent = `Upload failed: ${err.message}`;
     }
   },
 
@@ -2341,10 +2523,6 @@ const BankPortal = {
         <h1>Offers &amp; Decisions</h1>
         <span class="crumb">${Store.offers.length} verified offer${Store.offers.length === 1 ? '' : 's'}</span>
       </div>
-      <div class="banner info" style="margin-bottom:14px">
-        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><b>Surge Verified Offers.</b> All offers listed below have been pre-screened and verified by Surge Solutions before being released to your bank for decision.</div>
-      </div>
       <div class="gridwrap">
         <table class="grid">
           <thead>
@@ -2353,30 +2531,122 @@ const BankPortal = {
               <th>Asset</th>
               <th>Buyer</th>
               <th class="num">Amount</th>
+              <th>Date</th>
               <th>Status</th>
-              <th>Action</th>
+              <th style="text-align:right">Action</th>
             </tr>
           </thead>
           <tbody>
             ${Store.offers.map(o => `
-              <tr>
-                <td class="ref">${o.ref}</td>
+              <tr onclick="BankPortal.openOffer('${o.id}')" style="cursor:pointer">
+                <td class="ref"><b>${o.ref}</b></td>
                 <td class="ref">${o.assetRef}</td>
-                <td>${o.buyer}</td>
-                <td class="num">${UI.fmtMoney(o.amount)}${o.belowReserve ? ' <span style="color:var(--danger);font-size:10.5px">(Below Reserve)</span>' : ''}</td>
+                <td><b>${UI.escapeHtml(o.buyer)}</b></td>
+                <td class="num">
+                  <b>${UI.fmtMoney(o.amount)}</b>
+                  ${o.belowReserve ? '<br><span style="color:var(--danger);font-size:10.5px">Below Reserve</span>' : ''}
+                </td>
+                <td><small>${UI.fmtDateShort(o.date)}</small></td>
                 <td>${UI.badge(o.status)}</td>
-                <td>
-                  ${['Under Bank Review', 'Under Review'].includes(o.status) ? `
-                    <div style="display:flex;gap:6px">
-                      <button class="btn small ok" onclick="BankPortal.decideOffer('${o.id}','Accepted')">Accept</button>
-                      <button class="btn small alert" onclick="BankPortal.decideOffer('${o.id}','Rejected')">Reject</button>
-                    </div>
-                  ` : '—'}
+                <td style="text-align:right">
+                  <button class="btn small primary" onclick="event.stopPropagation();BankPortal.openOffer('${o.id}')">View Details →</button>
                 </td>
               </tr>
-            `).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">No verified offers currently pending for your bank.</td></tr>'}
+            `).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No verified offers currently pending for your bank.</td></tr>'}
           </tbody>
         </table>
+      </div>
+    `;
+  },
+
+  renderOfferWorkspace(o) {
+    const asset = Store.getAsset(o.assetId) || Store.assets.find(a => a.ref === o.assetRef);
+    const isUnderReview = ['Under Bank Review', 'Under Review'].includes(o.status);
+
+    return `
+      <div class="page-head">
+        <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Offers</button>
+        <h1>Offer Decision Workspace</h1>
+        <span class="crumb">${o.ref} · ${o.assetRef}</span>
+      </div>
+
+      <div class="group">
+        <div class="caption">Offer Particulars</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Offer Reference</span><span class="kv-v"><b>${o.ref}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Asset Reference</span><span class="kv-v"><b>${o.assetRef}</b>${asset ? ` <button class="btn small" style="margin-left:8px" onclick="BankPortal.openAsset('${asset.id}')">View Asset Listing</button>` : ''}</span></div>
+          ${asset?.title ? `<div class="kv-row"><span class="kv-k">Asset Title</span><span class="kv-v">${UI.escapeHtml(asset.title)}</span></div>` : ''}
+          <div class="kv-row"><span class="kv-k">Offered Purchase Price</span><span class="kv-v"><b style="font-size:15px;color:var(--primary)">${UI.fmtMoney(o.amount)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '—'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
+          <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
+          <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
+          <div class="kv-row"><span class="kv-k">Surge Screening</span><span class="kv-v"><span class="badge ok">✓ Verified by Surge</span></span></div>
+          <div class="kv-row"><span class="kv-k">Current Status</span><span class="kv-v">${UI.badge(o.status)}</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Buyer Contact &amp; Identification</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Full Legal Name</span><span class="kv-v"><b>${UI.escapeHtml(o.buyer)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Ghana Card Number</span><span class="kv-v"><code>${UI.escapeHtml(o.ghanaCard || 'GHA-1341354436-6')}</code></span></div>
+          <div class="kv-row"><span class="kv-k">Telephone Number</span><span class="kv-v">${o.phone ? `<a href="tel:${UI.escapeHtml(o.phone)}">${UI.escapeHtml(o.phone)}</a>` : 'Not recorded'}</span></div>
+          <div class="kv-row"><span class="kv-k">Email Address</span><span class="kv-v">${o.email ? `<a href="mailto:${UI.escapeHtml(o.email)}">${UI.escapeHtml(o.email)}</a>` : 'Not recorded'}</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Bank Decision &amp; Actions</div>
+        <div class="body">
+          ${isUnderReview ? `
+            <p style="margin:0 0 14px;color:var(--text-2);font-size:12.5px">
+              Review the purchase offer and terms. Accepting marks the asset listing as <b>Under Contract / Sold</b>.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn ok" onclick="BankPortal.decideOffer('${o.id}','Accepted')">
+                ✓ Accept Offer
+              </button>
+              <button class="btn alert" onclick="BankPortal.decideOffer('${o.id}','Rejected')">
+                Decline Offer
+              </button>
+            </div>
+          ` : o.status === 'Accepted' ? `
+            <div class="banner ok" style="margin-bottom:14px">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+              <div>
+                <b>Offer Accepted by Bank.</b> The asset has been marked as Under Contract / Sold.
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div>
+                <button class="btn alert" onclick="BankPortal.rescindOffer('${o.id}')">
+                  Rescind Offer Acceptance
+                </button>
+              </div>
+              <span style="font-size:11.5px;color:var(--text-2)">
+                If the buyer defaults on deposit or payment conditions, rescinding acceptance restores the asset listing to <b>Live</b> on the public marketplace.
+              </span>
+            </div>
+          ` : o.status === 'Rescinded' ? `
+            <div class="banner warn" style="margin-bottom:14px">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 9v4M12 17h.01"/></svg>
+              <div>
+                <b>Offer Acceptance Rescinded.</b> The previous acceptance was cancelled and the asset listing was restored to Live status.
+              </div>
+            </div>
+            <button class="btn small" onclick="BankPortal.decideOffer('${o.id}','Under Bank Review')">
+              Re-open Offer for Review
+            </button>
+          ` : o.status === 'Rejected' ? `
+            <div class="banner alert" style="margin:0">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div><b>Offer Declined by Bank.</b></div>
+            </div>
+          ` : `
+            <div>Current status: <b>${o.status}</b>.</div>
+          `}
+        </div>
       </div>
     `;
   },
@@ -2725,6 +2995,26 @@ const BankPortal = {
       UI.toast(err.message, 'error');
     }
   },
+
+  async rescindOffer(offerId) {
+    const offer = Store.offers.find(o => o.id === offerId);
+    if (!offer) return;
+    if (!confirm(`Are you sure you want to rescind acceptance of offer ${offer.ref}? The asset listing will be restored from Sold back to Live on the marketplace.`)) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/rescind`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ reason: 'Bank rescinded accepted offer' })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to rescind offer');
+      UI.toast(json.message || `Offer acceptance rescinded. Asset listing restored to Live.`, 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
 };
 
 // ============================================================
@@ -2877,6 +3167,9 @@ const AdminPortal = {
     if (this.selectedAssetId) {
       const a = Store.getAsset(this.selectedAssetId);
       el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('assets')">Assets</div><div class="dtab active">${a ? a.ref : 'Asset'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeAsset()">×</span></div>`;
+    } else if (this.subPage === 'offer-verify' && this.selectedOfferId) {
+      const o = Store.offers.find(x => x.id === this.selectedOfferId);
+      el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('offers')">Offers</div><div class="dtab active">${o ? o.ref : 'Offer Verification'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeSubPage()">×</span></div>`;
     } else {
       const titleMap = {
         'dashboard': 'Dashboard', 'assets': 'Assets', 'review': 'Review Queue',
@@ -2992,9 +3285,16 @@ const AdminPortal = {
     await this.loadGateReadiness(assetId);
     if (!this.gateReadinessError) UI.toast('Gate status refreshed from Cloudflare.', 'success');
   },
+  openOffer(offerId) {
+    this.selectedOfferId = offerId;
+    this.currentView = 'offers';
+    this.subPage = 'offer-verify';
+    this.render();
+  },
   openSubPage(name) { this.subPage = name; this.render(); },
   closeSubPage() {
     this.subPage = null;
+    this.selectedOfferId = null;
     if (this.currentView === 'title') {
       this.selectedAssetId = null;
       this.selectedValuationId = null;
@@ -3307,54 +3607,37 @@ const AdminPortal = {
         </div>
       </div>
 
-      <div class="banner info" style="margin-bottom:14px">
-        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><b>Surge Intermediary Gate:</b> As a licensed intermediary, Surge Admin must review and verify every buyer offer before it becomes visible to the recovery bank. Banks cannot see or accept unverified offers.</div>
-      </div>
-
       <div class="gridwrap">
         <table class="grid">
           <thead>
             <tr>
               <th>Ref</th>
               <th>Asset</th>
-              <th>Bank</th>
-              <th>Buyer &amp; Contact</th>
+              <th>Managing Bank</th>
+              <th>Buyer</th>
               <th class="num">Amount</th>
               <th>Date</th>
               <th>Status</th>
-              <th>Verification / Action</th>
+              <th style="text-align:right">Action</th>
             </tr>
           </thead>
           <tbody>
             ${Store.offers.map(o => {
               const isPending = o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge');
               return `
-                <tr style="${isPending ? 'background:rgba(255,193,7,0.06)' : ''}">
+                <tr onclick="AdminPortal.openOffer('${o.id}')" style="cursor:pointer;${isPending ? 'background:rgba(255,193,7,0.05)' : ''}">
                   <td class="ref"><b>${o.ref}</b></td>
                   <td class="ref">${o.assetRef}</td>
-                  <td>${o.bankName || 'Partner Bank'}</td>
-                  <td>
-                    <b>${UI.escapeHtml(o.buyer)}</b>
-                    ${o.notes ? `<br><small style="color:var(--text-2);font-size:11px">${UI.escapeHtml(o.notes)}</small>` : ''}
-                  </td>
+                  <td>${UI.escapeHtml(o.bankName || 'Partner Bank')}</td>
+                  <td><b>${UI.escapeHtml(o.buyer)}</b></td>
                   <td class="num">
                     <b>${UI.fmtMoney(o.amount)}</b>
                     ${o.belowReserve ? '<br><span style="color:var(--danger);font-size:10.5px">Below Reserve</span>' : ''}
                   </td>
                   <td><small>${UI.fmtDateShort(o.date)}</small></td>
                   <td>${UI.badge(o.status)}</td>
-                  <td>
-                    ${isPending ? `
-                      <div style="display:flex;gap:6px">
-                        <button class="btn small ok" onclick="AdminPortal.verifyOffer('${o.id}')">Verify for Bank</button>
-                        <button class="btn small alert" onclick="AdminPortal.rejectOfferModal('${o.id}')">Reject</button>
-                      </div>
-                    ` : o.surgeVerified ? `
-                      <span style="color:var(--ok);font-size:11.5px;font-weight:600">✓ Verified for Bank</span>
-                    ` : o.status === 'Rejected by Surge' ? `
-                      <span style="color:var(--danger);font-size:11.5px">Rejected by Surge</span>
-                    ` : '—'}
+                  <td style="text-align:right">
+                    <button class="btn small primary" onclick="event.stopPropagation();AdminPortal.openOffer('${o.id}')">Review Offer →</button>
                   </td>
                 </tr>
               `;
@@ -3370,6 +3653,11 @@ const AdminPortal = {
   },
 
   renderSubPage() {
+    if (this.subPage === 'offer-verify' && this.selectedOfferId) {
+      const o = Store.offers.find(record => record.id === this.selectedOfferId);
+      if (!o) return '<div class="empty-state"><p>Offer not found.</p><button class="btn" onclick="AdminPortal.closeSubPage()">← Back to Offers</button></div>';
+      return this.renderOfferWorkspace(o);
+    }
     let a = Store.getAsset(this.selectedAssetId);
     if (!a && this.subPage === 'valuation-verify' && this.selectedValuationId) {
       const v = Store.valuations.find(record => record.id === this.selectedValuationId);
@@ -3389,6 +3677,81 @@ const AdminPortal = {
       case 'valuation-verify': return this.renderValuationWorkspace(a);
       default: return this.renderAssetDetail(a.id);
     }
+  },
+
+  renderOfferWorkspace(o) {
+    const asset = Store.getAsset(o.assetId) || Store.assets.find(a => a.ref === o.assetRef);
+    const isPending = o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge');
+
+    return `
+      <div class="page-head">
+        <button class="btn small" onclick="AdminPortal.closeSubPage()">← Back to Offers</button>
+        <h1>Offer Verification Workspace</h1>
+        <span class="crumb">${o.ref} · ${UI.escapeHtml(o.bankName || 'Partner Bank')}</span>
+      </div>
+
+      <div class="group">
+        <div class="caption">Offer Particulars</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Offer Reference</span><span class="kv-v"><b>${o.ref}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Asset Reference</span><span class="kv-v"><b>${o.assetRef}</b>${asset ? ` <button class="btn small" style="margin-left:8px" onclick="AdminPortal.openAsset('${asset.id}')">View Asset</button>` : ''}</span></div>
+          ${asset?.title ? `<div class="kv-row"><span class="kv-k">Asset Title</span><span class="kv-v">${UI.escapeHtml(asset.title)}</span></div>` : ''}
+          <div class="kv-row"><span class="kv-k">Managing Bank</span><span class="kv-v">${UI.escapeHtml(o.bankName || 'Partner Bank')}</span></div>
+          <div class="kv-row"><span class="kv-k">Offered Purchase Price</span><span class="kv-v"><b style="font-size:15px;color:var(--primary)">${UI.fmtMoney(o.amount)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '—'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
+          <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
+          <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
+          <div class="kv-row"><span class="kv-k">Status</span><span class="kv-v">${UI.badge(o.status)}</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Buyer KYC &amp; Verification Details</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Full Legal Name</span><span class="kv-v"><b>${UI.escapeHtml(o.buyer)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Ghana Card Number</span><span class="kv-v"><code>${UI.escapeHtml(o.ghanaCard || 'GHA-1341354436-6')}</code></span></div>
+          <div class="kv-row"><span class="kv-k">Telephone Number</span><span class="kv-v">${o.phone ? `<a href="tel:${UI.escapeHtml(o.phone)}">${UI.escapeHtml(o.phone)}</a>` : 'Not recorded'}</span></div>
+          <div class="kv-row"><span class="kv-k">Email Address</span><span class="kv-v">${o.email ? `<a href="mailto:${UI.escapeHtml(o.email)}">${UI.escapeHtml(o.email)}</a>` : 'Not recorded'}</span></div>
+          ${o.notes ? `<div class="kv-row"><span class="kv-k">Buyer Notes</span><span class="kv-v" style="color:var(--text-2);font-size:12px">${UI.escapeHtml(o.notes)}</span></div>` : ''}
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Surge Verification Decision</div>
+        <div class="body">
+          ${isPending ? `
+            <p style="margin:0 0 14px;color:var(--text-2);font-size:12.5px">
+              Confirm that the buyer identity, KYC, and proposed offer meet Surge Intermediary qualification criteria before releasing to <b>${UI.escapeHtml(o.bankName || 'the partner bank')}</b>.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn ok" onclick="AdminPortal.verifyOffer('${o.id}')">
+                ✓ Verify &amp; Release to Bank
+              </button>
+              <button class="btn alert" onclick="AdminPortal.rejectOfferModal('${o.id}')">
+                Reject Offer
+              </button>
+            </div>
+          ` : o.surgeVerified ? `
+            <div class="banner ok" style="margin:0">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+              <div>
+                <b>Verified by Surge Solutions.</b> Released to <b>${UI.escapeHtml(o.bankName || 'Partner Bank')}</b> for decision on ${UI.fmtDate(o.surgeVerifiedAt)}${o.surgeVerifiedBy ? ` by ${UI.escapeHtml(o.surgeVerifiedBy)}` : ''}.
+              </div>
+            </div>
+          ` : o.status === 'Rejected by Surge' ? `
+            <div class="banner alert" style="margin:0">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div>
+                <b>Rejected by Surge Admin.</b> This offer was not released to the bank. Reason: "${UI.escapeHtml(o.rejectionReason || 'Does not meet qualification requirements')}".
+              </div>
+            </div>
+          ` : `
+            <div>Current status: <b>${o.status}</b>.</div>
+          `}
+        </div>
+      </div>
+    `;
   },
 
   renderLegalWorkspace(a) {
