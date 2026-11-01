@@ -2145,7 +2145,7 @@ const BankPortal = {
 
     try {
       UI.modal('Create Asset Draft', `
-        <p>Records created here are managed by Surge Partner Bank. Select who owns this asset.</p>
+        <p>Create a draft and select the bank, individual, or Surge Solutions as its legal owner.</p>
         <div class="field"><span class="lbl">Asset owner</span><div class="ctl">
           <select id="asset-owner-type" onchange="BankPortal.updateOwnerFields()">
             <option value="bank">Another partner bank</option>
@@ -2227,7 +2227,7 @@ const BankPortal = {
       const d = json.data;
       const actorName = d.created_by || 'Not recorded';
       const asset = {
-        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || (user?.bankName || 'Surge Partner Bank'),
+        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || user?.bankName || '—',
         ownershipType: d.ownership_type || ownershipType, ownerBankId: d.owner_bank_id || ownerBankId,
         ownerBankName: d.owner_bank_name || (ownerBankId ? document.getElementById('asset-owner-bank')?.selectedOptions[0]?.textContent : '') || '',
         ownerName: d.owner_name || ownerName, branchId: d.branch_id || branchId,
