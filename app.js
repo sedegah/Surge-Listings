@@ -1744,13 +1744,26 @@ const BankPortal = {
   },
 
   renderMediaTab(a) {
+    const photos = this._currentPhotos || [];
+    const exterior = photos.find(p => p.caption === 'exterior' || p.is_exterior) || (a.exteriorImage ? { caption: 'exterior' } : null);
+    const interior = photos.find(p => p.caption === 'interior');
+    const street = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
+    const totalCount = photos.length || a.images || 0;
+
     return `
       <div class="group">
-        <div class="caption">Media <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">+ Upload Photo</button></div>
+        <div class="caption">Listing Photographs <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">Manage Photos (3 Required)</button></div>
         <div class="body">
-          <div class="kv-row"><span class="kv-k">Total Photos</span><span class="kv-v">${a.images}</span></div>
-          <div class="kv-row"><span class="kv-k">Exterior Photo</span><span class="kv-v">${a.exteriorImage ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required to publish</span>'}</span></div>
-          ${!a.exteriorImage ? `<div class="banner amber" style="margin-top:12px;margin-bottom:0"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg><div><b>Exterior photo required.</b> At least one exterior photo is mandatory for publication.</div></div>` : ''}
+          <div class="kv-row"><span class="kv-k">Total Photographs</span><span class="kv-v">${totalCount} uploaded</span></div>
+          <div class="kv-row"><span class="kv-k">1. Exterior Front Elevation</span><span class="kv-v">${exterior ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">2. Interior Living Space</span><span class="kv-v">${interior ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">3. Street View &amp; Surroundings</span><span class="kv-v">${street ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
+          ${!exterior || !interior || !street ? `
+            <div class="banner amber" style="margin-top:12px;margin-bottom:0">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg>
+              <div><b>3 Photos Required for Publication.</b> The listing must include exterior front elevation, interior living space, and street surroundings views before it can be published.</div>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1760,6 +1773,11 @@ const BankPortal = {
   // SUB-PAGES (correction pages)
   // ============================================================
   renderSubPage() {
+    if (this.subPage === 'offer-detail' && this.selectedOfferId) {
+      const o = Store.offers.find(record => record.id === this.selectedOfferId);
+      if (!o) return '<div class="empty-state"><p>Offer not found.</p><button class="btn" onclick="BankPortal.closeSubPage()">← Back to Offers</button></div>';
+      return this.renderOfferWorkspace(o);
+    }
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return '<div class="empty-state"><p>Select an asset to continue.</p></div>';
     switch (this.subPage) {
@@ -2123,55 +2141,126 @@ const BankPortal = {
   },
 
   renderEditMedia(a) {
+    const photos = this._currentPhotos || [];
+    const exteriorPhoto = photos.find(p => p.caption === 'exterior' || p.is_exterior) || (a.exteriorImage ? { caption: 'exterior' } : null);
+    const interiorPhoto = photos.find(p => p.caption === 'interior');
+    const streetPhoto = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
+
     return `
       <div class="page-head">
         <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Asset</button>
-        <h1>Manage Media</h1>
-        <span class="crumb">${a.ref}</span>
+        <h1>Listing Photographs</h1>
+        <span class="crumb">${a.ref} · 3 Required Angles</span>
       </div>
-      ${!a.exteriorImage ? `<div class="banner amber"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg><div><b>Exterior photo required for publication.</b> Upload at least one photo showing the exterior of the property.</div></div>` : ''}
+
+      <div class="banner info">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><b>Mandatory 3-Photo Upload.</b> Provide 3 distinct photographs: Exterior Front Elevation (primary marketplace cover), Interior Living Space, and Street View / Surroundings.</div>
+      </div>
+
       <div class="group">
-        <div class="caption">Upload Photo</div>
+        <div class="caption">1. Exterior Front Elevation <span class="hint">Primary marketplace cover</span></div>
         <div class="body">
-          <div class="field"><span class="lbl">Photo Type <span class="req">*</span></span><div class="ctl">
-            <select id="media-type">
-              <option value="exterior">Exterior (required)</option>
-              <option value="interior">Interior</option>
-              <option value="aerial">Aerial</option>
-              <option value="siteplan">Site Plan</option>
-            </select>
-          </div></div>
-          <div class="upload-zone" onclick="document.getElementById('file-photo-input').click()">
-            <input type="file" id="file-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'photo')">
+          ${exteriorPhoto ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+              <div>
+                <b style="font-size:13px">Exterior Front Elevation</b>
+                <div style="font-size:11px;color:var(--text-2)">Public cover image for listing card &amp; search</div>
+              </div>
+              <span class="badge ok">✓ Uploaded</span>
+            </div>
+          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Exterior Front view is required to publish.</p>'}
+          <div class="upload-zone" onclick="document.getElementById('file-photo-exterior').click()">
+            <input type="file" id="file-photo-exterior" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'exterior')">
             <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <div id="photo-status-text">Click to choose photo (JPG, PNG · max 10MB)</div>
-            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">JPEG, PNG, or WebP · 10MB maximum</div>
+            <div id="photo-exterior-status">${exteriorPhoto ? 'Upload replacement Exterior photo (JPG, PNG)' : 'Upload Exterior Front photo (JPG, PNG · max 10MB)'}</div>
           </div>
-          <button class="btn primary" style="margin-top:12px" onclick="BankPortal.uploadPhoto()">+ Upload Photo</button>
         </div>
       </div>
+
+      <div class="group">
+        <div class="caption">2. Interior Living Space <span class="hint">Main hall, living area, or primary room</span></div>
+        <div class="body">
+          ${interiorPhoto ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+              <div>
+                <b style="font-size:13px">Interior Living Space</b>
+                <div style="font-size:11px;color:var(--text-2)">Interior view of primary living area</div>
+              </div>
+              <span class="badge ok">✓ Uploaded</span>
+            </div>
+          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Interior view is required.</p>'}
+          <div class="upload-zone" onclick="document.getElementById('file-photo-interior').click()">
+            <input type="file" id="file-photo-interior" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'interior')">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            <div id="photo-interior-status">${interiorPhoto ? 'Upload replacement Interior photo (JPG, PNG)' : 'Upload Interior Living Space photo (JPG, PNG · max 10MB)'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">3. Street View &amp; Surroundings <span class="hint">Access road, frontage, or neighborhood view</span></div>
+        <div class="body">
+          ${streetPhoto ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+              <div>
+                <b style="font-size:13px">Street View &amp; Surroundings</b>
+                <div style="font-size:11px;color:var(--text-2)">Access road and neighborhood surroundings</div>
+              </div>
+              <span class="badge ok">✓ Uploaded</span>
+            </div>
+          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Street view / surroundings is required.</p>'}
+          <div class="upload-zone" onclick="document.getElementById('file-photo-street').click()">
+            <input type="file" id="file-photo-street" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'street')">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            <div id="photo-street-status">${streetPhoto ? 'Upload replacement Street View photo (JPG, PNG)' : 'Upload Street View / Surroundings photo (JPG, PNG · max 10MB)'}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-actions">
-        <button class="btn" onclick="BankPortal.closeSubPage()">Close</button>
+        <button class="btn" onclick="BankPortal.closeSubPage()">Done / Back to Asset</button>
       </div>
     `;
   },
 
-  async uploadPhoto() {
-    const a = Store.getAsset(this.selectedAssetId);
-    if (!a) return;
-    const type = document.getElementById('media-type').value;
+  async handleSlotPhoto(event, assetId, type) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      UI.toast('Photo must be less than 10MB.', 'error');
+      return;
+    }
+    const statusEl = document.getElementById(`photo-${type}-status`);
+    if (statusEl) statusEl.textContent = `Uploading ${file.name}...`;
+
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('category', type);
+    form.append('caption', type);
+    form.append('is_exterior', type === 'exterior' ? '1' : '0');
+    form.append('is_primary', type === 'exterior' ? '1' : '0');
+
     try {
-      await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/photos/upload`, type, {
-        caption: type,
-        is_exterior: type === 'exterior' ? '1' : '0',
-        is_primary: (a.images || 0) === 0 ? '1' : '0'
-      }, 'photo');
-      a.images = (a.images || 0) + 1;
-      if (type === 'exterior') a.exteriorImage = true;
-      UI.toast(`${type} photo uploaded successfully.`, 'success');
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/upload`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: form
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Upload failed');
+      const label = type === 'exterior' ? 'Exterior Front' : type === 'interior' ? 'Interior' : 'Street view';
+      UI.toast(`${label} photo uploaded successfully.`, 'success');
+      await this.loadPhotos(assetId);
+      const a = Store.getAsset(assetId);
+      if (a) {
+        a.images = (a.images || 0) + 1;
+        if (type === 'exterior') a.exteriorImage = true;
+      }
       this.render();
-    } catch (error) {
-      UI.toast(error.message || 'Photo upload failed.', 'error');
+    } catch (err) {
+      UI.toast(err.message || 'Photo upload failed', 'error');
+      if (statusEl) statusEl.textContent = `Upload failed: ${err.message}`;
     }
   },
 
@@ -2434,10 +2523,6 @@ const BankPortal = {
         <h1>Offers &amp; Decisions</h1>
         <span class="crumb">${Store.offers.length} verified offer${Store.offers.length === 1 ? '' : 's'}</span>
       </div>
-      <div class="banner info" style="margin-bottom:14px">
-        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><b>Surge Verified Offers.</b> All offers listed below have been pre-screened and verified by Surge Solutions before being released to your bank for decision.</div>
-      </div>
       <div class="gridwrap">
         <table class="grid">
           <thead>
@@ -2446,30 +2531,122 @@ const BankPortal = {
               <th>Asset</th>
               <th>Buyer</th>
               <th class="num">Amount</th>
+              <th>Date</th>
               <th>Status</th>
-              <th>Action</th>
+              <th style="text-align:right">Action</th>
             </tr>
           </thead>
           <tbody>
             ${Store.offers.map(o => `
-              <tr>
-                <td class="ref">${o.ref}</td>
+              <tr onclick="BankPortal.openOffer('${o.id}')" style="cursor:pointer">
+                <td class="ref"><b>${o.ref}</b></td>
                 <td class="ref">${o.assetRef}</td>
-                <td>${o.buyer}</td>
-                <td class="num">${UI.fmtMoney(o.amount)}${o.belowReserve ? ' <span style="color:var(--danger);font-size:10.5px">(Below Reserve)</span>' : ''}</td>
+                <td><b>${UI.escapeHtml(o.buyer)}</b></td>
+                <td class="num">
+                  <b>${UI.fmtMoney(o.amount)}</b>
+                  ${o.belowReserve ? '<br><span style="color:var(--danger);font-size:10.5px">Below Reserve</span>' : ''}
+                </td>
+                <td><small>${UI.fmtDateShort(o.date)}</small></td>
                 <td>${UI.badge(o.status)}</td>
-                <td>
-                  ${['Under Bank Review', 'Under Review'].includes(o.status) ? `
-                    <div style="display:flex;gap:6px">
-                      <button class="btn small ok" onclick="BankPortal.decideOffer('${o.id}','Accepted')">Accept</button>
-                      <button class="btn small alert" onclick="BankPortal.decideOffer('${o.id}','Rejected')">Reject</button>
-                    </div>
-                  ` : '—'}
+                <td style="text-align:right">
+                  <button class="btn small primary" onclick="event.stopPropagation();BankPortal.openOffer('${o.id}')">View Details →</button>
                 </td>
               </tr>
-            `).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">No verified offers currently pending for your bank.</td></tr>'}
+            `).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-2)">No verified offers currently pending for your bank.</td></tr>'}
           </tbody>
         </table>
+      </div>
+    `;
+  },
+
+  renderOfferWorkspace(o) {
+    const asset = Store.getAsset(o.assetId) || Store.assets.find(a => a.ref === o.assetRef);
+    const isUnderReview = ['Under Bank Review', 'Under Review'].includes(o.status);
+
+    return `
+      <div class="page-head">
+        <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Offers</button>
+        <h1>Offer Decision Workspace</h1>
+        <span class="crumb">${o.ref} · ${o.assetRef}</span>
+      </div>
+
+      <div class="group">
+        <div class="caption">Offer Particulars</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Offer Reference</span><span class="kv-v"><b>${o.ref}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Asset Reference</span><span class="kv-v"><b>${o.assetRef}</b>${asset ? ` <button class="btn small" style="margin-left:8px" onclick="BankPortal.openAsset('${asset.id}')">View Asset Listing</button>` : ''}</span></div>
+          ${asset?.title ? `<div class="kv-row"><span class="kv-k">Asset Title</span><span class="kv-v">${UI.escapeHtml(asset.title)}</span></div>` : ''}
+          <div class="kv-row"><span class="kv-k">Offered Purchase Price</span><span class="kv-v"><b style="font-size:15px;color:var(--primary)">${UI.fmtMoney(o.amount)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '—'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
+          <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
+          <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
+          <div class="kv-row"><span class="kv-k">Surge Screening</span><span class="kv-v"><span class="badge ok">✓ Verified by Surge</span></span></div>
+          <div class="kv-row"><span class="kv-k">Current Status</span><span class="kv-v">${UI.badge(o.status)}</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Buyer Contact &amp; Identification</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Full Legal Name</span><span class="kv-v"><b>${UI.escapeHtml(o.buyer)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Ghana Card Number</span><span class="kv-v"><code>${UI.escapeHtml(o.ghanaCard || 'GHA-1341354436-6')}</code></span></div>
+          <div class="kv-row"><span class="kv-k">Telephone Number</span><span class="kv-v">${o.phone ? `<a href="tel:${UI.escapeHtml(o.phone)}">${UI.escapeHtml(o.phone)}</a>` : 'Not recorded'}</span></div>
+          <div class="kv-row"><span class="kv-k">Email Address</span><span class="kv-v">${o.email ? `<a href="mailto:${UI.escapeHtml(o.email)}">${UI.escapeHtml(o.email)}</a>` : 'Not recorded'}</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Bank Decision &amp; Actions</div>
+        <div class="body">
+          ${isUnderReview ? `
+            <p style="margin:0 0 14px;color:var(--text-2);font-size:12.5px">
+              Review the purchase offer and terms. Accepting marks the asset listing as <b>Under Contract / Sold</b>.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn ok" onclick="BankPortal.decideOffer('${o.id}','Accepted')">
+                ✓ Accept Offer
+              </button>
+              <button class="btn alert" onclick="BankPortal.decideOffer('${o.id}','Rejected')">
+                Decline Offer
+              </button>
+            </div>
+          ` : o.status === 'Accepted' ? `
+            <div class="banner ok" style="margin-bottom:14px">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+              <div>
+                <b>Offer Accepted by Bank.</b> The asset has been marked as Under Contract / Sold.
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div>
+                <button class="btn alert" onclick="BankPortal.rescindOffer('${o.id}')">
+                  Rescind Offer Acceptance
+                </button>
+              </div>
+              <span style="font-size:11.5px;color:var(--text-2)">
+                If the buyer defaults on deposit or payment conditions, rescinding acceptance restores the asset listing to <b>Live</b> on the public marketplace.
+              </span>
+            </div>
+          ` : o.status === 'Rescinded' ? `
+            <div class="banner warn" style="margin-bottom:14px">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 9v4M12 17h.01"/></svg>
+              <div>
+                <b>Offer Acceptance Rescinded.</b> The previous acceptance was cancelled and the asset listing was restored to Live status.
+              </div>
+            </div>
+            <button class="btn small" onclick="BankPortal.decideOffer('${o.id}','Under Bank Review')">
+              Re-open Offer for Review
+            </button>
+          ` : o.status === 'Rejected' ? `
+            <div class="banner alert" style="margin:0">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div><b>Offer Declined by Bank.</b></div>
+            </div>
+          ` : `
+            <div>Current status: <b>${o.status}</b>.</div>
+          `}
+        </div>
       </div>
     `;
   },
