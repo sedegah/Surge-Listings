@@ -2952,6 +2952,9 @@ const AdminPortal = {
     if (this.selectedAssetId) {
       const a = Store.getAsset(this.selectedAssetId);
       el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('assets')">Assets</div><div class="dtab active">${a ? a.ref : 'Asset'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeAsset()">×</span></div>`;
+    } else if (this.subPage === 'offer-verify' && this.selectedOfferId) {
+      const o = Store.offers.find(x => x.id === this.selectedOfferId);
+      el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('offers')">Offers</div><div class="dtab active">${o ? o.ref : 'Offer Verification'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeSubPage()">×</span></div>`;
     } else {
       const titleMap = {
         'dashboard': 'Dashboard', 'assets': 'Assets', 'review': 'Review Queue',
@@ -3067,9 +3070,16 @@ const AdminPortal = {
     await this.loadGateReadiness(assetId);
     if (!this.gateReadinessError) UI.toast('Gate status refreshed from Cloudflare.', 'success');
   },
+  openOffer(offerId) {
+    this.selectedOfferId = offerId;
+    this.currentView = 'offers';
+    this.subPage = 'offer-verify';
+    this.render();
+  },
   openSubPage(name) { this.subPage = name; this.render(); },
   closeSubPage() {
     this.subPage = null;
+    this.selectedOfferId = null;
     if (this.currentView === 'title') {
       this.selectedAssetId = null;
       this.selectedValuationId = null;
@@ -3382,54 +3392,37 @@ const AdminPortal = {
         </div>
       </div>
 
-      <div class="banner info" style="margin-bottom:14px">
-        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><b>Surge Intermediary Gate:</b> As a licensed intermediary, Surge Admin must review and verify every buyer offer before it becomes visible to the recovery bank. Banks cannot see or accept unverified offers.</div>
-      </div>
-
       <div class="gridwrap">
         <table class="grid">
           <thead>
             <tr>
               <th>Ref</th>
               <th>Asset</th>
-              <th>Bank</th>
-              <th>Buyer &amp; Contact</th>
+              <th>Managing Bank</th>
+              <th>Buyer</th>
               <th class="num">Amount</th>
               <th>Date</th>
               <th>Status</th>
-              <th>Verification / Action</th>
+              <th style="text-align:right">Action</th>
             </tr>
           </thead>
           <tbody>
             ${Store.offers.map(o => {
               const isPending = o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge');
               return `
-                <tr style="${isPending ? 'background:rgba(255,193,7,0.06)' : ''}">
+                <tr onclick="AdminPortal.openOffer('${o.id}')" style="cursor:pointer;${isPending ? 'background:rgba(255,193,7,0.05)' : ''}">
                   <td class="ref"><b>${o.ref}</b></td>
                   <td class="ref">${o.assetRef}</td>
-                  <td>${o.bankName || 'Partner Bank'}</td>
-                  <td>
-                    <b>${UI.escapeHtml(o.buyer)}</b>
-                    ${o.notes ? `<br><small style="color:var(--text-2);font-size:11px">${UI.escapeHtml(o.notes)}</small>` : ''}
-                  </td>
+                  <td>${UI.escapeHtml(o.bankName || 'Partner Bank')}</td>
+                  <td><b>${UI.escapeHtml(o.buyer)}</b></td>
                   <td class="num">
                     <b>${UI.fmtMoney(o.amount)}</b>
                     ${o.belowReserve ? '<br><span style="color:var(--danger);font-size:10.5px">Below Reserve</span>' : ''}
                   </td>
                   <td><small>${UI.fmtDateShort(o.date)}</small></td>
                   <td>${UI.badge(o.status)}</td>
-                  <td>
-                    ${isPending ? `
-                      <div style="display:flex;gap:6px">
-                        <button class="btn small ok" onclick="AdminPortal.verifyOffer('${o.id}')">Verify for Bank</button>
-                        <button class="btn small alert" onclick="AdminPortal.rejectOfferModal('${o.id}')">Reject</button>
-                      </div>
-                    ` : o.surgeVerified ? `
-                      <span style="color:var(--ok);font-size:11.5px;font-weight:600">✓ Verified for Bank</span>
-                    ` : o.status === 'Rejected by Surge' ? `
-                      <span style="color:var(--danger);font-size:11.5px">Rejected by Surge</span>
-                    ` : '—'}
+                  <td style="text-align:right">
+                    <button class="btn small primary" onclick="event.stopPropagation();AdminPortal.openOffer('${o.id}')">Review Offer →</button>
                   </td>
                 </tr>
               `;
@@ -3445,6 +3438,11 @@ const AdminPortal = {
   },
 
   renderSubPage() {
+    if (this.subPage === 'offer-verify' && this.selectedOfferId) {
+      const o = Store.offers.find(record => record.id === this.selectedOfferId);
+      if (!o) return '<div class="empty-state"><p>Offer not found.</p><button class="btn" onclick="AdminPortal.closeSubPage()">← Back to Offers</button></div>';
+      return this.renderOfferWorkspace(o);
+    }
     let a = Store.getAsset(this.selectedAssetId);
     if (!a && this.subPage === 'valuation-verify' && this.selectedValuationId) {
       const v = Store.valuations.find(record => record.id === this.selectedValuationId);
@@ -3464,6 +3462,81 @@ const AdminPortal = {
       case 'valuation-verify': return this.renderValuationWorkspace(a);
       default: return this.renderAssetDetail(a.id);
     }
+  },
+
+  renderOfferWorkspace(o) {
+    const asset = Store.getAsset(o.assetId) || Store.assets.find(a => a.ref === o.assetRef);
+    const isPending = o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge');
+
+    return `
+      <div class="page-head">
+        <button class="btn small" onclick="AdminPortal.closeSubPage()">← Back to Offers</button>
+        <h1>Offer Verification Workspace</h1>
+        <span class="crumb">${o.ref} · ${UI.escapeHtml(o.bankName || 'Partner Bank')}</span>
+      </div>
+
+      <div class="group">
+        <div class="caption">Offer Particulars</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Offer Reference</span><span class="kv-v"><b>${o.ref}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Asset Reference</span><span class="kv-v"><b>${o.assetRef}</b>${asset ? ` <button class="btn small" style="margin-left:8px" onclick="AdminPortal.openAsset('${asset.id}')">View Asset</button>` : ''}</span></div>
+          ${asset?.title ? `<div class="kv-row"><span class="kv-k">Asset Title</span><span class="kv-v">${UI.escapeHtml(asset.title)}</span></div>` : ''}
+          <div class="kv-row"><span class="kv-k">Managing Bank</span><span class="kv-v">${UI.escapeHtml(o.bankName || 'Partner Bank')}</span></div>
+          <div class="kv-row"><span class="kv-k">Offered Purchase Price</span><span class="kv-v"><b style="font-size:15px;color:var(--primary)">${UI.fmtMoney(o.amount)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '—'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
+          <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
+          <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
+          <div class="kv-row"><span class="kv-k">Status</span><span class="kv-v">${UI.badge(o.status)}</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Buyer KYC &amp; Verification Details</div>
+        <div class="body">
+          <div class="kv-row"><span class="kv-k">Full Legal Name</span><span class="kv-v"><b>${UI.escapeHtml(o.buyer)}</b></span></div>
+          <div class="kv-row"><span class="kv-k">Ghana Card Number</span><span class="kv-v"><code>${UI.escapeHtml(o.ghanaCard || 'GHA-1341354436-6')}</code></span></div>
+          <div class="kv-row"><span class="kv-k">Telephone Number</span><span class="kv-v">${o.phone ? `<a href="tel:${UI.escapeHtml(o.phone)}">${UI.escapeHtml(o.phone)}</a>` : 'Not recorded'}</span></div>
+          <div class="kv-row"><span class="kv-k">Email Address</span><span class="kv-v">${o.email ? `<a href="mailto:${UI.escapeHtml(o.email)}">${UI.escapeHtml(o.email)}</a>` : 'Not recorded'}</span></div>
+          ${o.notes ? `<div class="kv-row"><span class="kv-k">Buyer Notes</span><span class="kv-v" style="color:var(--text-2);font-size:12px">${UI.escapeHtml(o.notes)}</span></div>` : ''}
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Surge Verification Decision</div>
+        <div class="body">
+          ${isPending ? `
+            <p style="margin:0 0 14px;color:var(--text-2);font-size:12.5px">
+              Confirm that the buyer identity, KYC, and proposed offer meet Surge Intermediary qualification criteria before releasing to <b>${UI.escapeHtml(o.bankName || 'the partner bank')}</b>.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn ok" onclick="AdminPortal.verifyOffer('${o.id}')">
+                ✓ Verify &amp; Release to Bank
+              </button>
+              <button class="btn alert" onclick="AdminPortal.rejectOfferModal('${o.id}')">
+                Reject Offer
+              </button>
+            </div>
+          ` : o.surgeVerified ? `
+            <div class="banner ok" style="margin:0">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+              <div>
+                <b>Verified by Surge Solutions.</b> Released to <b>${UI.escapeHtml(o.bankName || 'Partner Bank')}</b> for decision on ${UI.fmtDate(o.surgeVerifiedAt)}${o.surgeVerifiedBy ? ` by ${UI.escapeHtml(o.surgeVerifiedBy)}` : ''}.
+              </div>
+            </div>
+          ` : o.status === 'Rejected by Surge' ? `
+            <div class="banner alert" style="margin:0">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div>
+                <b>Rejected by Surge Admin.</b> This offer was not released to the bank. Reason: "${UI.escapeHtml(o.rejectionReason || 'Does not meet qualification requirements')}".
+              </div>
+            </div>
+          ` : `
+            <div>Current status: <b>${o.status}</b>.</div>
+          `}
+        </div>
+      </div>
+    `;
   },
 
   renderLegalWorkspace(a) {
