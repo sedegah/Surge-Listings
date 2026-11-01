@@ -450,6 +450,7 @@ const Store = {
               type: instrument.instrument_type,
               ref: instrument.instrument_ref,
               status: instrument.verification_status,
+              documentId: instrument.document_id || '',
               uploadedBy: instrument.uploaded_by_name || 'Not recorded',
               uploadedAt: instrument.uploaded_at || '',
               uploadedByPublicId: instrument.uploaded_by_public_id || ''
@@ -2946,10 +2947,10 @@ const AdminPortal = {
               <span class="inst-status">${UI.badge(i.status)}</span>
               <span style="font-size:11px;color:var(--text-2)">${i.uploadedBy} · ${UI.fmtDateShort(i.uploadedAt)}</span>
               ${i.status !== 'Verified' ? `
-                ${i.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(i.document_id)}">Open document</button>` : '<span class="badge alert">No document</span>'}
-                <button class="btn small primary" onclick="AdminPortal.verifyInstrument('${a.id}','${i.id}','${UI.escapeHtml(i.document_id || '')}')">Verify</button>
+                ${i.documentId ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(i.documentId)}">Open document</button>` : '<span class="badge alert">No document</span>'}
+                <button class="btn small primary" onclick="AdminPortal.verifyInstrument('${a.id}','${i.id}','${UI.escapeHtml(i.documentId || '')}')">Verify</button>
                 <button class="btn small danger" onclick="AdminPortal.rejectInstrument('${a.id}','${i.id}')">Reject</button>
-              ` : `<span class="badge ok">✓ Verified</span>${i.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(i.document_id)}">Open document</button>` : ''}`}
+              ` : `<span class="badge ok">✓ Verified</span>${i.documentId ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(i.documentId)}">Open document</button>` : ''}`}
             </div>
           `).join('') : '<p style="color:var(--text-2);margin:0">No instruments uploaded by bank. Ask bank to upload legal instruments first.</p>'}
         </div>
