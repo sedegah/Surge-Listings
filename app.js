@@ -2336,7 +2336,49 @@ const BankPortal = {
   },
 
   renderOffersView() {
-    return `<div class="page-head"><h1>Offers &amp; Decisions</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Offer Ref</th><th>Asset</th><th>Buyer</th><th class="num">Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>${Store.offers.map(o => `<tr><td class="ref">${o.ref}</td><td class="ref">${o.assetRef}</td><td>${o.buyer}</td><td class="num">${UI.fmtMoney(o.amount)}</td><td>${UI.badge(o.status)}</td><td>${o.status === 'Under Review' ? `<button class="btn small primary" onclick="BankPortal.decideOffer('${o.id}','Accepted')">Accept</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+    return `
+      <div class="page-head">
+        <h1>Offers &amp; Decisions</h1>
+        <span class="crumb">${Store.offers.length} verified offer${Store.offers.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="banner info" style="margin-bottom:14px">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><b>Surge Verified Offers.</b> All offers listed below have been pre-screened and verified by Surge Solutions before being released to your bank for decision.</div>
+      </div>
+      <div class="gridwrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Offer Ref</th>
+              <th>Asset</th>
+              <th>Buyer</th>
+              <th class="num">Amount</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Store.offers.map(o => `
+              <tr>
+                <td class="ref">${o.ref}</td>
+                <td class="ref">${o.assetRef}</td>
+                <td>${o.buyer}</td>
+                <td class="num">${UI.fmtMoney(o.amount)}${o.belowReserve ? ' <span style="color:var(--danger);font-size:10.5px">(Below Reserve)</span>' : ''}</td>
+                <td>${UI.badge(o.status)}</td>
+                <td>
+                  ${['Under Bank Review', 'Under Review'].includes(o.status) ? `
+                    <div style="display:flex;gap:6px">
+                      <button class="btn small ok" onclick="BankPortal.decideOffer('${o.id}','Accepted')">Accept</button>
+                      <button class="btn small alert" onclick="BankPortal.decideOffer('${o.id}','Rejected')">Reject</button>
+                    </div>
+                  ` : '—'}
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">No verified offers currently pending for your bank.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
   },
 
   renderReportsView() {
@@ -2664,19 +2706,24 @@ const BankPortal = {
     return this.submitForReview();
   },
 
-  decideOffer(offerId, decision) {
+  async decideOffer(offerId, decision) {
     const offer = Store.offers.find(o => o.id === offerId);
     if (!offer) return;
-    offer.status = decision;
-    Store.addAudit(Auth.getActorName(), 'OFFER_' + decision.toUpperCase(), 'Offer', offer.ref, 'Under Review', decision, 'Bank decision');
-    if (decision === 'Accepted') {
-      const asset = Store.getAssetByRef(offer.assetRef);
-      if (asset) {
-        Store.updateAsset(asset.id, { status: 'Sale', publicationStatus: 'Withdrawn' }, Auth.getActorName(), 'Offer accepted');
-        UI.toast('Offer accepted. Sale processing can now begin.', 'success');
-      }
-    } else UI.toast('Offer ' + decision.toLowerCase(), 'success');
-    this.render();
+    if (!confirm(`Are you sure you want to mark offer ${offer.ref} as ${decision}?`)) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/decide`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ decision })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to record decision');
+      UI.toast(json.message || `Offer marked as ${decision.toLowerCase()}.`, 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
   },
 };
 
@@ -2982,6 +3029,18 @@ const AdminPortal = {
         <span class="crumb">${a.bankName}</span>
       </div>
       ${a.legalHold ? `<div class="banner red"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1"/><path d="M8 10V7a4 4 0 018 0v3"/></svg><div><b>LEGAL HOLD.</b> ${a.legalHoldReason}</div></div>` : ''}
+      ${a.deletionRequested ? `
+        <div class="banner warn" style="background:#FFF3CD;border:1px solid #FFEEBA;color:#856404;padding:12px 16px;margin-bottom:14px;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <b>⚠ DELETION REQUESTED BY PARTNER BANK</b><br>
+            <span style="font-size:12px">Requested by <b>${UI.escapeHtml(a.deletionRequestedBy || 'Bank Staff')}</b>${a.deletionRequestedAt ? ` on ${UI.fmtDateShort(a.deletionRequestedAt)}` : ''}: "${UI.escapeHtml(a.deletionRequestReason || 'No reason provided')}"</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button class="btn danger small" onclick="AdminPortal.deleteAsset('${a.id}')">Approve &amp; Delete Listing</button>
+            <button class="btn small" onclick="AdminPortal.rejectDeletionRequest('${a.id}')">Dismiss Request</button>
+          </div>
+        </div>
+      ` : ''}
       <div class="detailhead">
         <span class="ref">${a.ref}</span>
         <span class="title">${a.category} — ${a.assetType}</span>
@@ -3029,6 +3088,7 @@ const AdminPortal = {
               ` : `
                 <button class="btn success" onclick="AdminPortal.releaseLegalHold()">Release Legal Hold</button>
               `}
+              <button class="btn danger" onclick="AdminPortal.deleteAsset('${a.id}')">Delete Listing</button>
             </div>
             ${!readiness.allPass && (a.status === 'Under Review' || a.status === 'Approved') ? `
               <p style="font-size:11.5px;color:var(--warning);margin:8px 0 0">
