@@ -2509,6 +2509,7 @@ const BankPortal = {
 const AdminPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
   activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '', selectedValuationId: null,
+  openedReviewDocuments: new Set(),
 
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
@@ -2587,6 +2588,58 @@ const AdminPortal = {
     } catch (error) {
       UI.toast(error.message || 'Document download failed.', 'error');
     }
+  },
+
+  async openReviewDocument(documentId) {
+    const reviewWindow = window.open('', '_blank');
+    if (!reviewWindow) {
+      UI.toast('Allow pop-ups to open the supporting document for review.', 'error');
+      return false;
+    }
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/documents/${encodeURIComponent(documentId)}/download?view=1`,
+        { headers: Store.getAuthHeaders(), cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Document could not be opened (${response.status}).`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const contentType = response.headers.get('Content-Type') || '';
+      if (['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(contentType.toLowerCase())) {
+        reviewWindow.location.href = objectUrl;
+      } else {
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        reviewWindow.close();
+      }
+      return true;
+    } catch (error) {
+      reviewWindow.close();
+      UI.toast(error.message || 'Supporting document could not be opened.', 'error');
+      return false;
+    }
+  },
+
+  async verifyWithEvidence(kind, recordId, documentId) {
+    const evidenceKey = `${kind}:${recordId}:${documentId}`;
+    if (!this.openedReviewDocuments.has(evidenceKey)) {
+      const opened = await this.openReviewDocument(documentId);
+      if (!opened) return;
+      this.openedReviewDocuments.add(evidenceKey);
+      UI.toast('Review the opened document, then select Verify again to save your decision.', 'success');
+      this.render();
+      return;
+    }
+    return this.submitVerificationDecision(kind, recordId, 'verify');
   },
 
   renderDoctabs() {
@@ -3006,7 +3059,7 @@ const AdminPortal = {
           ${title?.perfection_status !== 'Perfected' ? '<p style="color:var(--warning);margin:0 0 10px">The submitted title is not marked Perfected. The API will not allow verification until this is corrected.</p>' : ''}
           <textarea id="title-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(title?.notes || '')}</textarea>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            ${title && title.verification_status !== 'Verified' ? `<button class="btn success" onclick="AdminPortal.verifyTitle('${UI.escapeHtml(title.id)}')" ${title.perfection_status !== 'Perfected' || !documentId ? 'disabled' : ''}>Verify Title</button>` : ''}
+            ${title && title.verification_status !== 'Verified' ? `<button class="btn success" onclick="AdminPortal.verifyTitle('${UI.escapeHtml(title.id)}','${UI.escapeHtml(documentId || '')}')" ${title.perfection_status !== 'Perfected' || !documentId ? 'disabled' : ''}>${this.openedReviewDocuments.has(`titles:${title.id}:${documentId}`) ? 'Confirm Title Verification' : 'Open Deed & Verify Title'}</button>` : ''}
             ${title && !['Verified', 'Rejected', 'Revoked'].includes(title.verification_status) ? `<button class="btn danger" onclick="AdminPortal.rejectTitle('${UI.escapeHtml(title.id)}')">Reject Title</button>` : ''}
             ${title?.verification_status === 'Verified' ? `<button class="btn danger" onclick="AdminPortal.revokeTitle('${UI.escapeHtml(title.id)}')">Revoke Verification</button>` : ''}
           </div>
@@ -3041,7 +3094,7 @@ const AdminPortal = {
       <div class="group"><div class="caption">Review Decision</div><div class="body">
         <textarea id="valuation-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(valuation.notes || '')}</textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${valuation.status !== 'Valid' ? `<button class="btn success" onclick="AdminPortal.verifyValuation('${UI.escapeHtml(valuation.id)}')">Verify Valuation</button>` : ''}
+          ${valuation.status !== 'Valid' ? `<button class="btn success" onclick="AdminPortal.verifyValuation('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}')" ${!documentId ? 'disabled' : ''}>${this.openedReviewDocuments.has(`valuations:${valuation.id}:${documentId}`) ? 'Confirm Valuation Verification' : 'Open Report & Verify Valuation'}</button>` : ''}
           ${!['Valid', 'Rejected', 'Revoked'].includes(valuation.status) ? `<button class="btn danger" onclick="AdminPortal.rejectValuation('${UI.escapeHtml(valuation.id)}')">Reject Valuation</button>` : ''}
           ${valuation.status === 'Valid' ? `<button class="btn danger" onclick="AdminPortal.revokeValuation('${UI.escapeHtml(valuation.id)}')">Revoke Verification</button>` : ''}
         </div>
@@ -3076,8 +3129,8 @@ const AdminPortal = {
     }
   },
 
-  verifyTitle(recordId) {
-    return this.submitVerificationDecision('titles', recordId, 'verify');
+  verifyTitle(recordId, documentId) {
+    return this.verifyWithEvidence('titles', recordId, documentId);
   },
 
   rejectTitle(recordId) {
@@ -3088,8 +3141,8 @@ const AdminPortal = {
     return this.submitVerificationDecision('titles', recordId, 'revoke');
   },
 
-  verifyValuation(recordId) {
-    return this.submitVerificationDecision('valuations', recordId, 'verify');
+  verifyValuation(recordId, documentId) {
+    return this.verifyWithEvidence('valuations', recordId, documentId);
   },
 
   rejectValuation(recordId) {

@@ -1536,15 +1536,20 @@ export default {
         const storedObject = await bucket.get(doc.file_path);
         if (!storedObject) return err('Stored document not found.', 404);
 
+        const viewRequested = new URL(request.url).searchParams.get('view') === '1';
+        const contentType = String(doc.content_type || '').toLowerCase();
+        const inlineContentTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+        const canViewInline = viewRequested && inlineContentTypes.has(contentType);
         await env.DB.prepare(`
           INSERT INTO document_access_logs (id, document_id, user_name, user_role, ip_address, access_type, created_at)
-          VALUES (?, ?, ?, ?, ?, 'DOWNLOAD', datetime('now'))
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
         `).bind(
           'dal-' + crypto.randomUUID(),
           doc.id,
           session.full_name || session.username,
           session.role_code,
-          request.headers.get('CF-Connecting-IP') || ''
+          request.headers.get('CF-Connecting-IP') || '',
+          canViewInline ? 'VIEW' : 'DOWNLOAD'
         ).run();
 
         const extension = extensionForMime(String(doc.content_type || '').toLowerCase());
@@ -1553,8 +1558,8 @@ export default {
           ? `${baseFilename}.${extension}`
           : baseFilename;
         const headers = new Headers(corsHeaders);
-        headers.set('Content-Type', 'application/octet-stream');
-        headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+        headers.set('Content-Type', canViewInline ? contentType : 'application/octet-stream');
+        headers.set('Content-Disposition', `${canViewInline ? 'inline' : 'attachment'}; filename="${filename}"`);
         headers.set('Cache-Control', 'private, no-store, max-age=0');
         headers.set('X-Content-Type-Options', 'nosniff');
         return new Response(storedObject.body, { headers });
