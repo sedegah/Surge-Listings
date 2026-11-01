@@ -1375,7 +1375,7 @@ export default {
           if (!deed) return err('A linked title deed is required before verification.', 400);
         }
         const status = action === 'verify' ? 'Verified' : action === 'reject' ? 'Rejected' : 'Revoked';
-        const verifiedBy = action === 'verify' ? actorName : null;
+        const verifiedBy = action === 'verify' ? activeSession?.full_name || actorName : null;
         await env.DB.prepare(`
           UPDATE title_records
           SET verification_status = ?, verified_by = ?, verified_at = ?, notes = ?

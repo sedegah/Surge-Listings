@@ -3116,7 +3116,7 @@ const AdminPortal = {
         <h1>Valuation Review</h1>${UI.badge(valuation.status)}
         <span class="crumb">${UI.escapeHtml(a.ref)} · ${UI.escapeHtml(a.bankName)}</span>
       </div>
-      <div class="banner info"><div>Review the submitted valuation and report. Verified valuations remain available in the queue and can be revoked.</div></div>
+      <div class="banner info"><div>To verify, tick “Verified by Surge Solutions” to open the report. Review the report, then tick again to save the decision. Verified valuations remain in the queue and can be revoked.</div></div>
       <div class="group"><div class="caption">Submitted Valuation</div><div class="body">
         <div class="kv-row"><span class="kv-k">Valuer</span><span class="kv-v">${UI.escapeHtml(valuation.valuer_name || '—')}</span></div>
         <div class="kv-row"><span class="kv-k">Market Value</span><span class="kv-v">${UI.fmtMoney(valuation.market_value)}</span></div>
@@ -3134,7 +3134,7 @@ const AdminPortal = {
           <label class="field" style="display:flex;align-items:center;gap:8px;margin:12px 0">
             <input type="checkbox" ${valuation.status === 'Valid' && !valuation.review_required ? 'checked disabled' : ''}
               onchange="AdminPortal.toggleValuationVerification('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}',this.checked)"
-              ${!documentId || valuation.status === 'Rejected' || valuation.status === 'Revoked' ? 'disabled' : ''}>
+              ${!documentId ? 'disabled' : ''}>
             <span>Verified by Surge Solutions</span>
           </label>
           ${!['Valid', 'Rejected', 'Revoked'].includes(valuation.status) ? `<button class="btn danger" onclick="AdminPortal.rejectValuation('${UI.escapeHtml(valuation.id)}')">Reject Valuation</button>` : ''}
@@ -3168,6 +3168,7 @@ const AdminPortal = {
       if (action === 'verify') this.render();
       else this.closeSubPage();
     } catch (error) {
+      this.render();
       UI.toast(error.message || 'Review decision could not be saved.', 'error');
     }
   },
