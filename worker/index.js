@@ -2911,17 +2911,44 @@ export default {
           if (offer.asset_status === 'Sold') {
             await env.DB.prepare(`UPDATE assets SET status = 'Live', updated_at = datetime('now') WHERE id = ?`).bind(offer.asset_id).run();
           }
-          await auditLog(actorName, actorRole, session.scope === 'surge' ? 'Surge' : 'Bank', 'OFFER_RESCIND', 'Offer', offer.offer_ref, `Offer acceptance rescinded by Bank${reason ? `: ${reason}` : ''}. Asset restored to Live.`);
+          // Cancel any commission invoice generated for this offer
+          await env.DB.prepare(`UPDATE invoices SET status = 'Cancelled' WHERE commission_id = ? AND status = 'Issued'`).bind(offer.id).run();
+
+          await auditLog(actorName, actorRole, session.scope === 'surge' ? 'Surge' : 'Bank', 'OFFER_RESCIND', 'Offer', offer.offer_ref, `Offer acceptance rescinded by Bank${reason ? `: ${reason}` : ''}. Asset restored to Live. Billing invoice cancelled.`);
           return json({ success: true, message: `Offer ${offer.offer_ref} rescinded. Asset listing restored to Live status.` });
         }
 
         await env.DB.prepare(`UPDATE offers SET status = ?, updated_at = datetime('now') WHERE id = ?`).bind(decision, offer.id).run();
         if (decision === 'Accepted') {
           await env.DB.prepare(`UPDATE assets SET status = 'Sold', updated_at = datetime('now') WHERE id = ?`).bind(offer.asset_id).run();
+
+          // Generate Success Fee & Transaction Billing Invoice for Reports & Billing
+          const commRate = Number(env.DEFAULT_COMMISSION_RATE || 4.0);
+          const commAmount = Math.round(Number(offer.amount) * (commRate / 100));
+          const invCountRow = await env.DB.prepare(`SELECT COUNT(*) as c FROM invoices`).first();
+          const invNumber = 'INV-2026-' + String((invCountRow ? invCountRow.c : 0) + 101).padStart(5, '0');
+          const invId = 'inv-' + Date.now();
+          const dueDate = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+          const issueDate = new Date().toISOString().split('T')[0];
+
+          // Check if invoice already exists for this offer to prevent duplicates
+          const existingInv = await env.DB.prepare(`SELECT id FROM invoices WHERE commission_id = ?`).bind(offer.id).first();
+          if (!existingInv) {
+            await env.DB.prepare(`
+              INSERT INTO invoices (id, invoice_number, commission_id, bank_id, amount, description, issue_date, due_date, status, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Issued', datetime('now'))
+            `).bind(
+              invId, invNumber, offer.id, offer.bank_id, commAmount,
+              `Surge Solutions ${commRate}% Success Fee — Asset ${offer.asset_ref} (Accepted Offer ${offer.offer_ref} by ${offer.buyer_name})`,
+              issueDate, dueDate
+            ).run();
+
+            await auditLog(actorName, actorRole, session.scope === 'surge' ? 'Surge' : 'Bank', 'INVOICE_GENERATED', 'Invoice', invNumber, `Commission invoice ${invNumber} of GHS ${commAmount.toLocaleString()} generated for ${offer.asset_ref}`);
+          }
         }
 
         await auditLog(actorName, actorRole, session.scope === 'surge' ? 'Surge' : 'Bank', 'OFFER_DECISION', 'Offer', offer.offer_ref, `Decision: ${decision}`);
-        return json({ success: true, message: `Offer ${decision.toLowerCase()}.` });
+        return json({ success: true, message: `Offer ${decision.toLowerCase()}. Reports & Billing updated with transaction success fee.` });
       }
 
       // Invoices

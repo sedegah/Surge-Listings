@@ -574,10 +574,10 @@ const Store = {
         const json = await invoicesRes.value.json();
         if (json.success && Array.isArray(json.data)) {
           this.invoices = json.data.map(i => ({
-            id: i.id, ref: i.invoice_ref || i.id, bankId: i.bank_id,
+            id: i.id, ref: i.invoice_number || i.invoice_ref || i.id, bankId: i.bank_id,
             bankName: i.bank_name || '', description: i.description || '',
             amount: i.total_amount || i.amount || 0, status: i.status,
-            issuedAt: i.created_at, paidAt: i.paid_at
+            issuedAt: i.issue_date || i.created_at, dueDate: i.due_date, paidAt: i.paid_at
           }));
         }
       }
@@ -2653,25 +2653,92 @@ const BankPortal = {
 
   renderReportsView() {
     const assets = Store.getBankAssets();
+    const acceptedOffers = Store.offers.filter(o => o.status === 'Accepted');
+    const totalRealized = acceptedOffers.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const totalBilled = Store.invoices.reduce((sum, i) => sum + (i.status !== 'Cancelled' ? Number(i.amount) || 0 : 0), 0);
+    const soldAssets = assets.filter(a => a.status === 'Sold');
+
     return `
-      <div class="page-head"><h1>Reports &amp; Billing</h1></div>
-      <div class="kpis">
-        <div class="kpi"><div class="k">Total</div><div class="v">${assets.length}</div></div>
-        <div class="kpi ok"><div class="k">Live</div><div class="v">${assets.filter(a => a.status === 'Live').length}</div></div>
-        <div class="kpi warn"><div class="k">Pending</div><div class="v">${assets.filter(a => ['Submitted','Under Review'].includes(a.status)).length}</div></div>
-        <div class="kpi"><div class="k">Offers</div><div class="v">${Store.offers.length}</div></div>
-        <div class="kpi alert"><div class="k">Holds</div><div class="v">${assets.filter(a => a.legalHold).length}</div></div>
+      <div class="page-head">
+        <h1>Reports &amp; Billing</h1>
+        <span class="crumb">${assets.length} portfolio assets · ${Store.invoices.length} invoices</span>
       </div>
-      <div class="group"><div class="caption">Monthly Report</div><div class="body">
-        <button class="btn" onclick="UI.exportPDF()">Export PDF</button>
-        <button class="btn" onclick="UI.exportExcel('assets')">Export Excel (CSV)</button>
-      </div></div>
-      <div class="group"><div class="caption">Billing &amp; Invoices</div><div class="body">
-        <table class="grid">
-          <thead><tr><th>Invoice</th><th>Description</th><th class="num">Amount</th><th>Status</th></tr></thead>
-          <tbody>${Store.invoices.map(i => `<tr><td class="ref">${i.ref}</td><td>${i.description}</td><td class="num">${UI.fmtMoney(i.amount)}</td><td>${UI.badge(i.status)}</td></tr>`).join('')}</tbody>
-        </table>
-      </div></div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="k">Total Assets</div><div class="v">${assets.length}</div></div>
+        <div class="kpi ok"><div class="k">Live on Market</div><div class="v">${assets.filter(a => a.status === 'Live').length}</div></div>
+        <div class="kpi ok"><div class="k">Disposed / Sold</div><div class="v">${soldAssets.length}</div></div>
+        <div class="kpi ok"><div class="k">Total Realized</div><div class="v" style="font-size:16px">${UI.fmtMoney(totalRealized)}</div></div>
+        <div class="kpi"><div class="k">Surge Fees Billed</div><div class="v" style="font-size:16px">${UI.fmtMoney(totalBilled)}</div></div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Portfolio Reports &amp; Exports</div>
+        <div class="body" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" onclick="UI.exportPDF()">Export Summary (PDF)</button>
+          <button class="btn" onclick="UI.exportExcel('assets')">Export Assets (CSV)</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Disposal &amp; Transaction Realization <span class="hint">${acceptedOffers.length} offer${acceptedOffers.length === 1 ? '' : 's'} accepted</span></div>
+        <div class="body">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Offer Ref</th>
+                <th>Asset</th>
+                <th>Purchaser</th>
+                <th class="num">Realized Amount</th>
+                <th>Date Accepted</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${acceptedOffers.map(o => `
+                <tr onclick="BankPortal.openOffer('${o.id}')" style="cursor:pointer">
+                  <td class="ref"><b>${o.ref}</b></td>
+                  <td class="ref">${o.assetRef}</td>
+                  <td><b>${UI.escapeHtml(o.buyer)}</b></td>
+                  <td class="num"><b>${UI.fmtMoney(o.amount)}</b></td>
+                  <td><small>${UI.fmtDateShort(o.date)}</small></td>
+                  <td><span class="badge ok">✓ Sold / Accepted</span></td>
+                </tr>
+              `).join('') || '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-2)">No accepted offers yet. Accepted offers will appear here with realized recovery values.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Billing &amp; Invoices <span class="hint">${Store.invoices.length} invoice${Store.invoices.length === 1 ? '' : 's'}</span></div>
+        <div class="body">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Invoice #</th>
+                <th>Description</th>
+                <th>Issue Date</th>
+                <th>Due Date</th>
+                <th class="num">Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${Store.invoices.map(i => `
+                <tr>
+                  <td class="ref"><b>${i.ref}</b></td>
+                  <td>${UI.escapeHtml(i.description)}</td>
+                  <td><small>${i.issuedAt ? UI.fmtDateShort(i.issuedAt) : '—'}</small></td>
+                  <td><small>${i.dueDate ? UI.fmtDateShort(i.dueDate) : '14 Days'}</small></td>
+                  <td class="num"><b>${UI.fmtMoney(i.amount)}</b></td>
+                  <td>${UI.badge(i.status)}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-2)">No billing invoices issued yet. Transaction success fees are billed automatically when an offer is accepted.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
     `;
   },
 
