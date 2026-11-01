@@ -100,6 +100,33 @@ const Auth = {
     window.location.href = 'login.html';
   },
 
+  showVerificationError(message, requiredScope) {
+    const status = document.getElementById('portal-auth-status');
+    if (!status) return;
+
+    status.replaceChildren();
+    const messageEl = document.createElement('p');
+    messageEl.textContent = message;
+    status.appendChild(messageEl);
+
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn primary';
+    retry.textContent = 'Retry';
+    retry.addEventListener('click', async () => {
+      retry.disabled = true;
+      status.replaceChildren(document.createTextNode('Verifying your session…'));
+      await this.checkAuth(requiredScope);
+    });
+    status.appendChild(retry);
+
+    const signIn = document.createElement('a');
+    signIn.className = 'btn';
+    signIn.href = 'login.html?reason=required';
+    signIn.textContent = 'Return to sign in';
+    status.appendChild(signIn);
+  },
+
   async checkAuth(requiredScope = 'bank') {
     const path = window.location.pathname.toLowerCase();
 
@@ -127,7 +154,7 @@ const Auth = {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       let res;
       let data;
       try {
@@ -140,8 +167,13 @@ const Auth = {
         clearTimeout(timeoutId);
       }
       if (!res.ok) {
-        console.warn('[Auth Guard] Session invalid or expired. Clearing session.', { status: res.status });
-        this.logout();
+        if (res.status === 401) {
+          console.warn('[Auth Guard] Session invalid or expired. Clearing session.', { status: res.status });
+          this.logout();
+          return false;
+        }
+        console.error('[Auth Guard] Session could not be verified by the server.', { status: res.status });
+        this.showVerificationError('The session service is temporarily unavailable. Retry, or return to sign in.', requiredScope);
         return false;
       }
       if (!data.authenticated || !data.user) {
@@ -175,8 +207,11 @@ const Auth = {
       document.body.classList.add('auth-ready');
       return true;
     } catch(e) {
-      console.error('[Auth Guard] Auth check failed with network error:', e);
-      this.logout();
+      console.error('[Auth Guard] Auth check failed before the server could verify the session:', e);
+      const message = e.name === 'AbortError'
+        ? 'Session verification timed out. Your saved sign-in was kept; retry in a moment.'
+        : 'Could not reach the session service. Your saved sign-in was kept; check your connection and retry.';
+      this.showVerificationError(message, requiredScope);
       return false;
     }
   },
@@ -275,6 +310,10 @@ const Store = {
             ref: d.public_ref,
             bankId: d.bank_id,
             bankName: d.bank_name || '',
+            ownershipType: d.ownership_type || 'bank',
+            ownerBankId: d.owner_bank_id || '',
+            ownerBankName: d.owner_bank_name || '',
+            ownerName: d.owner_name || '',
             category: d.category_code,
             assetType: d.asset_type,
             region: d.region,
@@ -714,6 +753,16 @@ const UI = {
     const mb = document.getElementById('modal-backdrop');
     if (mb) mb.classList.remove('open');
   },
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+  },
+  assetOwnerLabel(asset) {
+    if (asset.ownershipType === 'individual') return asset.ownerName || 'Individual';
+    if (asset.ownershipType === 'surge') return 'Surge Solutions';
+    return asset.ownerBankName || asset.bankName || 'Partner bank';
+  },
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
   fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
   fmtDateShort(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
@@ -796,12 +845,12 @@ const BankPortal = {
     const authed = await Auth.checkAuth('bank');
     if (!authed) return;
 
-    await Promise.all([Store.fetchRemote(), this.loadBranches()]);
-
     document.querySelectorAll('#bank-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });
     this.render();
+    void Store.fetchRemote();
+    void this.loadBranches().then(() => this.render());
   },
 
   async loadBranches() {
@@ -920,7 +969,7 @@ const BankPortal = {
         ${activeBranch ? `<span class="badge ok">Branch: ${activeBranch.name}</span>` : ''}
       </div>
       <div class="kpis">
-        <div class="kpi" onclick="BankPortal.nav('assets')"><div class="k">Total Assets</div><div class="v">${totalCount}</div><div class="d">${activeBranch ? 'This branch workspace' : 'All bank-owned records'}</div></div>
+        <div class="kpi" onclick="BankPortal.nav('assets')"><div class="k">Total Assets</div><div class="v">${totalCount}</div><div class="d">${activeBranch ? 'This branch workspace' : 'All records managed by this bank'}</div></div>
         <div class="kpi ok" onclick="BankPortal.nav('assets')"><div class="k">Live Listings</div><div class="v">${live}</div><div class="d">Published to Marketplace</div></div>
         <div class="kpi warn" onclick="BankPortal.nav('assets')"><div class="k">Pending Review</div><div class="v">${pending}</div><div class="d">Awaiting Surge review</div></div>
         <div class="kpi alert" onclick="BankPortal.nav('legal')"><div class="k">Legal Holds</div><div class="v">${holds}</div><div class="d">Blocked from publication</div></div>
@@ -962,12 +1011,13 @@ const BankPortal = {
         </div>
         <table class="grid">
           <thead><tr>
-            <th>Reference</th><th>Category</th><th>Location</th><th class="num">Reserve (GHS)</th><th>Status</th><th>Publication</th><th>Updated</th>
+            <th>Reference</th><th>Owner</th><th>Category</th><th>Location</th><th class="num">Reserve (GHS)</th><th>Status</th><th>Publication</th><th>Updated</th>
           </tr></thead>
           <tbody>
             ${assets.length ? assets.map(a => `
               <tr onclick="BankPortal.openAsset('${a.id}')">
                 <td class="ref">${a.ref}</td>
+                <td>${UI.escapeHtml(UI.assetOwnerLabel(a))}</td>
                 <td>${a.category}<span class="sub">${a.assetType}</span></td>
                 <td>${a.publicLocation}</td>
                 <td class="num">${a.showReserve ? UI.fmtMoney(a.reserve) : 'POA'}</td>
@@ -975,7 +1025,7 @@ const BankPortal = {
                 <td>${UI.badge(a.publicationStatus)}</td>
                 <td>${UI.fmtDateShort(a.updatedAt)}</td>
               </tr>
-            `).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:30px">No assets registered yet. Click "+ New Asset" to create your first draft.</td></tr>'}
+            `).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-2);padding:30px">No assets registered yet. Click "+ New Asset" to create your first draft.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1050,6 +1100,7 @@ const BankPortal = {
 
   renderOverviewTab(a) {
     const canEdit = ['Draft', 'Changes Required', 'Submitted'].includes(a.status);
+    const owner = UI.assetOwnerLabel(a);
     if (!canEdit) {
       return `
         <div class="grid2">
@@ -1060,6 +1111,7 @@ const BankPortal = {
               <div class="field"><span class="lbl">Category</span><div class="ctl"><input value="${a.category}" readonly></div></div>
               <div class="field"><span class="lbl">Asset Type</span><div class="ctl"><input value="${a.assetType || '—'}" readonly></div></div>
               <div class="field"><span class="lbl">Internal Bank Ref</span><div class="ctl"><input value="${a.caseRef || '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Asset Owner</span><div class="ctl"><input value="${UI.escapeHtml(owner || '—')}" readonly></div></div>
             </div>
           </div>
           <div class="group">
@@ -1112,6 +1164,9 @@ const BankPortal = {
             </div></div>
             <div class="field"><span class="lbl">Internal Bank Reference <span class="req">*</span></span><div class="ctl">
               <input id="edit-ov-caseRef" value="${a.caseRef || ''}" placeholder="e.g. BNK-LN-88214">
+            </div></div>
+            <div class="field"><span class="lbl">Asset Owner</span><div class="ctl">
+              <input value="${UI.escapeHtml(owner || '—')}" readonly>
             </div></div>
             <div class="field"><span class="lbl">Enforcement Basis</span><div class="ctl">
               <select id="edit-ov-enforcementBasis">
@@ -1823,27 +1878,100 @@ const BankPortal = {
   },
 
   async newAsset() {
+    const user = Auth.getUser();
+    if (user?.scope !== 'surge') {
+      return this.createAsset({ ownershipType: 'bank' });
+    }
+
+    try {
+      UI.modal('Create Asset Draft', `
+        <p>Records created here are managed by Surge Partner Bank. Select who owns this asset.</p>
+        <div class="field"><span class="lbl">Asset owner</span><div class="ctl">
+          <select id="asset-owner-type" onchange="BankPortal.updateOwnerFields()">
+            <option value="bank">Another partner bank</option>
+            <option value="individual">An individual</option>
+            <option value="surge">Surge Solutions</option>
+          </select>
+        </div></div>
+        <div class="field" id="asset-owner-bank-field"><span class="lbl">Owning bank</span><div class="ctl">
+          <select id="asset-owner-bank"><option value="">Loading partner banks…</option></select>
+        </div></div>
+        <div class="field" id="asset-owner-name-field" style="display:none"><span class="lbl">Individual owner name</span><div class="ctl">
+          <input id="asset-owner-name" maxlength="160" placeholder="Enter the owner's full name">
+        </div></div>
+        <div class="field"><span class="lbl">Asset category</span><div class="ctl">
+          <select id="asset-category">
+            <option value="House">House</option><option value="Apartment">Apartment</option>
+            <option value="Commercial">Commercial</option><option value="Land">Land</option>
+            <option value="Vehicle">Vehicle</option><option value="Equipment">Equipment</option>
+          </select>
+        </div></div>
+        <div class="field"><span class="lbl">Asset type</span><div class="ctl">
+          <input id="asset-type" value="Property" maxlength="120">
+        </div></div>
+      `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="BankPortal.submitNewAsset()">Create Draft</button>`);
+      this.updateOwnerFields();
+
+      const response = await fetch(Store.API_BASE + '/api/admin/banks', { headers: Store.getAuthHeaders() });
+      if (!response.ok) throw new Error(`Could not load partner banks (${response.status}).`);
+      const result = await response.json();
+      if (!result.success || !Array.isArray(result.data)) throw new Error(result.error || 'Could not load partner banks.');
+
+      const select = document.getElementById('asset-owner-bank');
+      if (select) {
+        select.replaceChildren(new Option('Select owning bank…', ''));
+        result.data.filter(bank => bank.id !== 'bank-surge').forEach(bank => {
+          select.add(new Option(bank.legal_name, bank.id));
+        });
+      }
+    } catch (e) {
+      console.error('Could not prepare asset form:', e);
+      UI.toast(e.message || 'Could not load the partner banks.', 'error');
+    }
+  },
+
+  updateOwnerFields() {
+    const type = document.getElementById('asset-owner-type')?.value;
+    const bankField = document.getElementById('asset-owner-bank-field');
+    const nameField = document.getElementById('asset-owner-name-field');
+    if (bankField) bankField.style.display = type === 'bank' ? '' : 'none';
+    if (nameField) nameField.style.display = type === 'individual' ? '' : 'none';
+  },
+
+  async submitNewAsset() {
+    const ownershipType = document.getElementById('asset-owner-type')?.value || 'bank';
+    const ownerBankId = document.getElementById('asset-owner-bank')?.value || '';
+    const ownerName = document.getElementById('asset-owner-name')?.value.trim() || '';
+    if (ownershipType === 'bank' && !ownerBankId) return UI.toast('Select the owning bank.', 'error');
+    if (ownershipType === 'individual' && !ownerName) return UI.toast('Enter the individual owner’s name.', 'error');
+    const categoryCode = document.getElementById('asset-category')?.value || 'House';
+    const assetType = document.getElementById('asset-type')?.value.trim() || 'Property';
+    await this.createAsset({ ownershipType, ownerBankId, ownerName, categoryCode, assetType });
+  },
+
+  async createAsset({ ownershipType, ownerBankId = '', ownerName = '', categoryCode = 'House', assetType = 'Property' }) {
     UI.toast('Creating new asset...', 'info');
     try {
       const user = Auth.getUser();
-      const bankId = user?.bankId || user?.bank_id || (user?.scope === 'surge' ? 'bank-surge' : null);
       const branchId = Auth.selectedBranchId || user?.branchId || user?.branch_id || null;
       const actorName = user?.fullName || user?.full_name || user?.username || 'Officer';
 
       const res = await fetch(Store.API_BASE + '/api/v1/assets', {
         method: 'POST',
         headers: Store.getAuthHeaders(),
-        body: JSON.stringify({ bankId, branchId, categoryCode: 'House', assetType: 'Property', reservePrice: 0 })
+        body: JSON.stringify({ branchId, ownershipType, ownerBankId, ownerName, categoryCode, assetType, reservePrice: 0 })
       });
       const json = await res.json();
-      if (!json.success || !json.data) {
-        UI.toast('Failed to create asset: ' + (json.error || 'Unknown error'), 'error');
+      if (!res.ok || !json.success || !json.data) {
+        UI.toast('Failed to create asset: ' + (json.error || `Request failed (${res.status})`), 'error');
         return;
       }
       const d = json.data;
       const asset = {
-        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || (user?.bankName || ''),
-        branchId: d.branch_id || branchId,
+        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || (user?.bankName || 'Surge Partner Bank'),
+        ownershipType: d.ownership_type || ownershipType, ownerBankId: d.owner_bank_id || ownerBankId,
+        ownerBankName: d.owner_bank_name || (ownerBankId ? document.getElementById('asset-owner-bank')?.selectedOptions[0]?.textContent : '') || '',
+        ownerName: d.owner_name || ownerName, branchId: d.branch_id || branchId,
         category: d.category_code, assetType: d.asset_type || '', region: d.region || 'Greater Accra',
         district: d.district || '', town: d.town || '', publicLocation: d.public_location || '',
         exactAddress: d.exact_address || '', description: d.description || '',
@@ -1860,6 +1988,7 @@ const BankPortal = {
         activity: [{ when: d.created_at, who: d.created_by || actorName, what: 'Asset created as Draft' }],
       };
       Store.assets.unshift(asset);
+      UI.closeModal();
       UI.toast('Draft asset created: ' + d.public_ref, 'success');
       this.openAsset(d.id);
     } catch (e) {
@@ -2018,11 +2147,11 @@ const AdminPortal = {
     const authed = await Auth.checkAuth('surge');
     if (!authed) return;
 
-    await Store.fetchRemote();
     document.querySelectorAll('#admin-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });
     this.render();
+    void Store.fetchRemote();
   },
 
   onBankRegionChange(region) {
@@ -2091,7 +2220,7 @@ const AdminPortal = {
   },
 
   renderAssetList() {
-    return `<div class="page-head"><h1>All Assets</h1><span class="crumb">${Store.assets.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Category</th><th>Status</th><th>Legal</th><th>Readiness</th></tr></thead><tbody>${Store.assets.length ? Store.assets.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${a.category}</td><td>${UI.badge(a.status)}</td><td>${UI.badge(a.legalStatus)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td></tr>`; }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-2);padding:30px">No assets registered in the platform yet.</td></tr>'}</tbody></table></div>`;
+    return `<div class="page-head"><h1>All Assets</h1><span class="crumb">${Store.assets.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Managing Bank</th><th>Owner</th><th>Category</th><th>Status</th><th>Legal</th><th>Readiness</th></tr></thead><tbody>${Store.assets.length ? Store.assets.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${UI.escapeHtml(a.bankName)}</td><td>${UI.escapeHtml(UI.assetOwnerLabel(a))}</td><td>${UI.escapeHtml(a.category)}</td><td>${UI.badge(a.status)}</td><td>${UI.badge(a.legalStatus)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td></tr>`; }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:30px">No assets registered in the platform yet.</td></tr>'}</tbody></table></div>`;
   },
 
   openAsset(id) { this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },

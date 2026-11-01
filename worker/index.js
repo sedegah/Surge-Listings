@@ -539,6 +539,10 @@ export default {
 
         const role = await env.DB.prepare(`SELECT scope FROM roles WHERE code = ?`).bind(role_code).first();
         if (!role) return err('The selected role does not exist.', 400);
+        if (role.scope === 'surge') {
+          const surgeBank = await env.DB.prepare(`SELECT id FROM banks WHERE id = 'bank-surge'`).first();
+          if (!surgeBank) return err('Surge Partner Bank is not configured. Apply the bank setup migration first.', 503);
+        }
 
         const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ? OR email = ?`).bind(username.trim().toLowerCase(), email.trim().toLowerCase()).first();
         if (existing) return err('A user with this username or email already exists.', 400);
@@ -913,12 +917,14 @@ export default {
           }
           let sql = `
             SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
+              owner_bank.legal_name as owner_bank_name,
               (SELECT COUNT(*) FROM asset_images WHERE asset_id = a.id) as image_count,
               (SELECT COUNT(*) FROM documents WHERE asset_id = a.id) as document_count,
               (SELECT COUNT(*) FROM offers WHERE asset_id = a.id) as offer_count
             FROM assets a
             JOIN banks b ON a.bank_id = b.id
             LEFT JOIN bank_branches br ON a.branch_id = br.id
+            LEFT JOIN banks owner_bank ON owner_bank.id = a.owner_bank_id
           `;
           let stmt;
           if (!canViewAllBanks) {
@@ -944,6 +950,33 @@ export default {
             ? 'bank-surge'
             : callerBankId;
           if (!assetBankId) return err('A bank must be selected before creating an asset.', 400);
+          const assetBank = await env.DB.prepare(`SELECT id FROM banks WHERE id = ?`).bind(assetBankId).first();
+          if (!assetBank) return err('The selected bank is not configured.', 400);
+          const ownershipType = session.scope === 'surge' ? body.ownershipType : 'bank';
+          if (!['bank', 'individual', 'surge'].includes(ownershipType)) {
+            return err('Choose whether the asset belongs to a bank, an individual, or Surge Solutions.', 400);
+          }
+          const ownerBankId = session.scope !== 'surge'
+            ? assetBankId
+            : ownershipType === 'bank' ? body.ownerBankId : null;
+          const ownerName = session.scope !== 'surge'
+            ? null
+            : ownershipType === 'individual' ? String(body.ownerName || '').trim()
+              : ownershipType === 'surge' ? 'Surge Solutions' : null;
+          if (ownershipType === 'bank') {
+            if (!ownerBankId) return err('Select the bank that owns the asset.', 400);
+            const ownerBank = await env.DB.prepare(`SELECT id FROM banks WHERE id = ?`).bind(ownerBankId).first();
+            if (!ownerBank) return err('The selected owner bank does not exist.', 400);
+          }
+          if (ownershipType === 'individual' && !ownerName) {
+            return err('Enter the individual owner’s name.', 400);
+          }
+          const branchId = body.branchId || (session.scope === 'surge' ? null : callerBranchId) || null;
+          if (branchId) {
+            const branch = await env.DB.prepare(`SELECT id FROM bank_branches WHERE id = ? AND bank_id = ?`)
+              .bind(branchId, assetBankId).first();
+            if (!branch) return err('The selected branch does not belong to the asset’s managing bank.', 400);
+          }
           const id = 'a-' + Date.now();
           const year = new Date().getFullYear();
           const cat = body.categoryCode || 'House';
@@ -955,15 +988,18 @@ export default {
 
           await env.DB.prepare(`
             INSERT INTO assets (
-              id, bank_id, branch_id, public_ref, internal_bank_ref, category_code, asset_type,
+              id, bank_id, ownership_type, owner_bank_id, owner_name, branch_id, public_ref, internal_bank_ref, category_code, asset_type,
               title, description, region, district, town, public_location, exact_address,
               reserve_price, minimum_offer, show_reserve_publicly, occupancy_status, land_guard_risk,
               status, legal_hold_active, review_required, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 0, 0, ?, datetime('now'), datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 0, 0, ?, datetime('now'), datetime('now'))
           `).bind(
             id,
             assetBankId,
-            body.branchId || callerBranchId || null,
+            ownershipType,
+            ownerBankId,
+            ownerName,
+            branchId,
             publicRef,
             body.internalBankRef || ('BNK-REF-' + Math.floor(10000 + Math.random() * 90000)),
             cat,
@@ -984,7 +1020,13 @@ export default {
           ).run();
 
           await auditLog(actorName, actorRole, 'Bank', 'CREATE', 'Asset', publicRef, `Draft asset created: ${publicRef}`);
-          const created = await env.DB.prepare(`SELECT * FROM assets WHERE id = ?`).bind(id).first();
+          const created = await env.DB.prepare(`
+            SELECT a.*, b.legal_name as bank_name, owner_bank.legal_name as owner_bank_name
+            FROM assets a
+            JOIN banks b ON b.id = a.bank_id
+            LEFT JOIN banks owner_bank ON owner_bank.id = a.owner_bank_id
+            WHERE a.id = ?
+          `).bind(id).first();
           return json({ success: true, data: created }, 201);
         }
       }
@@ -994,10 +1036,12 @@ export default {
         const session = await requireBankAuth();
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`
-          SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name
+          SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
+                 owner_bank.legal_name as owner_bank_name
           FROM assets a
           JOIN banks b ON a.bank_id = b.id
           LEFT JOIN bank_branches br ON a.branch_id = br.id
+          LEFT JOIN banks owner_bank ON owner_bank.id = a.owner_bank_id
           WHERE a.id = ? OR a.public_ref = ?
         `).bind(id, id).first();
 
@@ -1122,7 +1166,7 @@ export default {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+        if (asset.bank_id !== session.bank_id) {
           return err('Asset not found or access denied.', 404);
         }
         if (asset.legal_hold_active) return err('Legal hold is active on this asset.', 400);

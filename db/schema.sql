@@ -95,6 +95,9 @@ CREATE TABLE IF NOT EXISTS asset_categories (
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY,
   bank_id TEXT NOT NULL,
+  ownership_type TEXT NOT NULL DEFAULT 'bank' CHECK (ownership_type IN ('bank', 'individual', 'surge')),
+  owner_bank_id TEXT,
+  owner_name TEXT,
   branch_id TEXT,
   public_ref TEXT NOT NULL UNIQUE,
   internal_bank_ref TEXT NOT NULL,
@@ -126,6 +129,7 @@ CREATE TABLE IF NOT EXISTS assets (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (bank_id) REFERENCES banks(id),
+  FOREIGN KEY (owner_bank_id) REFERENCES banks(id),
   FOREIGN KEY (category_code) REFERENCES asset_categories(code)
 );
 
@@ -570,4 +574,3 @@ CREATE TABLE IF NOT EXISTS organization_members (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
-
