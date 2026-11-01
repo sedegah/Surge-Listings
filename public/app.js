@@ -2628,6 +2628,16 @@ const AdminPortal = {
     this.subPage = 'valuation-verify';
     this.render();
   },
+  openLatestValuation(assetId) {
+    const valuation = Store.valuations
+      .filter(record => record.asset_id === assetId)
+      .sort((left, right) => String(right.valuation_date).localeCompare(String(left.valuation_date)))[0];
+    if (!valuation) {
+      UI.toast('The bank has not submitted a valuation record for this asset yet.', 'warn');
+      return;
+    }
+    this.openValuation(assetId, valuation.id);
+  },
   openTitleReview(assetId) {
     this.selectedAssetId = assetId;
     this.selectedValuationId = null;
@@ -2739,7 +2749,7 @@ const AdminPortal = {
     if (!c.pass) {
       if (c.key === 'legal' || c.key === 'injunction' || c.key === 'hold') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open</button>`;
       else if (c.key === 'title' || c.key === 'landSearch') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Verify Title</button>`;
-      else if (c.key === 'valuation') fix = `<button class="btn small" onclick="UI.toast('Ask bank to re-upload valuation','warn')">Ask Bank for New Valuation</button>`;
+      else if (c.key === 'valuation') fix = `<button class="btn small primary" onclick="AdminPortal.openLatestValuation('${UI.escapeHtml(a.id)}')">${Store.valuations.some(record => record.asset_id === a.id) ? 'Review Valuation' : 'Request Valuation'}</button>`;
       else fix = `<span style="font-size:11px;color:var(--text-2);font-style:italic">Awaiting bank submission</span>`;
     }
     return `
