@@ -4341,6 +4341,118 @@ const AdminPortal = {
       UI.closeModal();
       this.render();
     }
+  },
+
+  async verifyOffer(offerId) {
+    const offer = Store.offers.find(o => o.id === offerId);
+    const label = offer ? `offer ${offer.ref} (${UI.fmtMoney(offer.amount)})` : 'this offer';
+    if (!confirm(`Verify ${label}? Once verified, the recovery bank will be able to see the offer and decide whether to accept or reject it.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/verify`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to verify offer');
+      UI.toast(json.message || 'Offer verified and released to the bank.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  rejectOfferModal(offerId) {
+    const offer = Store.offers.find(o => o.id === offerId);
+    if (!offer) return;
+    const bodyHtml = `
+      <p style="font-size:13px;color:var(--text-1);margin-bottom:12px">
+        Reject offer <b>${offer.ref}</b> from <b>${UI.escapeHtml(offer.buyer)}</b> (${UI.fmtMoney(offer.amount)}).
+        The offer will not be released to the recovery bank.
+      </p>
+      <div class="field">
+        <span class="lbl">Rejection Reason <span class="req">*</span></span>
+        <div class="ctl">
+          <textarea id="reject-offer-reason" style="width:100%;height:80px;font-family:inherit;font-size:13px" placeholder="e.g. Unrealistic offer below minimum threshold, KYC qualification failed, fraudulent contact details..."></textarea>
+        </div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn danger" onclick="AdminPortal.submitRejectOffer('${offerId}')">Confirm Rejection</button>
+    `;
+    UI.modal('Reject Offer', bodyHtml, footerHtml);
+  },
+
+  async submitRejectOffer(offerId) {
+    const reason = document.getElementById('reject-offer-reason')?.value?.trim();
+    if (!reason) {
+      return UI.toast('Please provide a reason for rejecting the offer.', 'error');
+    }
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/reject`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ reason })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to reject offer');
+      UI.closeModal();
+      UI.toast(json.message || 'Offer rejected.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  async deleteAsset(id = this.selectedAssetId) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    const promptMsg = a.status === 'Live'
+      ? `Are you sure you want to permanently delete listing ${a.ref}?\n\nThis listing is currently PUBLISHED on the live marketplace. Deleting it will remove it from the marketplace and delete all associated records (documents, valuations, titles, offers). This action CANNOT be undone.`
+      : `Are you sure you want to permanently delete asset ${a.ref}? All associated records will be deleted.`;
+    if (!confirm(promptMsg)) return;
+
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete listing');
+      UI.toast(json.message || `Listing ${a.ref} deleted successfully.`, 'success');
+      this.closeAsset();
+      await Store.fetchRemote();
+      this.render();
+      if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  async rejectDeletionRequest(id = this.selectedAssetId) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    if (!confirm(`Dismiss the deletion request for ${a.ref}? The listing will remain published.`)) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}/reject-deletion-request`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to dismiss request');
+      UI.toast(json.message || 'Deletion request dismissed.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
   }
 };
 
