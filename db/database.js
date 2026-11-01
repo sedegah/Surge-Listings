@@ -685,7 +685,7 @@ function seedData() {
       year: 2015,
       mileage: null,
       fuel: null,
-      created_by: 'k.asare'
+      created_by: null
     },
     {
       id: 'ast-005',

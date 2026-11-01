@@ -535,6 +535,7 @@ const Store = {
             branchId: u.branch_id,
             branchName: u.branch_name || 'Head Office',
             status: u.status || 'Active',
+            protected: !!u.is_protected,
             hasPassword: !!u.has_password,
             mfaEnabled: !!u.mfa_enabled,
             lastLogin: u.last_login,
@@ -3018,7 +3019,7 @@ const AdminPortal = {
         <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end">
           <div>
             <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Search Staff by Name / Username / Email</label>
-            <input type="text" placeholder="e.g. Mensah or j.mensah..." value="${this.staffSearchQuery || ''}" 
+            <input type="text" placeholder="Search by name, username, or email..." value="${this.staffSearchQuery || ''}"
               oninput="AdminPortal.staffSearchQuery = this.value; AdminPortal.render();" 
               style="width:100%;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
           </div>
@@ -3102,7 +3103,7 @@ const AdminPortal = {
                 </td>
                 <td style="text-align:right">
                   <div style="display:inline-flex;gap:4px">
-                    <button class="btn small danger" onclick="Store.deleteUser('${u.id}')" title="Delete account" aria-label="Delete ${u.username} account">
+                    <button class="btn small danger" onclick="Store.deleteUser('${u.id}')" title="${u.protected ? 'Protected owner account' : 'Delete account'}" aria-label="${u.protected ? 'Protected owner account' : `Delete ${u.username} account`}" ${u.protected ? 'disabled' : ''}>
                       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M5 7l1 14h12l1-14"/><path d="M9 7V4h6v3"/></svg>
                     </button>
                   </div>

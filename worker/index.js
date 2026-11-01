@@ -824,6 +824,7 @@ export default {
           SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
                  u.status, u.mfa_enabled, u.last_login, u.created_at,
                  CASE WHEN u.password_hash IS NOT NULL AND length(u.password_hash) > 0 THEN 1 ELSE 0 END as has_password,
+                 EXISTS (SELECT 1 FROM protected_user_accounts pua WHERE pua.user_id = u.id) AS is_protected,
                  r.name as role_name, r.scope, o.name as org_name,
                  b.legal_name as bank_name, b.short_code as bank_code,
                  br.name as branch_name
@@ -936,7 +937,7 @@ export default {
         const protectedAccount = await env.DB.prepare(`
           SELECT 1 AS protected FROM protected_user_accounts WHERE user_id = ?
         `).bind(userId).first();
-        if (protectedAccount) return err('This owner account is protected and cannot be deleted.', 403);
+        if (protectedAccount) return err('This owner account is protected and cannot be deleted.', 409);
         if (target.id === session.user_id) return err('You cannot delete your own account.', 409);
 
         if (target.role_code === 'SA' && target.status === 'Active') {

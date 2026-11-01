@@ -4,10 +4,7 @@ CREATE TABLE IF NOT EXISTS protected_user_accounts (
 );
 
 INSERT OR IGNORE INTO protected_user_accounts (user_id)
-SELECT id
-FROM users
-WHERE (lower(username) = 'k.sedegah' AND lower(email) = 'k.sedegah@surgesolutions.com.gh')
-   OR (lower(username) = 's.k.sedegah' AND lower(email) = 'seday74+1@gmail.com');
+VALUES ('u-sedegah'), ('u-mvvftjyt-k995');
 
 CREATE TRIGGER IF NOT EXISTS prevent_protected_user_deletion
 BEFORE DELETE ON users
