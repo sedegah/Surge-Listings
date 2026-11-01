@@ -18,6 +18,7 @@ a:hover { text-decoration: underline }
 .switcher .brandmark { font-weight: 600; letter-spacing: .4px; margin-right: 14px; color: #fff }
 .switcher .brandmark span { color: #E0555C }
 .switcher button, .switcher a, .switcher a:link, .switcher a:visited { background: transparent; border: 1px solid transparent; color: #C8C8C8 !important; padding: 5px 12px; border-radius: 2px; font-size: 12px; font-family: inherit; font-weight: 500; cursor: pointer; text-decoration: none !important; display: inline-flex; align-items: center; }
+.switcher [hidden] { display: none !important; }
 .switcher button:hover, .switcher a:hover { background: #333; color: #fff !important; text-decoration: none !important; }
 .switcher button.active, .switcher a.active, .switcher a.active:link, .switcher a.active:visited { background: var(--blue) !important; color: #fff !important; border-color: #2C5C96 !important; }
 .switcher .note { margin-left: auto; color: #8A8A8A; font-size: 11px; display: inline-flex; align-items: center; }

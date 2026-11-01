@@ -6,8 +6,14 @@
 <title>Surge Solutions — Administration Portal</title>
 <meta name="description" content="Surge Solutions Super Administrator Portal — Platform oversight, 5-gate publish readiness verification, legal holds, bank partner management, and audit records.">
 <link rel="stylesheet" href="styles.css">
+<style>
+body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
+#portal-auth-status { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: #DCDCDC; color: #1F1F1F; font: 14px "Segoe UI", Inter, Arial, sans-serif; }
+body.auth-ready #portal-auth-status { display: none; }
+</style>
 </head>
-<body data-portal="admin" style="visibility:hidden">
+<body data-portal="admin">
+<div id="portal-auth-status" role="status" aria-live="polite">Verifying your session…</div>
 <nav class="switcher">
   <span class="brandmark">SURGE <span>&#9632;</span></span>
   <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>

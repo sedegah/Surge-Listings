@@ -6,8 +6,14 @@
 <title>Surge Solutions — Bank Partner Portal</title>
 <meta name="description" content="Surge Solutions Bank Portal — Multi-tenant loan recovery and asset management platform for Ghanaian financial institutions.">
 <link rel="stylesheet" href="styles.css">
+<style>
+body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
+#portal-auth-status { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: #DCDCDC; color: #1F1F1F; font: 14px "Segoe UI", Inter, Arial, sans-serif; }
+body.auth-ready #portal-auth-status { display: none; }
+</style>
 </head>
-<body data-portal="bank" style="visibility:hidden">
+<body data-portal="bank">
+<div id="portal-auth-status" role="status" aria-live="polite">Verifying your session…</div>
 <nav class="switcher">
   <span class="brandmark">SURGE <span>&#9632;</span></span>
   <button data-app="bank" class="active">Bank Portal</button>

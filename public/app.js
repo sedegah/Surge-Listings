@@ -165,7 +165,7 @@ const Auth = {
       console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
       const adminPortalLink = document.getElementById('admin-portal-link');
       if (adminPortalLink) adminPortalLink.hidden = data.user.scope !== 'surge';
-      document.body.style.visibility = 'visible';
+      document.body.classList.add('auth-ready');
       return true;
     } catch(e) {
       console.error('[Auth Guard] Auth check failed with network error:', e);
@@ -190,23 +190,6 @@ const Auth = {
       });
     });
 
-    // Update public marketplace header button if present
-    const pubAuthBtn = document.getElementById('pub-auth-btn');
-    if (pubAuthBtn) {
-      if (u) {
-        pubAuthBtn.href = '#';
-        pubAuthBtn.onclick = (e) => { e.preventDefault(); Auth.logout(); };
-        pubAuthBtn.innerHTML = `<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;margin-right:4px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out (${u.username || 'Staff'})`;
-        pubAuthBtn.style.background = '#B3262E';
-        pubAuthBtn.style.borderColor = '#B3262E';
-      } else {
-        pubAuthBtn.href = 'login.html';
-        pubAuthBtn.onclick = null;
-        pubAuthBtn.textContent = 'Staff Sign In';
-        pubAuthBtn.style.background = 'var(--blue)';
-        pubAuthBtn.style.borderColor = 'var(--blue)';
-      }
-    }
   }
 };
 

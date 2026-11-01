@@ -165,7 +165,7 @@ const Auth = {
       console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
       const adminPortalLink = document.getElementById('admin-portal-link');
       if (adminPortalLink) adminPortalLink.hidden = data.user.scope !== 'surge';
-      document.body.style.visibility = 'visible';
+      document.body.classList.add('auth-ready');
       return true;
     } catch(e) {
       console.error('[Auth Guard] Auth check failed with network error:', e);
