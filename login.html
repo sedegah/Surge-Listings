@@ -150,9 +150,7 @@ input[aria-invalid=true] { border-color: var(--danger) }
 
 <script>
 (function () {
-  // Same API host rule as app.js
-  var API_BASE = (location.hostname.indexOf('vercel.app') > -1 || location.protocol === 'file:')
-    ? 'https://surge-solutions-api.sedegahkimathi.workers.dev' : '';
+  var API_BASE = '';
   var LOGIN_URL = API_BASE + '/api/auth/login';   // app.js already uses /api/auth/me and /api/auth/logout
   var NEXT_PAGE = 'bank.html', ADMIN_PAGE = 'admin.html';
   var MAX_TRIES = 5, LOCK_MS = 60000;
@@ -179,10 +177,16 @@ input[aria-invalid=true] { border-color: var(--danger) }
   });
 
   // Check if user already has an active session
-  var existingToken = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
-  if (existingToken) {
+  var hasSessionMarker = false;
+  try {
+    hasSessionMarker = sessionStorage.getItem('surge_session_present') === 'true' ||
+      localStorage.getItem('surge_session_present') === 'true';
+  } catch (e) {}
+  if (hasSessionMarker) {
+    var existingToken = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
     fetch(API_BASE + '/api/auth/me', {
-      headers: { 'Authorization': 'Bearer ' + existingToken },
+      headers: existingToken ? { 'Authorization': 'Bearer ' + existingToken } : {},
+      credentials: 'same-origin',
       cache: 'no-store'
     })
       .then(function(r) { return r.json(); })
@@ -194,10 +198,14 @@ input[aria-invalid=true] { border-color: var(--danger) }
           console.info('[Login Page] Active session detected. Redirecting to:', dest);
           location.href = dest;
         } else {
-          sessionStorage.removeItem('surge_token');
-          sessionStorage.removeItem('surge_user');
-          localStorage.removeItem('surge_token');
-          localStorage.removeItem('surge_user');
+          try {
+            sessionStorage.removeItem('surge_token');
+            sessionStorage.removeItem('surge_user');
+            localStorage.removeItem('surge_token');
+            localStorage.removeItem('surge_user');
+            sessionStorage.removeItem('surge_session_present');
+            localStorage.removeItem('surge_session_present');
+          } catch (e) {}
         }
       })
       .catch(function() {});
@@ -246,18 +254,23 @@ input[aria-invalid=true] { border-color: var(--danger) }
     if (!p) return showError('Enter your password.', ['p']);
 
     btn.disabled = true; btn.textContent = 'Signing in…';
-    fetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }), cache: 'no-store' })
+    fetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: u, password: p, remember: $('remember').checked }), cache: 'no-store' })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, json: j }; }); })
       .then(function (res) {
         if (res.ok && res.json.success !== false) {
-          var token = res.json.token, u = res.json.user || {};
-          if (!token) return showError('Sign-in succeeded but no session was returned. Contact your Surge administrator.', ['u']);
+          var u = res.json.user || {};
           try {
-            // Same keys and rules as Auth.setSession() in app.js
-            sessionStorage.setItem('surge_token', token);
-            sessionStorage.setItem('surge_user', JSON.stringify(u));
-            if ($('remember').checked) { localStorage.setItem('surge_token', token); localStorage.setItem('surge_user', JSON.stringify(u)); }
-            else { localStorage.removeItem('surge_token'); localStorage.removeItem('surge_user'); }
+            sessionStorage.removeItem('surge_token');
+            sessionStorage.removeItem('surge_user');
+            localStorage.removeItem('surge_token');
+            localStorage.removeItem('surge_user');
+            if ($('remember').checked) {
+              localStorage.setItem('surge_session_present', 'true');
+              sessionStorage.removeItem('surge_session_present');
+            } else {
+              sessionStorage.setItem('surge_session_present', 'true');
+              localStorage.removeItem('surge_session_present');
+            }
           } catch (e) {}
           btn.textContent = 'Signed in';
           var home = u.scope === 'surge' ? ADMIN_PAGE : NEXT_PAGE;

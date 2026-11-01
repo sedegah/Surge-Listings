@@ -10,6 +10,7 @@
 
 import express from 'express';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import { d1 } from '../db/d1-client.js';
 import {
   ASSETS_BUCKET,
@@ -381,7 +382,7 @@ router.post('/assets/:id/photos/upload', upload.single('file'), async (req, res)
     if (!hasValidUploadSignature(file, true)) {
       return res.status(415).json({ success: false, error: 'Use a valid JPEG, PNG, or WebP photo no larger than 10MB.' });
     }
-    const key = `photos/${asset.id}/${crypto.randomUUID()}`;
+    const key = `photos/${asset.id}/${randomUUID()}`;
 
     // Upload to Cloudflare R2 surge-assets bucket
     const r2Result = await uploadToObjectStorage({
@@ -439,7 +440,7 @@ router.post('/assets/:id/documents/upload', upload.single('file'), async (req, r
     }
 
     const storageBucket = getDocumentBucket(category);
-    const key = `documents/${asset.id}/${crypto.randomUUID()}`;
+    const key = `documents/${asset.id}/${randomUUID()}`;
 
     // Upload to Cloudflare R2 surge-documents bucket
     const r2Result = await uploadToObjectStorage({

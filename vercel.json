@@ -5,11 +5,7 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "private, no-store, max-age=0" },
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, X-Bank-ID, X-Actor-Name, X-Actor-Role, Authorization" }
+        { "key": "Cache-Control", "value": "private, no-store, max-age=0" }
       ]
     },
     {
@@ -65,24 +61,12 @@
   ],
   "rewrites": [
     {
-      "source": "/api/public/:match*",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/bank/:match*",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/admin/:match*",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/v1/:match*",
-      "destination": "/api/index.js"
+      "source": "/api/:match*",
+      "destination": "https://surge-solutions-api.sedegahkimathi.workers.dev/api/:match*"
     },
     {
       "source": "/health",
-      "destination": "/api/index.js"
+      "destination": "https://surge-solutions-api.sedegahkimathi.workers.dev/health"
     },
     {
       "source": "/login",

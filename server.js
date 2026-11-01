@@ -10,6 +10,40 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5080;
 
+app.use('/api', async (req, res, next) => {
+  const upstream = new URL('https://surge-solutions-api.sedegahkimathi.workers.dev');
+
+  try {
+    const target = new URL(req.originalUrl, upstream);
+    const headers = new Headers();
+    for (const name of ['accept', 'content-type', 'cookie', 'origin', 'user-agent']) {
+      const value = req.headers[name];
+      if (typeof value === 'string') headers.set(name, value);
+    }
+
+    const hasBody = !['GET', 'HEAD'].includes(req.method);
+    const upstreamResponse = await fetch(target, {
+      method: req.method,
+      headers,
+      ...(hasBody ? { body: req, duplex: 'half' } : {}),
+      redirect: 'manual'
+    });
+
+    res.status(upstreamResponse.status);
+    for (const name of ['cache-control', 'content-type', 'content-disposition', 'etag', 'vary']) {
+      const value = upstreamResponse.headers.get(name);
+      if (value) res.set(name, value);
+    }
+    const cookies = upstreamResponse.headers.getSetCookie?.();
+    if (cookies?.length) res.setHeader('Set-Cookie', cookies);
+    res.set('Cache-Control', 'private, no-store, max-age=0');
+    res.send(Buffer.from(await upstreamResponse.arrayBuffer()));
+  } catch (error) {
+    console.error('Worker API proxy request failed:', error);
+    if (!res.headersSent) res.status(502).json({ success: false, error: 'The API service is temporarily unavailable. Please retry.' });
+  }
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -63,31 +63,31 @@ const Auth = {
     return this.user;
   },
 
+  getActorName() {
+    const user = this.getUser();
+    return user?.fullName || user?.username || 'Signed-in user';
+  },
+
   setSession(token, user, remember) {
-    this.token = token;
+    this.token = null;
     this.user = user;
     this.selectedBranchId = user?.branchId || user?.branch_id || null;
     try {
-      sessionStorage.setItem('surge_token', token);
-      sessionStorage.setItem('surge_user', JSON.stringify(user));
-      if (remember) {
-        localStorage.setItem('surge_token', token);
-        localStorage.setItem('surge_user', JSON.stringify(user));
-      } else {
-        localStorage.removeItem('surge_token');
-        localStorage.removeItem('surge_user');
-      }
+      sessionStorage.removeItem('surge_token');
+      sessionStorage.removeItem('surge_user');
+      localStorage.removeItem('surge_token');
+      localStorage.removeItem('surge_user');
     } catch(e) {}
   },
 
   logout() {
     const token = this.getToken();
-    if (token) {
-      fetch(Store.API_BASE + '/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token }
-      }).catch(() => {});
-    }
+    fetch(Store.API_BASE + '/api/auth/logout', {
+      method: 'POST',
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+      credentials: 'same-origin',
+      keepalive: true
+    }).catch(() => {});
     this.token = null;
     this.user = null;
     this.selectedBranchId = null;
@@ -96,6 +96,8 @@ const Auth = {
       sessionStorage.removeItem('surge_user');
       localStorage.removeItem('surge_token');
       localStorage.removeItem('surge_user');
+      sessionStorage.removeItem('surge_session_present');
+      localStorage.removeItem('surge_session_present');
     } catch(e) {}
     window.location.href = 'login.html';
   },
@@ -140,19 +142,6 @@ const Auth = {
     }
 
     const token = this.getToken();
-    if (!token) {
-      const fallbackTarget = (requiredScope === 'surge') ? 'admin.html' : 'bank.html';
-      let curPage = window.location.pathname.split('/').pop() || fallbackTarget;
-      if (/login/i.test(curPage)) curPage = fallbackTarget;
-
-      console.warn('[Auth Guard] Protected route access without session. Redirecting to login:', {
-        requestedUrl: window.location.href,
-        destination: 'login.html?next=' + encodeURIComponent(curPage),
-        reason: 'Unauthenticated'
-      });
-      window.location.href = 'login.html?next=' + encodeURIComponent(curPage);
-      return false;
-    }
 
     try {
       const controller = new AbortController();
@@ -161,7 +150,8 @@ const Auth = {
       let data;
       try {
         res = await fetch(Store.API_BASE + '/api/auth/me', {
-          headers: { 'Authorization': 'Bearer ' + token },
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+          credentials: 'same-origin',
           cache: 'no-store',
           signal: controller.signal
         });
@@ -185,8 +175,21 @@ const Auth = {
         return false;
       }
       this.user = data.user;
-      sessionStorage.setItem('surge_user', JSON.stringify(data.user));
+      this.token = null;
+      try {
+        sessionStorage.removeItem('surge_token');
+        sessionStorage.removeItem('surge_user');
+        localStorage.removeItem('surge_token');
+        localStorage.removeItem('surge_user');
+      } catch (storageError) {
+        console.warn('[Auth Guard] Could not clear legacy browser credentials:', storageError);
+      }
       this.selectedBranchId = data.user.branchId || data.user.branch_id || null;
+      try {
+        sessionStorage.setItem('surge_session_present', 'true');
+      } catch (storageError) {
+        console.warn('[Auth Guard] Could not store the non-secret session marker:', storageError);
+      }
 
       // Authorization check
       if (requiredScope === 'bank') {
@@ -242,22 +245,14 @@ const Auth = {
 // SHARED DATA STORE
 // ============================================================
 const Store = {
-  assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [], branches: [],
+  assets: [], documents: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [], branches: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
   deploymentVersion: null,
   deploymentVersionTimer: null,
-  API_BASE: (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.protocol === 'file:'))
-    ? 'https://surge-solutions-api.sedegahkimathi.workers.dev'
-    : '',
+  API_BASE: '',
 
   getAuthHeaders() {
-    const token = Auth.getToken();
     const h = { 'Content-Type': 'application/json' };
-    if (token) h['Authorization'] = 'Bearer ' + token;
-    const user = Auth.getUser();
-    if (user?.bankId || user?.bank_id) h['x-bank-id'] = user.bankId || user.bank_id;
-    if (user?.roleCode || user?.role_code) h['x-actor-role'] = user.roleCode || user.role_code;
-    if (user?.fullName || user?.full_name || user?.username) h['x-actor-name'] = user.fullName || user.full_name || user.username;
     return h;
   },
 
@@ -269,6 +264,7 @@ const Store = {
       }
     } catch (e) {}
     this.assets = [];
+    this.documents = [];
     this.auditLog = [];
     this.leads = [];
     this.offers = [];
@@ -348,8 +344,9 @@ const Store = {
       const portal = document.body?.dataset.portal;
       const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
       const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : '/api/v1/assets' + scopeParam;
+      const documentsEndpoint = portal === 'admin' ? '/api/admin/documents' : portal === 'bank' ? '/api/bank/documents' : null;
       const skipAdminData = portal !== 'admin';
-      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes] = await Promise.allSettled([
+      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes, documentsRes] = await Promise.allSettled([
         fetch(this.API_BASE + assetsEndpoint, { headers, cache: 'no-store' }),
         fetch(this.API_BASE + '/api/v1/leads' + scopeParam, { headers, cache: 'no-store' }),
         fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' }),
@@ -358,6 +355,7 @@ const Store = {
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs', { headers, cache: 'no-store' }),
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers, cache: 'no-store' }),
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers, cache: 'no-store' }),
+        documentsEndpoint ? fetch(this.API_BASE + documentsEndpoint, { headers, cache: 'no-store' }) : Promise.resolve(null),
       ]);
 
       // Assets
@@ -526,6 +524,12 @@ const Store = {
             createdAt: u.created_at
           }));
         }
+      }
+
+      // Private asset documents
+      if (documentsRes.status === 'fulfilled' && documentsRes.value?.ok) {
+        const json = await documentsRes.value.json();
+        if (json.success && Array.isArray(json.data)) this.documents = json.data;
       }
 
       // Re-render all active portals
@@ -986,6 +990,38 @@ const BankPortal = {
       case 'notifications': el.innerHTML = this.renderNotificationsView(); break;
       default: el.innerHTML = this.renderAssetList();
     }
+    el.querySelectorAll('[data-document-download]').forEach(button => {
+      button.addEventListener('click', () => this.downloadDocument(button.dataset.documentDownload));
+    });
+  },
+
+  async downloadDocument(documentId) {
+    try {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const response = await fetch(
+        Store.API_BASE + `/api/bank/documents/${encodeURIComponent(documentId)}/download`,
+        { headers, cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Download failed (${response.status}).`);
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      UI.toast(error.message || 'Document download failed.', 'error');
+    }
   },
 
   renderDoctabs() {
@@ -1399,6 +1435,7 @@ const BankPortal = {
   },
 
   renderDocumentsTab(a) {
+    const docs = Store.documents.filter(doc => doc.asset_id === a.id);
     return `
       <div class="group">
         <div class="caption">Title &amp; Supporting Documents <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-docs')">+ Upload Document</button></div>
@@ -1406,6 +1443,7 @@ const BankPortal = {
           <div class="kv-row"><span class="kv-k">Total Documents</span><span class="kv-v">${a.documents} files</span></div>
           <div class="kv-row"><span class="kv-k">Title Verified</span><span class="kv-v">${a.titleVerified ? UI.badge('Verified') : UI.badge('Pending')}</span></div>
           <div class="kv-row"><span class="kv-k">Land Search</span><span class="kv-v">${a.landSearchValid ? UI.badge('Valid') : UI.badge('Pending')}</span></div>
+          ${docs.map(doc => `<div class="kv-row"><span class="kv-k">${UI.escapeHtml(doc.title)} · ${UI.escapeHtml(doc.category)}</span><button class="btn small" data-document-download="${UI.escapeHtml(doc.id)}">Download</button></div>`).join('')}
         </div>
       </div>
     `;
@@ -1532,9 +1570,9 @@ const BankPortal = {
     Store.updateAsset(this.selectedAssetId, {
       category, assetType, description, region, district, publicLocation, exactAddress,
       reserve, minOffer, showReserve
-    }, 'J. Mensah', 'Updated asset basics, description and pricing');
+    }, Auth.getActorName(), 'Updated asset basics, description and pricing');
 
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Updated basic details and pricing');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Updated basic details and pricing');
     UI.toast('Changes saved successfully. Readiness re-checked.', 'success');
     this.closeSubPage();
   },
@@ -1639,12 +1677,29 @@ const BankPortal = {
     const headers = {};
     const token = Auth.getToken();
     if (token) headers.Authorization = 'Bearer ' + token;
-    const response = await fetch(Store.API_BASE + endpoint, {
-      method: 'POST',
-      headers,
-      body: form,
-      cache: 'no-store'
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    let response;
+    try {
+      response = await fetch(Store.API_BASE + endpoint, {
+        method: 'POST',
+        headers,
+        body: form,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Upload timed out. Check your connection and the asset documents before trying again.');
+      }
+      if (error instanceof TypeError) {
+        throw new Error('Upload connection failed. Check your internet connection and try uploading again.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
     const result = await response.json();
     if (!response.ok || !result.success) {
       throw new Error(result.error || `Upload failed (${response.status}).`);
@@ -1687,8 +1742,8 @@ const BankPortal = {
 
     a.legalSubstate = a.legalSubstate || {};
     a.legalSubstate.enforcementRecorded = true;
-    Store.updateAsset(this.selectedAssetId, { enforcementBasis, caseRef, legalStatus: 'Pending' }, 'J. Mensah', 'Enforcement basis and instruments submitted for legal review');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Submitted enforcement documents — awaiting Surge legal verification');
+    Store.updateAsset(this.selectedAssetId, { enforcementBasis, caseRef, legalStatus: 'Pending'     }, Auth.getActorName(), 'Enforcement basis and instruments submitted for legal review');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Submitted enforcement documents — awaiting Surge legal verification');
     UI.toast('Legal documents submitted. Surge Legal will review within 2 business days.', 'success');
     this.closeSubPage();
   },
@@ -1857,8 +1912,8 @@ const BankPortal = {
       titleOwner: document.getElementById('title-owner').value.trim(),
       titlePerfection: document.getElementById('title-perfection').value,
       titleDetails: true,
-    }, 'J. Mensah', 'Title verification pending');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Title verification pending');
+    }, Auth.getActorName(), 'Title verification pending');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Title verification pending');
     UI.toast('Title information saved. Surge Property Manager will verify.', 'success');
     this.closeSubPage();
   },
@@ -1917,16 +1972,16 @@ const BankPortal = {
       valuationDate: valDate.toISOString(),
       valuationExpiry: expiry.toISOString(),
       valuerName,
-    }, 'J. Mensah', 'Valuation updated');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Valuation updated: ' + UI.fmtMoney(amount) + ' valid to ' + UI.fmtDateShort(expiry.toISOString()));
+    }, Auth.getActorName(), 'Valuation updated');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Valuation updated: ' + UI.fmtMoney(amount) + ' valid to ' + UI.fmtDateShort(expiry.toISOString()));
     UI.toast('Valuation saved successfully', 'success');
     this.closeSubPage();
   },
 
   requestVerification(assetId, kind) {
     const a = Store.getAsset(assetId);
-    Store.addAudit('J. Mensah', 'REQUEST_VERIFICATION', 'Asset', a.ref, null, null, 'Requested ' + kind + ' verification from Surge');
-    Store.addActivity(assetId, 'J. Mensah', 'Requested ' + kind + ' verification from Surge');
+    Store.addAudit(Auth.getActorName(), 'REQUEST_VERIFICATION', 'Asset', a.ref, null, null, 'Requested ' + kind + ' verification from Surge');
+    Store.addActivity(assetId, Auth.getActorName(), 'Requested ' + kind + ' verification from Surge');
     UI.toast(kind + ' verification request sent to Surge. Expect response within 2 business days.', 'success');
     this.render();
   },
@@ -2121,7 +2176,7 @@ const BankPortal = {
       return;
     }
     Store.assets = Store.assets.filter(x => x.id !== id);
-    Store.addAudit('J. Mensah', 'DELETE', 'Asset', a.ref, 'Draft', 'Deleted', `Draft asset ${a.ref} deleted`);
+    Store.addAudit(Auth.getActorName(), 'DELETE', 'Asset', a.ref, 'Draft', 'Deleted', `Draft asset ${a.ref} deleted`);
     Store.persist();
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
       fetch(`/api/v1/assets/${id}?scope=bank`, {
@@ -2169,7 +2224,7 @@ const BankPortal = {
     a.description = description;
     a.updatedAt = new Date().toISOString();
 
-    Store.addAudit('J. Mensah', 'UPDATE', 'Asset', a.ref, null, null, 'Asset details updated');
+    Store.addAudit(Auth.getActorName(), 'UPDATE', 'Asset', a.ref, null, null, 'Asset details updated');
     Store.persist();
 
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
@@ -2213,36 +2268,46 @@ const BankPortal = {
   },
   submitCurrent() { this.submitForReview(); },
 
-  submitForReview() {
+  async submitForReview() {
     if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn');
     const a = Store.getAsset(this.selectedAssetId);
     if (a.legalHold) return UI.toast('Cannot submit: legal hold active', 'error');
     const r = Store.checkPublishReadiness(a);
     const criticalMissing = r.checks.filter(c => !c.pass && ['price','description'].includes(c.key));
     if (criticalMissing.length) return UI.toast('This action is unavailable because the following requirements are incomplete: ' + criticalMissing.map(c => c.label).join(', '), 'error');
-    Store.updateAsset(this.selectedAssetId, { status: 'Submitted' }, 'J. Mensah', 'Submitted for Surge review');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Submitted for review');
-    UI.toast('Asset submitted for review. Surge disposition team notified.', 'success');
-    this.render();
+    try {
+      const response = await fetch(`${Store.API_BASE}/api/v1/assets/${encodeURIComponent(a.id)}/submit`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Submission failed (${response.status}).`);
+      }
+      await Store.fetchRemote();
+      UI.toast('Asset submitted for review. Surge disposition team notified.', 'success');
+      this.render();
+    } catch (error) {
+      console.error('Asset submission failed:', error);
+      UI.toast(error.message || 'Could not submit the asset. Please retry.', 'error');
+    }
   },
 
   resubmitAsset() {
-    if (!this.selectedAssetId) return;
-    Store.updateAsset(this.selectedAssetId, { status: 'Submitted' }, 'J. Mensah', 'Resubmitted');
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', 'Resubmitted');
-    UI.toast('Asset resubmitted for review.', 'success');
-    this.render();
+    return this.submitForReview();
   },
 
   decideOffer(offerId, decision) {
     const offer = Store.offers.find(o => o.id === offerId);
     if (!offer) return;
     offer.status = decision;
-    Store.addAudit('E. Owusu', 'OFFER_' + decision.toUpperCase(), 'Offer', offer.ref, 'Under Review', decision, 'Bank decision');
+    Store.addAudit(Auth.getActorName(), 'OFFER_' + decision.toUpperCase(), 'Offer', offer.ref, 'Under Review', decision, 'Bank decision');
     if (decision === 'Accepted') {
       const asset = Store.getAssetByRef(offer.assetRef);
       if (asset) {
-        Store.updateAsset(asset.id, { status: 'Sale', publicationStatus: 'Withdrawn' }, 'E. Owusu', 'Offer accepted');
+        Store.updateAsset(asset.id, { status: 'Sale', publicationStatus: 'Withdrawn' }, Auth.getActorName(), 'Offer accepted');
         UI.toast('Offer accepted. Sale processing can now begin.', 'success');
       }
     } else UI.toast('Offer ' + decision.toLowerCase(), 'success');
@@ -2467,7 +2532,7 @@ const AdminPortal = {
   },
 
   renderReviewQueue() {
-    const queue = Store.assets.filter(a => ['Submitted', 'Under Review', 'Changes Required'].includes(a.status));
+    const queue = Store.assets.filter(a => ['Submitted by Bank', 'Submitted', 'Under Review', 'Changes Required'].includes(a.status));
     return `<div class="page-head"><h1>Review Queue</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Status</th><th>Readiness</th><th>Action</th></tr></thead><tbody>${queue.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${UI.badge(a.status)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td><td><button class="btn small primary" onclick="event.stopPropagation();AdminPortal.openAsset('${a.id}')">Open</button></td></tr>`; }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">No assets currently in review queue.</td></tr>'}</tbody></table></div>`;
   },
 
@@ -2573,7 +2638,7 @@ const AdminPortal = {
     a.legalSubstate.instrumentsVerified = allVerified;
     a.legalNotes = a.legalNotes || [];
     a.legalNotes.push({ when: new Date().toISOString(), who: 'S. Adjei (Legal Officer)', decision: 'verified', note: 'Instrument ' + instrumentId + ' verified' });
-    Store.addAudit('S. Adjei', 'VERIFY_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Verified', 'Instrument ' + instrumentId);
+    Store.addAudit(Auth.getActorName(), 'VERIFY_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Verified', 'Instrument ' + instrumentId);
     UI.toast(allVerified ? 'All instruments verified. You can now issue legal clearance.' : 'Instrument verified. Verify remaining instruments.', 'success');
     this.render();
   },
@@ -2585,7 +2650,7 @@ const AdminPortal = {
     if (inst) inst.status = 'Rejected';
     a.legalSubstate = a.legalSubstate || {};
     a.legalSubstate.instrumentsVerified = false;
-    Store.addAudit('S. Adjei', 'REJECT_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Rejected', 'Instrument ' + instrumentId);
+    Store.addAudit(Auth.getActorName(), 'REJECT_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Rejected', 'Instrument ' + instrumentId);
     UI.toast('Instrument rejected. Bank will be notified to re-upload.', 'warn');
     this.render();
   },
@@ -2599,9 +2664,9 @@ const AdminPortal = {
     Store.updateAsset(assetId, {
       legalStatus: 'Cleared',
       legalSubstate: { ...a.legalSubstate, clearanceIssued: true }
-    }, 'S. Adjei', 'Legal clearance issued' + (notes ? ': ' + notes : ''));
-    a.legalNotes.push({ when: new Date().toISOString(), who: 'S. Adjei', decision: 'cleared', note: 'Legal clearance issued ' + (notes ? ': ' + notes : '') });
-    Store.addActivity(assetId, 'S. Adjei', 'Legal clearance issued — gate now PASS');
+    }, Auth.getActorName(), 'Legal clearance issued' + (notes ? ': ' + notes : ''));
+    a.legalNotes.push({ when: new Date().toISOString(), who: Auth.getActorName(), decision: 'cleared', note: 'Legal clearance issued ' + (notes ? ': ' + notes : '') });
+    Store.addActivity(assetId, Auth.getActorName(), 'Legal clearance issued — gate now PASS');
     UI.toast('Legal clearance issued. The "Legal and enforcement verified" gate now passes.', 'success');
     this.closeSubPage();
   },
@@ -2609,9 +2674,9 @@ const AdminPortal = {
   liftInjunction(assetId) {
     const a = Store.getAsset(assetId);
     if (!a) return;
-    Store.updateAsset(assetId, { injunctionActive: false, legalHold: false, legalHoldReason: null, status: 'Approved' }, 'S. Adjei', 'Injunction lifted');
+    Store.updateAsset(assetId, { injunctionActive: false, legalHold: false, legalHoldReason: null, status: 'Approved' }, Auth.getActorName(), 'Injunction lifted');
     a.legalSubstate.injunctionClear = true;
-    Store.addActivity(assetId, 'S. Adjei', 'Injunction lifted');
+    Store.addActivity(assetId, Auth.getActorName(), 'Injunction lifted');
     UI.toast('Injunction lifted. Asset no longer blocked.', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
   },
@@ -2653,22 +2718,22 @@ const AdminPortal = {
     const a = Store.getAsset(assetId);
     if (!a) return;
     const notes = document.getElementById('title-notes')?.value || '';
-    Store.updateAsset(assetId, { titleVerified: true, landSearchValid: true, landSearchExpiry: new Date(Date.now() + 180*86400000).toISOString() }, 'A. Boateng', 'Title verified');
-    Store.addActivity(assetId, 'A. Boateng', 'Title verified — gate now PASS' + (notes ? ': ' + notes : ''));
+    Store.updateAsset(assetId, { titleVerified: true, landSearchValid: true, landSearchExpiry: new Date(Date.now() + 180*86400000).toISOString() }, Auth.getActorName(), 'Title verified');
+    Store.addActivity(assetId, Auth.getActorName(), 'Title verified — gate now PASS' + (notes ? ': ' + notes : ''));
     UI.toast('Title verified. "Title information verified" gate now passes.', 'success');
     this.closeSubPage();
   },
 
   rejectTitle(assetId) {
-    Store.addAudit('A. Boateng', 'REJECT_TITLE', 'Asset', Store.getAsset(assetId).ref, null, null, 'Title rejected');
+    Store.addAudit(Auth.getActorName(), 'REJECT_TITLE', 'Asset', Store.getAsset(assetId).ref, null, null, 'Title rejected');
     UI.toast('Title rejected. Bank notified to correct.', 'warn');
     this.closeSubPage();
   },
 
   startReview() { 
     if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { status: 'Under Review' }, 'A. Boateng', 'Review started'); 
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Review started'); 
+    Store.updateAsset(this.selectedAssetId, { status: 'Under Review' }, Auth.getActorName(), 'Review started');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Review started');
     this.render(); 
   },
   
@@ -2683,24 +2748,24 @@ const AdminPortal = {
       return UI.toast(`Approval blocked by platform guards: ${fails}`, 'error');
     } 
     
-    Store.updateAsset(this.selectedAssetId, { status: 'Approved' }, 'A. Boateng', 'Approved'); 
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Approved'); 
+    Store.updateAsset(this.selectedAssetId, { status: 'Approved' }, Auth.getActorName(), 'Approved');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Approved');
     UI.toast('Asset approved. Ready for marketplace publication.', 'success');
     this.render(); 
   },
   
   requestChanges() { 
     if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { status: 'Changes Required' }, 'A. Boateng', 'Changes requested'); 
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Changes requested'); 
+    Store.updateAsset(this.selectedAssetId, { status: 'Changes Required' }, Auth.getActorName(), 'Changes requested');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Changes requested');
     UI.toast('Changes requested successfully.', 'warn'); 
     this.render(); 
   },
   
   rejectAsset() { 
     if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { status: 'Rejected' }, 'A. Boateng', 'Rejected'); 
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Rejected'); 
+    Store.updateAsset(this.selectedAssetId, { status: 'Rejected' }, Auth.getActorName(), 'Rejected');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Rejected');
     this.render(); 
   },
   
@@ -2718,15 +2783,15 @@ const AdminPortal = {
       return UI.toast('This asset must be approved before publication.', 'error');
     }
     
-    Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, 'A. Boateng', 'Published to Marketplace');
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Published to Marketplace');
+    Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, Auth.getActorName(), 'Published to Marketplace');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Published to Marketplace');
     UI.toast('Asset published to Marketplace.', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
   },
   
   unpublishAsset() { 
     if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { publicationStatus: 'Unpublished', status: 'Approved' }, 'A. Boateng', 'Unpublished'); 
+    Store.updateAsset(this.selectedAssetId, { publicationStatus: 'Unpublished', status: 'Approved' }, Auth.getActorName(), 'Unpublished');
     this.render(); PublicMarket.render(); BankPortal.render(); 
   },
   
@@ -2740,9 +2805,9 @@ const AdminPortal = {
   confirmHold() {
     const reason = document.getElementById('hold-reason')?.value || 'No reason';
     const a = Store.getAsset(this.selectedAssetId);
-    Store.updateAsset(this.selectedAssetId, { legalHold: true, legalHoldReason: reason, status: 'Legal Hold', publicationStatus: 'Suspended' }, 'A. Boateng', 'Legal hold: ' + reason);
+    Store.updateAsset(this.selectedAssetId, { legalHold: true, legalHoldReason: reason, status: 'Legal Hold', publicationStatus: 'Suspended' }, Auth.getActorName(), 'Legal hold: ' + reason);
     a.legalSubstate.holdClear = false;
-    Store.addActivity(this.selectedAssetId, 'A. Boateng', 'Legal hold placed: ' + reason);
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Legal hold placed: ' + reason);
     UI.closeModal();
     UI.toast('Legal hold placed', 'error');
     this.render(); PublicMarket.render(); BankPortal.render();
@@ -2751,9 +2816,9 @@ const AdminPortal = {
   releaseLegalHold(assetId) {
     const id = assetId || this.selectedAssetId;
     if (!id) return;
-    Store.updateAsset(id, { legalHold: false, legalHoldReason: null, status: 'Approved', publicationStatus: 'Unpublished' }, 'A. Boateng', 'Legal hold released');
+    Store.updateAsset(id, { legalHold: false, legalHoldReason: null, status: 'Approved', publicationStatus: 'Unpublished' }, Auth.getActorName(), 'Legal hold released');
     Store.getAsset(id).legalSubstate.holdClear = true;
-    Store.addActivity(id, 'A. Boateng', 'Legal hold released');
+    Store.addActivity(id, Auth.getActorName(), 'Legal hold released');
     UI.toast('Legal hold released. Asset returns to Approved.', 'success');
     this.render(); PublicMarket.render(); BankPortal.render();
   },

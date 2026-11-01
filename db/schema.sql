@@ -4,6 +4,7 @@
 -- 1. Organizations
 CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   name TEXT NOT NULL,
   code TEXT NOT NULL UNIQUE,
   type TEXT NOT NULL, -- 'surge', 'bank'
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 -- 2. Banks
 CREATE TABLE IF NOT EXISTS banks (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   organization_id TEXT NOT NULL,
   legal_name TEXT NOT NULL,
   short_code TEXT NOT NULL UNIQUE,
@@ -28,6 +30,7 @@ CREATE TABLE IF NOT EXISTS banks (
 -- 3. Bank Branches
 CREATE TABLE IF NOT EXISTS bank_branches (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   bank_id TEXT NOT NULL,
   name TEXT NOT NULL,
   branch_code TEXT,
@@ -70,6 +73,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 -- 7. Users
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   organization_id TEXT NOT NULL,
   bank_id TEXT,
   branch_id TEXT,
@@ -94,6 +98,7 @@ CREATE TABLE IF NOT EXISTS asset_categories (
 -- 9. Assets
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   bank_id TEXT NOT NULL,
   ownership_type TEXT NOT NULL DEFAULT 'bank' CHECK (ownership_type IN ('bank', 'individual', 'surge')),
   owner_bank_id TEXT,
@@ -136,6 +141,7 @@ CREATE TABLE IF NOT EXISTS assets (
 -- 10. Asset Images
 CREATE TABLE IF NOT EXISTS asset_images (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL,
   url TEXT NOT NULL,
   object_key TEXT,
@@ -151,6 +157,7 @@ CREATE TABLE IF NOT EXISTS asset_images (
 -- 11. Enforcement Cases
 CREATE TABLE IF NOT EXISTS enforcement_cases (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL UNIQUE,
   case_number TEXT NOT NULL,
   court TEXT NOT NULL,
@@ -163,6 +170,7 @@ CREATE TABLE IF NOT EXISTS enforcement_cases (
 -- 12. Legal Instruments
 CREATE TABLE IF NOT EXISTS legal_instruments (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   case_id TEXT NOT NULL,
   instrument_type TEXT NOT NULL,
   instrument_ref TEXT NOT NULL,
@@ -180,6 +188,7 @@ CREATE TABLE IF NOT EXISTS legal_instruments (
 -- 13. Title Records
 CREATE TABLE IF NOT EXISTS title_records (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL UNIQUE,
   certificate_number TEXT NOT NULL,
   registry TEXT NOT NULL,
@@ -195,6 +204,7 @@ CREATE TABLE IF NOT EXISTS title_records (
 -- 14. Land Searches
 CREATE TABLE IF NOT EXISTS land_searches (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL,
   search_reference TEXT NOT NULL,
   search_date TEXT NOT NULL,
@@ -208,6 +218,7 @@ CREATE TABLE IF NOT EXISTS land_searches (
 -- 15. Valuations
 CREATE TABLE IF NOT EXISTS valuations (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL,
   valuer_name TEXT NOT NULL,
   market_value REAL NOT NULL,
@@ -224,6 +235,7 @@ CREATE TABLE IF NOT EXISTS valuations (
 -- 16. Documents
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL,
   title TEXT NOT NULL,
   category TEXT NOT NULL,
@@ -252,6 +264,7 @@ CREATE TABLE IF NOT EXISTS document_access_logs (
 -- 18. Buyers
 CREATE TABLE IF NOT EXISTS buyers (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   full_name TEXT NOT NULL,
   email TEXT NOT NULL,
   phone TEXT NOT NULL,
@@ -264,6 +277,7 @@ CREATE TABLE IF NOT EXISTS buyers (
 -- 19. KYC Applications
 CREATE TABLE IF NOT EXISTS kyc_applications (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   buyer_id TEXT,
   full_name TEXT NOT NULL,
   email TEXT NOT NULL,
@@ -307,6 +321,7 @@ CREATE TABLE IF NOT EXISTS buyer_access_grants (
 -- 22. Enquiries
 CREATE TABLE IF NOT EXISTS enquiries (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT,
   buyer_name TEXT NOT NULL,
   email TEXT NOT NULL,
@@ -320,6 +335,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
 -- 23. Leads
 CREATE TABLE IF NOT EXISTS leads (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   lead_ref TEXT NOT NULL UNIQUE,
   asset_id TEXT NOT NULL,
   buyer_id TEXT,
@@ -350,6 +366,7 @@ CREATE TABLE IF NOT EXISTS lead_activities (
 -- 25. Viewings
 CREATE TABLE IF NOT EXISTS viewings (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL,
   buyer_id TEXT,
   buyer_name TEXT NOT NULL,
@@ -370,6 +387,7 @@ CREATE TABLE IF NOT EXISTS viewings (
 -- 26. Offers
 CREATE TABLE IF NOT EXISTS offers (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   offer_ref TEXT NOT NULL UNIQUE,
   asset_id TEXT NOT NULL,
   buyer_id TEXT,
@@ -441,6 +459,7 @@ CREATE TABLE IF NOT EXISTS commissions (
 -- 31. Invoices
 CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY,
+  public_id TEXT UNIQUE,
   invoice_number TEXT NOT NULL UNIQUE,
   commission_id TEXT,
   bank_id TEXT NOT NULL,
@@ -506,6 +525,11 @@ CREATE TABLE IF NOT EXISTS system_settings (
 -- 36. Sessions — Secure server-side session store
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,                       -- session token (random 64-char hex)
+  secret_hash TEXT UNIQUE,
+  device_name TEXT,
+  last_ip TEXT,
+  suspicious_activity_count INTEGER NOT NULL DEFAULT 0,
+  remembered INTEGER NOT NULL DEFAULT 0,
   user_id TEXT NOT NULL,
   organization_id TEXT NOT NULL,
   bank_id TEXT,

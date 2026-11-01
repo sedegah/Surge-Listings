@@ -30,35 +30,136 @@ export default {
 
     // ============================================================
     // CORS MIDDLEWARE
-    // Explicitly allows https://surge-listings.vercel.app, all vercel subdomains,
-    // localhost development ports, and any originating client.
+    // The browser uses the Vercel same-origin API rewrite. Direct API clients are
+    // limited to explicitly configured application origins.
     // ============================================================
     const origin = request.headers.get('Origin');
-    const isVercelOrLocal = !origin ||
-      origin === 'https://surge-listings.vercel.app' ||
-      origin.endsWith('.vercel.app') ||
-      origin.includes('localhost') ||
-      origin.includes('127.0.0.1');
-
-    const allowOrigin = isVercelOrLocal ? (origin || '*') : '*';
+    const allowedOrigins = new Set([
+      'https://surge-listings.vercel.app',
+      ...(env.APP_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean)
+    ]);
+    const allowOrigin = origin && allowedOrigins.has(origin) ? origin : '';
 
     const corsHeaders = {
-      'Access-Control-Allow-Origin': allowOrigin,
+      ...(allowOrigin ? { 'Access-Control-Allow-Origin': allowOrigin, 'Access-Control-Allow-Credentials': 'true' } : {}),
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Bank-ID, X-Actor-Name, X-Actor-Role, Authorization, Accept, Origin, X-Requested-With',
-      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, Origin, X-Requested-With',
       'Access-Control-Max-Age': '86400',
+      'Access-Control-Expose-Headers': 'Content-Disposition, ETag',
       'Content-Type': 'application/json',
       'Cache-Control': 'private, no-store, max-age=0',
-      'Vary': 'Origin'
+      'Vary': 'Origin',
+      'X-Content-Type-Options': 'nosniff'
     };
 
     if (method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: corsHeaders });
-    const err = (message, status = 400) => new Response(JSON.stringify({ success: false, error: message }), { status, headers: corsHeaders });
+    let responseCookie = null;
+    const json = (data, status = 200) => {
+      const headers = new Headers(corsHeaders);
+      if (responseCookie) headers.set('Set-Cookie', responseCookie);
+      return new Response(JSON.stringify(data), { status, headers });
+    };
+    const err = (message, status = 400) => {
+      const headers = new Headers(corsHeaders);
+      if (responseCookie) headers.set('Set-Cookie', responseCookie);
+      return new Response(JSON.stringify({ success: false, error: message }), { status, headers });
+    };
+
+    const SESSION_COOKIE = '__Host-surge_session';
+    const SESSION_TTL_HOURS = 8;
+    const encoder = new TextEncoder();
+
+    function secureRandomHex(byteCount = 32) {
+      const bytes = crypto.getRandomValues(new Uint8Array(byteCount));
+      return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function randomId() {
+      return crypto.randomUUID();
+    }
+
+    async function sha256Hex(value) {
+      const digest = await crypto.subtle.digest('SHA-256', encoder.encode(value));
+      return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function setSessionCookie(secret, maxAge = SESSION_TTL_HOURS * 3600) {
+      responseCookie = `${SESSION_COOKIE}=${secret}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+    }
+
+    function clearSessionCookie() {
+      responseCookie = `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+    }
+
+    function readCookie(name) {
+      const cookieHeader = request.headers.get('Cookie') || '';
+      for (const part of cookieHeader.split(';')) {
+        const separator = part.indexOf('=');
+        if (separator > 0 && part.slice(0, separator).trim() === name) {
+          return part.slice(separator + 1).trim();
+        }
+      }
+      return '';
+    }
+
+    function equalSecret(left, right) {
+      if (left.length !== right.length) return false;
+      let difference = 0;
+      for (let index = 0; index < left.length; index += 1) {
+        difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+      }
+      return difference === 0;
+    }
+
+    function decodeBase64(value) {
+      return Uint8Array.from(atob(value), character => character.charCodeAt(0));
+    }
+
+    function encodeBase64(value) {
+      return btoa(String.fromCharCode(...new Uint8Array(value)));
+    }
+
+    async function hashPassword(password) {
+      const iterations = 120000;
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+      const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
+      return `pbkdf2-sha256$${iterations}$${encodeBase64(salt)}$${encodeBase64(bits)}`;
+    }
+
+    async function verifyPassword(password, storedHash) {
+      const parts = String(storedHash || '').split('$');
+      if (parts.length !== 4 || parts[0] !== 'pbkdf2-sha256') return false;
+      const iterations = Number(parts[1]);
+      if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 600000) return false;
+      const salt = decodeBase64(parts[2]);
+      const expected = decodeBase64(parts[3]);
+      const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+      const actual = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, expected.length * 8));
+      if (actual.length !== expected.length) return false;
+      let difference = 0;
+      for (let index = 0; index < actual.length; index += 1) difference |= actual[index] ^ expected[index];
+      return difference === 0;
+    }
+
+    function parseDeviceName(userAgent) {
+      const agent = String(userAgent || '');
+      const browser = /Edg\//.test(agent) ? 'Edge' : /Firefox\//.test(agent) ? 'Firefox' : /Chrome\//.test(agent) ? 'Chrome' : /Safari\//.test(agent) ? 'Safari' : 'Unknown browser';
+      const platform = /Windows/.test(agent) ? 'Windows' : /Android/.test(agent) ? 'Android' : /iPhone|iPad/.test(agent) ? 'iOS' : /Mac OS/.test(agent) ? 'macOS' : /Linux/.test(agent) ? 'Linux' : 'Unknown device';
+      return `${browser} on ${platform}`;
+    }
+
+    function enforceSameOriginMutation() {
+      if (env.ENVIRONMENT !== 'production' || ['GET', 'HEAD', 'OPTIONS'].includes(method)) return null;
+      const requestOrigin = request.headers.get('Origin');
+      if (!requestOrigin || !allowedOrigins.has(requestOrigin)) {
+        return err('Cross-origin request rejected.', 403);
+      }
+      return null;
+    }
 
     function bucketNameForDocumentCategory(category) {
       const normalized = String(category || '').trim().toLowerCase();
@@ -120,18 +221,20 @@ export default {
       }
     }
 
+    let activeSession = null;
+
     // Helper: Immutable Audit Logging
     async function auditLog(actorName, actorRole, org, actionType, entityType, entityId, summary, oldVal = null, newVal = null) {
       try {
-        const id = 'au-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        const id = randomId();
         await env.DB.prepare(`
           INSERT INTO audit_logs (id, actor_name, actor_role, organization, action_type, entity_type, entity_id, delta_summary, old_values, new_values, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         `).bind(
           id,
-          actorName || 'System',
-          actorRole || 'System',
-          org || 'Surge Solutions',
+          activeSession?.full_name || actorName || 'System',
+          activeSession?.role_code || actorRole || 'System',
+          activeSession?.bank_name || org || 'Surge Solutions',
           actionType,
           entityType,
           entityId,
@@ -150,36 +253,88 @@ export default {
     // or X-Session-Token header. Enriches the request context.
     // NEVER trusts client-supplied bank_id headers.
     // ============================================================
-    const SESSION_TTL_HOURS = 8; // sessions expire after 8 hours of inactivity
-
-    async function generateToken(bytes = 32) {
-      const arr = new Uint8Array(bytes);
-      crypto.getRandomValues(arr);
-      return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    // Resolve session from Authorization header or X-Session-Token
+    // New credentials use an opaque session ID plus a random secret stored only as a hash.
     async function resolveSession() {
       const authHeader = request.headers.get('Authorization') || '';
-      const tokenHeader = request.headers.get('X-Session-Token') || '';
-      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : tokenHeader.trim();
-      if (!token) return null;
+      const legacyToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      const cookieSecret = readCookie(SESSION_COOKIE);
+      let session = null;
 
-      const session = await env.DB.prepare(`
+      if (cookieSecret) {
+        const secretHash = await sha256Hex(cookieSecret);
+        session = await env.DB.prepare(`
         SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
-               b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status
+               b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status,
+               b.public_id as bank_public_id, o.public_id as organization_public_id,
+               u.public_id as user_public_id
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         LEFT JOIN banks b ON s.bank_id = b.id
-        WHERE s.id = ? AND s.revoked = 0
+        LEFT JOIN organizations o ON o.id = s.organization_id
+        WHERE s.secret_hash = ? AND s.revoked = 0
           AND datetime(s.expires_at) > datetime('now')
-      `).bind(token).first();
+        `).bind(secretHash).first();
+      }
+
+      if (!session && legacyToken) {
+        session = await env.DB.prepare(`
+          SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
+                 b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status,
+                 b.public_id as bank_public_id, o.public_id as organization_public_id,
+                 u.public_id as user_public_id
+          FROM sessions s
+          JOIN users u ON s.user_id = u.id
+          LEFT JOIN banks b ON s.bank_id = b.id
+          LEFT JOIN organizations o ON o.id = s.organization_id
+          WHERE s.id = ? AND s.secret_hash IS NULL AND s.revoked = 0
+            AND datetime(s.expires_at) > datetime('now')
+        `).bind(legacyToken).first();
+
+        if (session?.user_status === 'Active') {
+          const newSecret = secureRandomHex(32);
+          const newSessionId = randomId();
+          const secretHash = await sha256Hex(newSecret);
+          const ipAddress = request.headers.get('CF-Connecting-IP') || '';
+          const userAgent = (request.headers.get('User-Agent') || '').slice(0, 250);
+          const remembered = session.remembered === 1;
+          const ttlDays = remembered ? 30 : SESSION_TTL_HOURS / 24;
+          const rotated = await env.DB.prepare(`
+            UPDATE sessions
+            SET id = ?, secret_hash = ?, last_active = datetime('now'),
+                expires_at = datetime('now', ?), device_name = ?, last_ip = ?,
+                user_agent = ?, remembered = ?
+            WHERE id = ? AND secret_hash IS NULL AND revoked = 0
+          `).bind(
+            newSessionId, secretHash, `+${ttlDays} days`, parseDeviceName(userAgent),
+            ipAddress, userAgent, remembered ? 1 : 0, legacyToken
+          ).run();
+          if (!rotated.meta?.changes) return null;
+          session.id = newSessionId;
+          session.secret_hash = secretHash;
+          session.last_ip = ipAddress;
+          setSessionCookie(newSecret, remembered ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
+          await auditLog(session.full_name, session.role_code, session.bank_name, 'SESSION_ROTATED', 'Session', newSessionId, 'Legacy bearer session rotated to a secure HttpOnly cookie.');
+        }
+      }
 
       if (!session) return null;
       if (session.user_status !== 'Active') return null;
-
-      // Touch last_active (non-blocking)
-      ctx.waitUntil(env.DB.prepare(`UPDATE sessions SET last_active = datetime('now') WHERE id = ?`).bind(token).run());
+      activeSession = session;
+      const currentIp = request.headers.get('CF-Connecting-IP') || '';
+      if (session.secret_hash) {
+        const suspicious = Boolean(session.last_ip && currentIp && session.last_ip !== currentIp);
+        const ttlDays = session.remembered === 1 ? 30 : SESSION_TTL_HOURS / 24;
+        ctx.waitUntil(env.DB.prepare(`
+          UPDATE sessions
+          SET last_active = datetime('now'), expires_at = datetime('now', ?),
+              last_ip = ?, suspicious_activity_count = suspicious_activity_count + ?
+          WHERE id = ? AND revoked = 0
+        `).bind(`+${ttlDays} days`, currentIp, suspicious ? 1 : 0, session.id).run());
+        if (suspicious) {
+          ctx.waitUntil(auditLog(session.full_name, session.role_code, session.bank_name, 'SESSION_IP_CHANGED', 'Session', session.id, 'Session used from a different network address; session remains active.'));
+        }
+        setSessionCookie(cookieSecret || '', session.remembered === 1 ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
+      }
       return session;
     }
 
@@ -232,6 +387,9 @@ export default {
     const actorRole = request.headers.get('x-actor-role') || 'User';
 
     try {
+      const originError = enforceSameOriginMutation();
+      if (originError) return originError;
+
       // ============================================================
       // 0. ROOT & HEALTH ENDPOINTS
       // ============================================================
@@ -298,8 +456,9 @@ export default {
         }
 
         const user = await env.DB.prepare(`
-          SELECT u.*, r.name as role_name, r.scope, o.name as org_name,
-                 b.id as bank_id, b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status
+          SELECT u.*, r.name as role_name, r.scope, o.name as org_name, o.public_id as organization_public_id,
+                 b.id as bank_id, b.public_id as bank_public_id, b.legal_name as bank_name,
+                 b.short_code as bank_code, b.status as bank_status
           FROM users u
           JOIN roles r ON u.role_code = r.code
           JOIN organizations o ON u.organization_id = o.id
@@ -315,12 +474,21 @@ export default {
         if (!user) { await recordFailure('USER_NOT_FOUND'); return err('The username or password is incorrect.', 401); }
         let validPassword = false;
         if (user.password_hash) {
-          validPassword = (user.password_hash === password.trim());
+          if (String(user.password_hash).startsWith('pbkdf2-sha256$')) {
+            validPassword = await verifyPassword(password.trim(), user.password_hash);
+          } else {
+            validPassword = equalSecret(String(user.password_hash), password.trim());
+            if (validPassword) {
+              const upgradedHash = await hashPassword(password.trim());
+              await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`)
+                .bind(upgradedHash, user.id, user.password_hash).run();
+            }
+          }
         } else {
           // Uninitialized seed accounts can log in with Surge2026! or password, activating their initial password
           if (password.trim() === 'Surge2026!' || password.trim() === 'password') {
             validPassword = true;
-            await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(password.trim(), user.id).run();
+            await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(await hashPassword(password.trim()), user.id).run();
           }
         }
         if (!validPassword) {
@@ -329,31 +497,36 @@ export default {
         }
 
         // Create session
-        const token = await generateToken(32);
-        const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 3600 * 1000).toISOString();
+        const sessionId = randomId();
+        const sessionSecret = secureRandomHex(32);
+        const secretHash = await sha256Hex(sessionSecret);
+        const remembered = body.remember === true;
+        const ttlDays = remembered ? 30 : SESSION_TTL_HOURS / 24;
+        const expiresAt = new Date(Date.now() + ttlDays * 24 * 3600 * 1000).toISOString();
+        const userAgent = (request.headers.get('User-Agent') || '').slice(0, 250);
         await env.DB.prepare(`
-          INSERT INTO sessions (id, user_id, organization_id, bank_id, branch_id, role_code, scope, ip_address, user_agent, created_at, expires_at, last_active)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
-        `).bind(token, user.id, user.organization_id, user.bank_id || null, user.branch_id || null,
+          INSERT INTO sessions (id, secret_hash, user_id, organization_id, bank_id, branch_id, role_code, scope,
+            ip_address, last_ip, user_agent, device_name, remembered, created_at, expires_at, last_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
+        `).bind(sessionId, secretHash, user.id, user.organization_id, user.bank_id || null, user.branch_id || null,
           user.role_code, user.scope, ipAddress,
-          (request.headers.get('User-Agent') || '').substring(0, 250),
-          expiresAt).run();
+          ipAddress, userAgent, parseDeviceName(userAgent), remembered ? 1 : 0, expiresAt).run();
+        setSessionCookie(sessionSecret, remembered ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
 
         // Record success & update last_login
         await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, attempted_at) VALUES (?, ?, ?, 1, datetime('now'))`)
-          .bind('la-' + Date.now(), uname, ipAddress).run();
+          .bind(randomId(), uname, ipAddress).run();
         await env.DB.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).bind(user.id).run();
         await auditLog(user.full_name, user.role_name, user.org_name, 'LOGIN', 'User', user.id, `Signed in from ${ipAddress}`);
 
         return json({
           success: true,
-          token,
           expiresAt,
           user: {
-            id: user.id, username: user.username, fullName: user.full_name,
+            id: user.public_id, username: user.username, fullName: user.full_name,
             email: user.email, roleCode: user.role_code, roleName: user.role_name,
-            scope: user.scope, bankId: user.bank_id, bankName: user.bank_name,
-            bankCode: user.bank_code, organizationId: user.organization_id,
+            scope: user.scope, bankId: user.bank_public_id, bankName: user.bank_name,
+            bankCode: user.bank_code, organizationId: user.organization_public_id,
             branchId: user.branch_id, mfaEnabled: !!user.mfa_enabled
           }
         });
@@ -361,25 +534,62 @@ export default {
 
       // POST /api/auth/logout — Revoke session
       if (pathname === '/api/auth/logout' && method === 'POST') {
-        const authHeader = request.headers.get('Authorization') || '';
-        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-        if (token) {
-          await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'USER_LOGOUT' WHERE id = ?`).bind(token).run();
-        }
+        const session = await resolveSession();
+        if (session) await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'USER_LOGOUT' WHERE id = ?`).bind(session.id).run();
+        clearSessionCookie();
         return json({ success: true, message: 'Signed out successfully.' });
+      }
+
+      if (pathname === '/api/auth/logout-all' && method === 'POST') {
+        const session = await requireAuth();
+        await env.DB.prepare(`
+          UPDATE sessions SET revoked = 1, revoke_reason = 'USER_LOGOUT_ALL'
+          WHERE user_id = ? AND revoked = 0
+        `).bind(session.user_id).run();
+        clearSessionCookie();
+        await auditLog(session.full_name, session.role_code, session.bank_name, 'LOGOUT_ALL', 'User', session.user_id, 'All active sessions revoked.');
+        return json({ success: true, message: 'All sessions have been signed out.' });
+      }
+
+      if (pathname === '/api/auth/sessions' && method === 'GET') {
+        const session = await requireAuth();
+        const result = await env.DB.prepare(`
+          SELECT id, device_name, last_ip, created_at, last_active, expires_at,
+                 CASE WHEN id = ? THEN 1 ELSE 0 END AS current
+          FROM sessions
+          WHERE user_id = ? AND revoked = 0 AND datetime(expires_at) > datetime('now')
+          ORDER BY last_active DESC
+        `).bind(session.id, session.user_id).all();
+        return json({ success: true, sessions: result.results || [] });
+      }
+
+      const revokeSessionMatch = pathname.match(/^\/api\/auth\/sessions\/([0-9a-f-]{36})$/i);
+      if (revokeSessionMatch && method === 'DELETE') {
+        const session = await requireAuth();
+        const revoked = await env.DB.prepare(`
+          UPDATE sessions SET revoked = 1, revoke_reason = 'USER_REVOKED'
+          WHERE id = ? AND user_id = ? AND revoked = 0
+        `).bind(revokeSessionMatch[1], session.user_id).run();
+        if (!revoked.meta?.changes) return err('Session not found or already revoked.', 404);
+        if (revokeSessionMatch[1] === session.id) clearSessionCookie();
+        await auditLog(session.full_name, session.role_code, session.bank_name, 'SESSION_REVOKED', 'Session', revokeSessionMatch[1], 'User revoked an active session.');
+        return json({ success: true });
       }
 
       // GET /api/auth/me — Validate session and return user profile
       if ((pathname === '/api/auth/me' || pathname === '/api/v1/auth/me') && method === 'GET') {
         const session = await resolveSession();
         if (!session) return json({ success: true, authenticated: false, user: null });
+        const branch = session.branch_id
+          ? await env.DB.prepare('SELECT public_id FROM bank_branches WHERE id = ?').bind(session.branch_id).first()
+          : null;
         return json({
           success: true, authenticated: true,
           user: {
-            id: session.user_id, username: session.username, fullName: session.full_name,
+            id: session.user_public_id, username: session.username, fullName: session.full_name,
             email: session.email, roleCode: session.role_code, scope: session.scope,
-            bankId: session.bank_id, bankName: session.bank_name, bankCode: session.bank_code,
-            branchId: session.branch_id, organizationId: session.organization_id
+            bankId: session.bank_public_id, bankName: session.bank_name, bankCode: session.bank_code,
+            branchId: branch?.public_id || null, organizationId: session.organization_public_id
           }
         });
       }
@@ -914,7 +1124,11 @@ export default {
           request.headers.get('CF-Connecting-IP') || ''
         ).run();
 
-        const filename = String(doc.title || 'document').replace(/["\\r\\n]/g, '_').slice(0, 120);
+        const extension = extensionForMime(String(doc.content_type || '').toLowerCase());
+        const baseFilename = String(doc.title || 'document').replace(/["\\r\\n]/g, '_').slice(0, 120);
+        const filename = extension && !baseFilename.toLowerCase().endsWith(`.${extension}`)
+          ? `${baseFilename}.${extension}`
+          : baseFilename;
         const headers = new Headers(corsHeaders);
         headers.set('Content-Type', 'application/octet-stream');
         headers.set('Content-Disposition', `attachment; filename="${filename}"`);
@@ -933,6 +1147,18 @@ export default {
           WHERE a.bank_id = ?
           ORDER BY d.uploaded_at DESC
         `).bind(session.bank_id).all();
+        return json({ success: true, count: docs.results.length, data: docs.results });
+      }
+
+      if (pathname === '/api/admin/documents' && method === 'GET') {
+        await requireAdminAuth();
+        const docs = await env.DB.prepare(`
+          SELECT d.*, a.public_ref as asset_ref, a.title as asset_title, b.legal_name as bank_name
+          FROM documents d
+          JOIN assets a ON a.id = d.asset_id
+          JOIN banks b ON b.id = a.bank_id
+          ORDER BY d.uploaded_at DESC
+        `).all();
         return json({ success: true, count: docs.results.length, data: docs.results });
       }
 
@@ -1376,7 +1602,7 @@ export default {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (asset.bank_id !== session.bank_id) {
+        if (asset.bank_id !== session.bank_id && !(session.scope === 'surge' && asset.bank_id === 'bank-surge')) {
           return err('Asset not found or access denied.', 404);
         }
         if (asset.legal_hold_active) return err('Legal hold is active on this asset.', 400);

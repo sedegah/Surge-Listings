@@ -6,15 +6,6 @@
 <title>Surge Solutions — Bank Partner Portal</title>
 <meta name="description" content="Surge Solutions Bank Portal — Multi-tenant loan recovery and asset management platform for Ghanaian financial institutions.">
 <link rel="stylesheet" href="styles.css">
-<script>
-try {
-  if (!sessionStorage.getItem('surge_token') && !localStorage.getItem('surge_token')) {
-    location.replace('login.html?next=bank.html');
-  }
-} catch (error) {
-  location.replace('login.html?next=bank.html');
-}
-</script>
 <style>
 body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
 #portal-auth-status { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; text-align: center; background: #DCDCDC; color: #1F1F1F; font: 14px "Segoe UI", Inter, Arial, sans-serif; }
@@ -43,6 +34,7 @@ body.auth-ready #portal-auth-status { display: none; }
         <span class="menu-item" onclick="BankPortal.nav('reports')"><u>R</u>eports</span>
         <span class="menu-spacer"></span>
         <span class="menu-env">BANK PORTAL</span>
+        <button class="btn small" type="button" onclick="Auth.logout()">Sign Out</button>
       </div>
       <div class="toolbar">
         <button class="tbtn" onclick="BankPortal.newAsset()"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button>

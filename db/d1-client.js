@@ -27,9 +27,12 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '065fc200f5c2cb1f51dd59426f19012c';
+const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
 const API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-const DATABASE_ID = process.env.CLOUDFLARE_D1_DATABASE_ID || '62b0bf0f-803b-4a09-8cbb-78f948bb6d02';
+const DATABASE_ID = process.env.CLOUDFLARE_D1_DATABASE_ID;
+if (!ACCOUNT_ID || !DATABASE_ID) {
+  throw new Error('CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_D1_DATABASE_ID must be configured for the D1 client.');
+}
 const D1_ENDPOINT = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database/${DATABASE_ID}/query`;
 
 if (!API_TOKEN) {
