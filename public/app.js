@@ -2863,8 +2863,7 @@ const AdminPortal = {
     return `
       <div class="page-head" style="flex-wrap:wrap;gap:10px">
         <div>
-          <h1 style="display:flex;align-items:center;gap:8px">
-            <svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--blue)"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+          <h1>
             Bank Partners &amp; Staff Administration
           </h1>
           <span class="crumb">Multi-tenant institutional onboarding, staff user accounts, and credential provisioning</span>

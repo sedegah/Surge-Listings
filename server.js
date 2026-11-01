@@ -274,10 +274,10 @@ app.post('/api/v1/public/enquiries', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, 'Promoted', ?)
   `).run(enquiryId, assetId, buyerName, email, phone || '', message, leadId);
 
-  // Auto-promote to Lead and assign agent Akosua Tetteh
+  // Leave the enquiry unassigned until a staff member takes ownership.
   db.prepare(`
     INSERT INTO leads (id, lead_ref, asset_id, buyer_name, email, phone, stage, assigned_agent_id, assigned_agent_name, source, notes)
-    VALUES (?, ?, ?, ?, ?, ?, 'New', 'u-tetteh', 'Akosua Tetteh', 'Marketplace Enquiry', ?)
+    VALUES (?, ?, ?, ?, ?, ?, 'New', NULL, NULL, 'Marketplace Enquiry', ?)
   `).run(leadId, leadRef, assetId, buyerName, email, phone || '', message);
 
   db.prepare(`
@@ -386,7 +386,7 @@ app.post('/api/v1/public/viewings', (req, res) => {
 
   db.prepare(`
     INSERT INTO viewings (id, asset_id, buyer_name, agent_id, agent_name, viewing_date, time_slot, status, high_risk_override, notes)
-    VALUES (?, ?, ?, 'u-tetteh', 'Akosua Tetteh', ?, ?, 'Requested', 0, ?)
+    VALUES (?, ?, ?, NULL, NULL, ?, ?, 'Requested', 0, ?)
   `).run(viewingId, asset.id, buyerName, viewingDate, timeSlot, notes || '');
 
   logAudit(buyerName, 'Buyer', 'Public', 'Request Viewing', 'Viewing', viewingId, `Viewing requested for ${asset.public_ref} on ${viewingDate} (${timeSlot})`);

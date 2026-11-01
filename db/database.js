@@ -551,11 +551,7 @@ function seedData() {
 
   // 3. Users
   const users = [
-    { id: 'u-sedegah', org_id: 'org-surge', bank_id: null, username: 'k.sedegah', full_name: 'Kimathi Sedegah', email: 'k.sedegah@surgesolutions.com.gh', role_code: 'SA', password_hash: '090806' },
-    { id: 'u-admin', org_id: 'org-surge', bank_id: null, username: 'admin', full_name: 'System Administrator', email: 'admin@surgesolutions.com.gh', role_code: 'SA' },
-    { id: 'u-boateng', org_id: 'org-surge', bank_id: null, username: 'a.boateng', full_name: 'Ama Boateng', email: 'a.boateng@surgesolutions.com.gh', role_code: 'PM' },
-    { id: 'u-addo', org_id: 'org-surge', bank_id: null, username: 'k.addo', full_name: 'Kwame Addo', email: 'k.addo@surgesolutions.com.gh', role_code: 'LO' },
-    { id: 'u-tetteh', org_id: 'org-surge', bank_id: null, username: 'a.tetteh', full_name: 'Akosua Tetteh', email: 'a.tetteh@surgesolutions.com.gh', role_code: 'SG' },
+    { id: 'u-sedegah', org_id: 'org-surge', bank_id: null, username: 'k.sedegah', full_name: 'Kimathi Sedegah', email: 'k.sedegah@surgesolutions.com.gh', role_code: 'SA' },
     { id: 'u-mensah', org_id: 'org-mtb', bank_id: 'bank-mtb', username: 'j.mensah', full_name: 'Joseph Mensah', email: 'j.mensah@meridiantrust.com.gh', role_code: 'LRO' },
     { id: 'u-asare', org_id: 'org-mtb', bank_id: 'bank-mtb', username: 'k.asare', full_name: 'Kofi Asare', email: 'k.asare@meridiantrust.com.gh', role_code: 'AO' },
     { id: 'u-owusu', org_id: 'org-mtb', bank_id: 'bank-mtb', username: 'a.owusu', full_name: 'Abena Owusu', email: 'a.owusu@meridiantrust.com.gh', role_code: 'AP' },
@@ -875,22 +871,17 @@ function seedData() {
   // 11. Leads & Activities
   db.prepare(`
     INSERT INTO leads (id, lead_ref, asset_id, buyer_id, buyer_name, email, phone, stage, assigned_agent_id, assigned_agent_name, source, notes)
-    VALUES ('lead-001', 'SL-LEAD-2026-000042', 'ast-001', 'byr-001', 'Dr. Kwabena Frimpong', 'k.frimpong@apexmed.com.gh', '+233 24 419 8832', 'Viewing', 'u-tetteh', 'Akosua Tetteh', 'Marketplace Enquiry', 'Buyer requested viewing appointment for Community 25 property.')
+    VALUES ('lead-001', 'SL-LEAD-2026-000042', 'ast-001', 'byr-001', 'Dr. Kwabena Frimpong', 'k.frimpong@apexmed.com.gh', '+233 24 419 8832', 'Viewing', NULL, NULL, 'Marketplace Enquiry', 'Buyer requested viewing appointment for Community 25 property.')
   `).run();
 
   db.prepare(`
     INSERT INTO lead_activities (id, lead_id, activity_type, description, actor_name)
     VALUES ('la-001', 'lead-001', 'Enquiry Received', 'Marketplace enquiry submitted regarding Tema Comm 25 house', 'Dr. Kwabena Frimpong')
   `).run();
-  db.prepare(`
-    INSERT INTO lead_activities (id, lead_id, activity_type, description, actor_name)
-    VALUES ('la-002', 'lead-001', 'KYC Verified', 'Buyer identity and source of funds verified; Access Grant issued', 'Ama Boateng')
-  `).run();
-
   // 12. Viewings (Occupied - Hostile requiring Override)
   db.prepare(`
     INSERT INTO viewings (id, asset_id, buyer_id, buyer_name, agent_id, agent_name, viewing_date, time_slot, status, high_risk_override, override_reason, override_by, notes, address_disclosed)
-    VALUES ('vw-001', 'ast-001', 'byr-001', 'Dr. Kwabena Frimpong', 'u-tetteh', 'Akosua Tetteh', '2026-10-21', '14:00 - 15:30', 'Confirmed', 1, 'Accompanied by armed court bailiff and bank security detail per High-Risk Occupancy protocol.', 'Ama Boateng', 'Exterior and compound inspection only. Occupant notified.', 1)
+    VALUES ('vw-001', 'ast-001', 'byr-001', 'Dr. Kwabena Frimpong', NULL, NULL, '2026-10-21', '14:00 - 15:30', 'Confirmed', 1, 'Accompanied by armed court bailiff and bank security detail per High-Risk Occupancy protocol.', NULL, 'Exterior and compound inspection only. Occupant notified.', 1)
   `).run();
 
   // 13. Offers & Decisions
@@ -988,10 +979,8 @@ function seedData() {
   // 15. Audit Logs
   const auditLogs = [
     { actor: 'j.mensah', role: 'Legal / Recovery Officer', org: 'Meridian Trust Bank', action: 'Update Occupancy', entity: 'Asset', id: 'SS-RE-2026-00241', delta: 'Occupancy Status: Vacant -> Occupied — Hostile', old: 'Vacant', new: 'Occupied — Hostile', time: '2026-10-17 14:22:00' },
-    { actor: 'a.boateng', role: 'Property Manager', org: 'Surge Solutions', action: 'Place Legal Hold', entity: 'Asset', id: 'SS-RE-2026-00236', delta: 'Legal Hold: Active. Reason: Family caveat and pending cross-examination', old: 'Inactive', new: 'Active', time: '2026-10-16 10:04:00' },
     { actor: 'k.asare', role: 'Asset Officer', org: 'Meridian Trust Bank', action: 'Submit for Review', entity: 'Asset', id: 'SS-RE-2026-00241', delta: 'Lifecycle: Draft -> Submitted by Bank', old: 'Draft', new: 'Submitted by Bank', time: '2026-10-15 16:47:00' },
     { actor: 'k.asare', role: 'Asset Officer', org: 'Meridian Trust Bank', action: 'Change Reserve Price', entity: 'Asset', id: 'SS-RE-2026-00241', delta: 'Reserve: GHS 980,000.00 -> GHS 950,000.00', old: '980,000.00', new: '950,000.00', time: '2026-10-15 16:41:00' },
-    { actor: 'k.addo', role: 'Legal Verification Officer', org: 'Surge Solutions', action: 'Verify Judgment', entity: 'Instrument', id: 'J-2026-0418', delta: 'Verified: High Court Judgment CM/0418/2026 with injunction active flag', old: 'Pending', new: 'Verified', time: '2026-10-14 11:30:00' }
   ];
   for (const log of auditLogs) {
     db.prepare(`
@@ -1045,4 +1034,3 @@ function seedBankBranches() {
     `).run(br.id, br.bank_id, br.name, br.branch_code, br.region, br.town, br.address, br.phone, br.email, br.manager_name);
   }
 }
-
