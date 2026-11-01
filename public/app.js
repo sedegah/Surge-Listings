@@ -423,6 +423,7 @@ const Store = {
             exteriorImage: (d.image_count || 0) > 0,
             titleNumber: d.title_certificate_number || '',
             titleType: d.title_type || '',
+            titleRegistry: d.title_registry || '',
             titleOwner: d.title_registered_owner || '',
             titlePerfection: d.title_perfection_status || '',
             titleVerificationStatus: d.title_verification_status || '',
@@ -2011,14 +2012,17 @@ const BankPortal = {
           <div class="field"><span class="lbl">Title Number <span class="req">*</span></span><div class="ctl"><input id="title-number" maxlength="160" value="${UI.escapeHtml(a.titleNumber || '')}" placeholder="e.g. TD-2024-01234"></div></div>
           <div class="field"><span class="lbl">Title Type</span><div class="ctl">
             <select id="title-type">
+              <option value="" ${a.titleType ? '' : 'selected'} disabled>Select title type</option>
               <option value="Freehold" ${a.titleType === 'Freehold' ? 'selected' : ''}>Freehold</option>
               <option value="Leasehold" ${a.titleType === 'Leasehold' ? 'selected' : ''}>Leasehold</option>
               <option value="Registered" ${a.titleType === 'Registered' ? 'selected' : ''}>Registered</option>
             </select>
           </div></div>
+          <div class="field"><span class="lbl">Registry / Issuing Authority <span class="req">*</span></span><div class="ctl"><input id="title-registry" maxlength="160" value="${UI.escapeHtml(a.titleRegistry || '')}" placeholder="e.g. Lands Commission"></div></div>
           <div class="field"><span class="lbl">Registered Owner</span><div class="ctl"><input id="title-owner" maxlength="160" value="${UI.escapeHtml(a.titleOwner || '')}" placeholder="Per title deed"></div></div>
           <div class="field"><span class="lbl">Perfection Status</span><div class="ctl">
             <select id="title-perfection">
+              <option value="" ${a.titlePerfection ? '' : 'selected'} disabled>Select perfection status</option>
               <option value="Perfected" ${a.titlePerfection === 'Perfected' ? 'selected' : ''}>Perfected</option>
               <option value="Unperfected" ${a.titlePerfection === 'Unperfected' ? 'selected' : ''}>Unperfected</option>
               <option value="In Progress" ${a.titlePerfection === 'In Progress' ? 'selected' : ''}>In Progress</option>
@@ -2046,8 +2050,12 @@ const BankPortal = {
     const titleNumber = document.getElementById('title-number').value.trim();
     if (!titleNumber) return UI.toast('Title number is required', 'error');
     const titleType = document.getElementById('title-type').value;
+    const registry = document.getElementById('title-registry').value.trim();
+    if (!titleType) return UI.toast('Select a title type', 'error');
+    if (!registry) return UI.toast('Registry or issuing authority is required', 'error');
     const registeredOwner = document.getElementById('title-owner').value.trim();
     const perfectionStatus = document.getElementById('title-perfection').value;
+    if (!perfectionStatus) return UI.toast('Select a perfection status', 'error');
     let documentId = a.titleDocumentId || '';
     if (this._stagedFile?.category === 'title') {
       try {
@@ -2068,7 +2076,7 @@ const BankPortal = {
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin',
         cache: 'no-store',
-        body: JSON.stringify({ certificateNumber: titleNumber, titleType, registeredOwner, perfectionStatus, documentId })
+        body: JSON.stringify({ certificateNumber: titleNumber, titleType, registry, registeredOwner, perfectionStatus, documentId })
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Title submission failed (${response.status}).`);
@@ -2982,6 +2990,7 @@ const AdminPortal = {
         <div class="body">
           <div class="kv-row"><span class="kv-k">Title Number</span><span class="kv-v">${UI.escapeHtml(title?.certificate_number || a.titleNumber || 'Not provided')}</span></div>
           <div class="kv-row"><span class="kv-k">Title Type</span><span class="kv-v">${UI.escapeHtml(title?.title_type || a.titleType || '—')}</span></div>
+          <div class="kv-row"><span class="kv-k">Registry</span><span class="kv-v">${UI.escapeHtml(title?.registry || a.titleRegistry || '—')}</span></div>
           <div class="kv-row"><span class="kv-k">Registered Owner</span><span class="kv-v">${UI.escapeHtml(title?.registered_owner || a.titleOwner || '—')}</span></div>
           <div class="kv-row"><span class="kv-k">Perfection Status</span><span class="kv-v">${UI.escapeHtml(title?.perfection_status || a.titlePerfection || '—')}</span></div>
           <div class="kv-row"><span class="kv-k">Verification Notes</span><span class="kv-v">${UI.escapeHtml(title?.notes || '—')}</span></div>

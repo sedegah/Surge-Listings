@@ -1065,10 +1065,12 @@ export default {
         const body = await getBody();
         const certificateNumber = String(body.certificateNumber || '').trim().slice(0, 160);
         const titleType = String(body.titleType || '').trim();
+        const registry = String(body.registry || '').trim().slice(0, 160);
         const registeredOwner = String(body.registeredOwner || '').trim().slice(0, 160);
         const perfectionStatus = String(body.perfectionStatus || '').trim();
         if (!certificateNumber) return err('Title number is required.', 400);
         if (!['Freehold', 'Leasehold', 'Registered'].includes(titleType)) return err('Select a valid title type.', 400);
+        if (!registry) return err('Registry or issuing authority is required.', 400);
         if (!['Perfected', 'Unperfected', 'In Progress'].includes(perfectionStatus)) {
           return err('Select a valid perfection status.', 400);
         }
@@ -1109,7 +1111,7 @@ export default {
             notes = NULL
         `).bind(
           titleRecordId, asset.id, certificateNumber, titleType, registeredOwner,
-          titleType, documentId, perfectionStatus
+          registry, documentId, perfectionStatus
         ).run();
         await auditLog(session.full_name, session.role_code, session.bank_id, 'SUBMIT_TITLE', 'TitleRecord', asset.public_ref,
           `Title details submitted for ${asset.public_ref}`);
@@ -1779,6 +1781,7 @@ export default {
               (SELECT certificate_number FROM title_records WHERE asset_id = a.id LIMIT 1) as title_certificate_number,
               (SELECT title_type FROM title_records WHERE asset_id = a.id LIMIT 1) as title_type,
               (SELECT registered_owner FROM title_records WHERE asset_id = a.id LIMIT 1) as title_registered_owner,
+              (SELECT registry FROM title_records WHERE asset_id = a.id LIMIT 1) as title_registry,
               (SELECT perfection_status FROM title_records WHERE asset_id = a.id LIMIT 1) as title_perfection_status,
               (SELECT verification_status FROM title_records WHERE asset_id = a.id LIMIT 1) as title_verification_status,
               (SELECT document_id FROM title_records WHERE asset_id = a.id LIMIT 1) as title_document_id,
