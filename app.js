@@ -412,7 +412,7 @@ const Store = {
             titleVerified: d.status === 'Live' || d.status === 'Approved',
             titleDetails: d.status !== 'Draft',
             enforcementBasis: d.internal_bank_ref ? 'Court Judgment' : '',
-            caseRef: d.internal_bank_ref || '',
+            caseRef: d.enforcement_case_number || d.internal_bank_ref || '',
             images: d.image_count || 0,
             documents: d.document_count || 0,
             createdAt: d.created_at,
@@ -425,7 +425,15 @@ const Store = {
               clearanceIssued: d.status === 'Live' || d.status === 'Approved'
             },
             legalNotes: [],
-            instruments: [],
+            instruments: (d.legal_instruments || []).map(instrument => ({
+              id: instrument.id,
+              type: instrument.instrument_type,
+              ref: instrument.instrument_ref,
+              status: instrument.verification_status,
+              uploadedBy: instrument.uploaded_by_name || 'Not recorded',
+              uploadedAt: instrument.uploaded_at || '',
+              uploadedByPublicId: instrument.uploaded_by_public_id || ''
+            })),
             activity: [{ when: d.created_at, who: d.created_by || 'Not recorded', what: 'Asset created' }]
           }));
         }
@@ -1077,7 +1085,7 @@ const BankPortal = {
   renderDashboard() {
     const assets = Store.getBankAssets();
     const user = Auth.getUser();
-    const bankName = user?.bankName || 'Partner Bank';
+    const bankName = user?.organizationName || user?.bankName || user?.bank_name || 'Partner Bank';
     const activeBranch = this.branches.find(b => b.id === Auth.selectedBranchId);
     const branchLabel = activeBranch ? `${activeBranch.name} (${activeBranch.region} / ${activeBranch.district || 'Hub'})` : 'All Branches (Whole Bank Portfolio)';
 
@@ -1120,10 +1128,12 @@ const BankPortal = {
 
   renderAssetList() {
     const assets = Store.getBankAssets();
+    const user = Auth.getUser();
+    const bankName = user?.organizationName || user?.bankName || user?.bank_name || 'Partner Bank';
     return `
       <div class="page-head">
         <h1>My Assets</h1>
-        <span class="crumb">Partner Bank · ${assets.length} records</span>
+        <span class="crumb">${UI.escapeHtml(bankName)} · ${assets.length} records</span>
         <span class="spacer"></span>
         <button class="btn primary" onclick="BankPortal.newAsset()"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Asset</button>
       </div>
@@ -1491,8 +1501,8 @@ const BankPortal = {
         <div class="body">
           ${(a.instruments || []).map(i => `
             <div class="instrument-row">
-              <span class="inst-type">${i.type}</span>
-              <span class="inst-ref">${i.ref}</span>
+              <span class="inst-type">${UI.escapeHtml(i.type)}</span>
+              <span class="inst-ref">${UI.escapeHtml(i.ref)}</span>
               <span class="inst-status">${UI.badge(i.status)}</span>
               <span style="font-size:11px;color:var(--text-2)">Uploaded ${UI.fmtDateShort(i.uploadedAt)}</span>
             </div>
@@ -1675,10 +1685,10 @@ const BankPortal = {
         <div class="body">
           ${instruments.length ? instruments.map(i => `
             <div class="instrument-row">
-              <span class="inst-type">${i.type}</span>
-              <span class="inst-ref">${i.ref}</span>
+              <span class="inst-type">${UI.escapeHtml(i.type)}</span>
+              <span class="inst-ref">${UI.escapeHtml(i.ref)}</span>
               <span class="inst-status">${UI.badge(i.status)}</span>
-              <span style="font-size:11px;color:var(--text-2)">${i.uploadedBy} · ${UI.fmtDateShort(i.uploadedAt)}</span>
+              <span style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(i.uploadedBy || 'Not recorded')} · ${UI.fmtDateShort(i.uploadedAt)}</span>
             </div>
           `).join('') : '<p style="color:var(--text-2);margin:0">No legal instruments have been added.</p>'}
         </div>
@@ -1786,14 +1796,26 @@ const BankPortal = {
     const ref = document.getElementById('new-inst-ref').value.trim();
     if (!ref) return UI.toast('Instrument reference number is required', 'error');
     try {
-      await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Legal Instrument', {
-        title: `${type} ${ref}`
+      const result = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Legal Instrument', {
+        title: `${type} ${ref}`,
+        instrument_type: type,
+        instrument_ref: ref,
+        case_number: document.getElementById('edit-caseRef').value.trim()
       });
-      a.instruments = a.instruments || [];
-      a.instruments.push({
-        id: 'i' + Date.now(), type, ref, fileName: ref,
-        status: 'Pending', uploadedBy: Auth.getUser()?.fullName || 'Bank User', uploadedAt: new Date().toISOString()
-      });
+      const refreshedAsset = Store.getAsset(this.selectedAssetId);
+      if (!refreshedAsset) throw new Error('The instrument was uploaded, but the asset could not be refreshed.');
+      if (result.instrument && !refreshedAsset.instruments.some(instrument => instrument.id === result.instrument.id)) {
+        const instrument = result.instrument;
+        refreshedAsset.instruments.push({
+          id: instrument.id,
+          type: instrument.instrument_type,
+          ref: instrument.instrument_ref,
+          status: instrument.verification_status,
+          uploadedBy: instrument.uploaded_by_name || 'Not recorded',
+          uploadedAt: instrument.uploaded_at || '',
+          uploadedByPublicId: instrument.uploaded_by_public_id || ''
+        });
+      }
       UI.toast('Instrument uploaded and attached to the asset.', 'success');
       this.render();
     } catch (error) {

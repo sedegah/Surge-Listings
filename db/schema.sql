@@ -179,6 +179,7 @@ CREATE TABLE IF NOT EXISTS legal_instruments (
   court TEXT,
   injunction_active INTEGER NOT NULL DEFAULT 0,
   verification_status TEXT NOT NULL DEFAULT 'Pending',
+  uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   verified_by TEXT,
   verified_at TEXT,
   notes TEXT,
@@ -573,6 +574,10 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   failure_reason TEXT,
   attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_login_attempts_username_success_time
+  ON login_attempts(username, success, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_success_time
+  ON login_attempts(ip_address, success, attempted_at);
 
 -- 39. Password Resets — Reset tokens (admin-issued)
 CREATE TABLE IF NOT EXISTS password_resets (

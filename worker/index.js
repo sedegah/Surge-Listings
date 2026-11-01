@@ -405,14 +405,24 @@ export default {
       return session;
     }
 
-    // Check recent failed login attempts (rate limiting)
+    // Lock an account after repeated failures and throttle abusive source IPs.
     async function checkLoginRateLimit(username, ipAddress) {
-      const window = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      const attempts = await env.DB.prepare(`
+      const [accountAttempts, ipAttempts] = await Promise.all([
+        env.DB.prepare(`
         SELECT COUNT(*) as c FROM login_attempts
-        WHERE username = ? AND success = 0 AND attempted_at > ?
-      `).bind(username.trim().toLowerCase(), window).first();
-      return (attempts?.c || 0) >= 5;
+        WHERE username = ? AND success = 0
+          AND datetime(attempted_at) >= datetime('now', '-15 minutes')
+      `).bind(username).first(),
+        env.DB.prepare(`
+        SELECT COUNT(*) as c FROM login_attempts
+        WHERE ip_address = ? AND success = 0
+          AND datetime(attempted_at) >= datetime('now', '-15 minutes')
+      `).bind(ipAddress).first()
+      ]);
+      return {
+        accountLocked: Number(accountAttempts?.c || 0) >= 5,
+        ipRateLimited: Number(ipAttempts?.c || 0) >= 20
+      };
     }
 
     // Legacy context (used by non-auth-gated routes only)
@@ -475,17 +485,18 @@ export default {
       if (['/api/auth/login', '/api/v1/auth/login', '/api/bank/auth/login', '/api/admin/auth/login'].includes(pathname) && method === 'POST') {
         const body = await getBody();
         const { username, password } = body;
-        if (!username || !password) return err('Username and password are required.', 400);
+        if (typeof username !== 'string' || typeof password !== 'string' || !username.trim() || !password.trim()) {
+          return err('Username and password are required.', 400);
+        }
+        if (username.trim().length > 254) return err('Username is too long.', 400);
 
-        const ipAddress = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+        const ipAddress = request.headers.get('CF-Connecting-IP') || 'unknown';
         const uname = username.trim().toLowerCase();
+        const passwordValue = password.trim();
 
-        // Rate limit: 5 failures per 15 min
-        const locked = await checkLoginRateLimit(uname, ipAddress);
-        if (locked) {
-          await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, failure_reason, attempted_at) VALUES (?, ?, ?, 0, 'RATE_LIMITED', datetime('now'))`)
-            .bind('la-' + Date.now(), uname, ipAddress).run();
-          return err('Too many failed attempts. Wait 15 minutes before trying again.', 429);
+        const loginLimits = await checkLoginRateLimit(uname, ipAddress);
+        if (loginLimits.accountLocked || loginLimits.ipRateLimited) {
+          return err('Too many sign-in attempts. Wait 15 minutes before trying again.', 429);
         }
 
         const user = await env.DB.prepare(`
@@ -501,18 +512,18 @@ export default {
 
         const recordFailure = async (reason) => {
           await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, failure_reason, attempted_at) VALUES (?, ?, ?, 0, ?, datetime('now'))`)
-            .bind('la-' + Date.now() + Math.random().toString(36).slice(2), uname, ipAddress, reason).run();
+            .bind(randomId(), uname, ipAddress, reason).run();
         };
 
         if (!user) { await recordFailure('USER_NOT_FOUND'); return err('The username or password is incorrect.', 401); }
         let validPassword = false;
         if (user.password_hash) {
           if (String(user.password_hash).startsWith('pbkdf2-sha256$')) {
-            validPassword = await verifyPassword(password.trim(), user.password_hash);
+            validPassword = await verifyPassword(passwordValue, user.password_hash);
           } else {
-            validPassword = equalSecret(String(user.password_hash), password.trim());
+            validPassword = equalSecret(String(user.password_hash), passwordValue);
             if (validPassword) {
-              const upgradedHash = await hashPassword(password.trim());
+              const upgradedHash = await hashPassword(passwordValue);
               await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`)
                 .bind(upgradedHash, user.id, user.password_hash).run();
             }
@@ -1159,6 +1170,22 @@ export default {
         }
 
         const category = String(form.get('category') || (isPhoto ? 'Asset Photo' : 'Other')).trim().slice(0, 80);
+        const isLegalInstrument = !isPhoto && category.toLowerCase() === 'legal instrument';
+        const instrumentType = String(form.get('instrument_type') || '').trim().slice(0, 80);
+        const instrumentRef = String(form.get('instrument_ref') || '').trim().slice(0, 130);
+        const caseNumber = String(form.get('case_number') || '').trim().slice(0, 160) || instrumentRef;
+        const court = String(form.get('court') || '').trim().slice(0, 160) || 'Not provided';
+        const supportedInstrumentTypes = [
+          'Court Judgment',
+          'Default Notice',
+          'Memorandum of Agreement',
+          'Settlement Agreement',
+          'Affidavit of Service'
+        ];
+        if (isLegalInstrument &&
+          (!supportedInstrumentTypes.includes(instrumentType) || !instrumentRef || !caseNumber)) {
+          return err('A valid instrument type, reference number, and case number are required.', 400);
+        }
         const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
         const bucketName = isPhoto ? 'surge-assets' : bucketNameForDocumentCategory(category);
         const bucket = isPhoto ? env.ASSETS_BUCKET : bucketForStoredDocument(bucketName);
@@ -1182,6 +1209,9 @@ export default {
           }
         });
 
+        let committedDocumentId = null;
+        let committedInstrumentId = null;
+        let enforcementCaseId = null;
         try {
           if (isPhoto) {
             const imageId = 'img-' + crypto.randomUUID();
@@ -1206,7 +1236,56 @@ export default {
           }
 
           const documentId = 'doc-' + crypto.randomUUID();
-          const title = String(form.get('title') || file.name || category).trim().slice(0, 160);
+          committedDocumentId = documentId;
+          const title = isLegalInstrument
+            ? `${instrumentType} ${instrumentRef}`.slice(0, 160)
+            : String(form.get('title') || file.name || category).trim().slice(0, 160);
+          if (isLegalInstrument) {
+            const caseId = 'case-' + crypto.randomUUID();
+            const instrumentId = 'li-' + crypto.randomUUID();
+            enforcementCaseId = caseId;
+            committedInstrumentId = instrumentId;
+            await env.DB.batch([
+              env.DB.prepare(`
+                INSERT INTO enforcement_cases (id, asset_id, case_number, court, status)
+                VALUES (?, ?, ?, ?, 'Pending Verification')
+                ON CONFLICT(asset_id) DO NOTHING
+              `).bind(caseId, asset.id, caseNumber, court),
+              env.DB.prepare(`
+                INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
+              `).bind(documentId, asset.id, title, category, objectKey, sizeLabel, mimeType, bucketName),
+              env.DB.prepare(`
+                INSERT INTO legal_instruments (
+                  id, case_id, instrument_type, instrument_ref, court, verification_status, uploaded_by, notes
+                )
+                SELECT ?, id, ?, ?, ?, 'Pending', ?, ?
+                FROM enforcement_cases WHERE asset_id = ?
+              `).bind(instrumentId, instrumentType, instrumentRef, court, session.user_id, `Document ${documentId}`, asset.id)
+            ]);
+            const instrument = await env.DB.prepare(`
+              SELECT li.id, li.instrument_type, li.instrument_ref, li.verification_status,
+                li.uploaded_by, uploader.full_name AS uploaded_by_name,
+                uploader.public_id AS uploaded_by_public_id, li.court,
+                MAX(d.uploaded_at) AS uploaded_at
+              FROM legal_instruments li
+              JOIN enforcement_cases ec ON ec.id = li.case_id
+              LEFT JOIN documents d ON d.asset_id = ec.asset_id
+                AND d.category = 'Legal Instrument'
+                AND d.title = li.instrument_type || ' ' || li.instrument_ref
+              LEFT JOIN users uploader ON uploader.id = li.uploaded_by
+              WHERE li.id = ?
+              GROUP BY li.id
+            `).bind(instrumentId).first();
+            await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_DOCUMENT', 'LegalInstrument', instrumentId, `Uploaded ${instrumentType} ${instrumentRef} for ${asset.public_ref}`);
+            return json({
+              success: true,
+              document_id: documentId,
+              instrument,
+              category,
+              message: 'Legal instrument uploaded and attached to the asset.'
+            }, 201);
+          }
           await env.DB.prepare(`
             INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
@@ -1214,6 +1293,20 @@ export default {
           await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_DOCUMENT', 'Document', documentId, `Uploaded ${category} for ${asset.public_ref}`);
           return json({ success: true, document_id: documentId, category, message: 'Document uploaded and queued for review.' }, 201);
         } catch (storageCommitError) {
+          if (committedInstrumentId) {
+            await env.DB.prepare(`DELETE FROM legal_instruments WHERE id = ?`).bind(committedInstrumentId).run();
+          }
+          if (committedDocumentId) {
+            await env.DB.prepare(`DELETE FROM documents WHERE id = ?`).bind(committedDocumentId).run();
+          }
+          if (enforcementCaseId) {
+            await env.DB.prepare(`
+              DELETE FROM enforcement_cases
+              WHERE id = ? AND NOT EXISTS (
+                SELECT 1 FROM legal_instruments WHERE case_id = ?
+              )
+            `).bind(enforcementCaseId, enforcementCaseId).run();
+          }
           await bucket.delete(objectKey);
           throw storageCommitError;
         }
@@ -1479,6 +1572,7 @@ export default {
           let sql = `
             SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
               owner_bank.legal_name as owner_bank_name,
+              (SELECT case_number FROM enforcement_cases WHERE asset_id = a.id LIMIT 1) as enforcement_case_number,
               (SELECT COUNT(*) FROM asset_images WHERE asset_id = a.id) as image_count,
               (SELECT COUNT(*) FROM documents WHERE asset_id = a.id) as document_count,
               (SELECT COUNT(*) FROM offers WHERE asset_id = a.id) as offer_count
@@ -1496,7 +1590,41 @@ export default {
             stmt = env.DB.prepare(sql);
           }
           const assets = await stmt.all();
-          return json({ success: true, count: assets.results.length, data: assets.results });
+          const instrumentsByAsset = new Map();
+          if (assets.results.length) {
+            let instrumentSql = `
+              SELECT ec.asset_id, li.id, li.instrument_type, li.instrument_ref,
+                li.verification_status, li.court, li.injunction_active,
+                li.uploaded_by, uploader.full_name AS uploaded_by_name,
+                uploader.public_id AS uploaded_by_public_id,
+                MAX(d.uploaded_at) AS uploaded_at
+              FROM legal_instruments li
+              JOIN enforcement_cases ec ON ec.id = li.case_id
+              JOIN assets a ON a.id = ec.asset_id
+              LEFT JOIN users uploader ON uploader.id = li.uploaded_by
+              LEFT JOIN documents d ON d.asset_id = ec.asset_id
+                AND d.category = 'Legal Instrument'
+                AND d.title = li.instrument_type || ' ' || li.instrument_ref
+            `;
+            const instrumentStmt = canViewAllBanks
+              ? env.DB.prepare(`${instrumentSql} GROUP BY li.id ORDER BY uploaded_at DESC`)
+              : env.DB.prepare(`${instrumentSql} WHERE a.bank_id = ? GROUP BY li.id ORDER BY uploaded_at DESC`)
+                .bind(callerBankId);
+            const instrumentRows = await instrumentStmt.all();
+            for (const instrument of instrumentRows.results) {
+              const assetInstruments = instrumentsByAsset.get(instrument.asset_id) || [];
+              assetInstruments.push(instrument);
+              instrumentsByAsset.set(instrument.asset_id, assetInstruments);
+            }
+          }
+          return json({
+            success: true,
+            count: assets.results.length,
+            data: assets.results.map(asset => ({
+              ...asset,
+              legal_instruments: instrumentsByAsset.get(asset.id) || []
+            }))
+          });
         }
 
         if (method === 'POST') {
