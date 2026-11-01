@@ -1174,12 +1174,12 @@ const BankPortal = {
     });
   },
 
-  openAsset(id) { this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },
-  closeAsset() { this.selectedAssetId = null; this.subPage = null; this.render(); },
+  openAsset(id) { this._stagedFile = null; this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },
+  closeAsset() { this._stagedFile = null; this.selectedAssetId = null; this.subPage = null; this.render(); },
   setTab(t) { this.detailTab = t; this.render(); },
 
-  openSubPage(name) { this.subPage = name; this.render(); },
-  closeSubPage() { this.subPage = null; this.render(); },
+  openSubPage(name) { this._stagedFile = null; this.subPage = name; this.render(); },
+  closeSubPage() { this._stagedFile = null; this.subPage = null; this.render(); },
 
   async performAssetAction(action, successMessage, body = {}, assetId = this.selectedAssetId) {
     if (!assetId) {
@@ -1698,16 +1698,17 @@ const BankPortal = {
         <div class="body">
           <div class="field"><span class="lbl">Instrument Type <span class="req">*</span></span><div class="ctl">
             <select id="new-inst-type">
-              <option>Court Judgment</option>
-              <option>Default Notice</option>
-              <option>Memorandum of Agreement</option>
-              <option>Settlement Agreement</option>
-              <option>Affidavit of Service</option>
+              <option value="Court Judgment">Court Judgment</option>
+              <option value="Default Notice">Default Notice</option>
+              <option value="Memorandum of Agreement">Memorandum of Agreement</option>
+              <option value="Settlement Agreement">Settlement Agreement</option>
+              <option value="Affidavit of Service">Affidavit of Service</option>
             </select>
           </div></div>
-          <div class="field"><span class="lbl">Reference Number <span class="req">*</span></span><div class="ctl"><input id="new-inst-ref" placeholder="e.g. JUD-2025-0201"></div></div>
+          <div class="field"><span class="lbl">Instrument Reference Number <span class="req">*</span></span><div class="ctl"><input id="new-inst-ref" maxlength="130" required placeholder="e.g. JUD-2025-0201"></div></div>
+          <div class="field"><span class="lbl">Case Number <span class="req">*</span></span><div class="ctl"><input id="new-inst-case-number" maxlength="160" required value="${UI.escapeHtml(a.caseRef || '')}" placeholder="Enter the court or enforcement case number"></div></div>
           <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-inst-input').click()">
-            <input type="file" id="file-inst-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'inst')">
+            <input type="file" id="file-inst-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'inst')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
             <div id="inst-status-text">Upload legal instrument</div>
             <div style="font-size:11px;margin-top:4px;color:var(--text-2)">Supported formats: PDF, DOCX (up to 25MB)</div>
@@ -1725,6 +1726,13 @@ const BankPortal = {
   handleFileSelect(e, category) {
     const file = e.target.files[0];
     if (!file) return;
+    const maxSize = category === 'photo' ? 10 * 1024 * 1024 : 25 * 1024 * 1024;
+    if (file.size < 1 || file.size > maxSize) {
+      e.target.value = '';
+      this._stagedFile = null;
+      UI.toast(`File size must be between 1 byte and ${category === 'photo' ? '10MB' : '25MB'}.`, 'error');
+      return;
+    }
     this._stagedFile = {
       file,
       name: file.name,
@@ -1742,9 +1750,12 @@ const BankPortal = {
     UI.toast(`File selected: ${file.name}`, 'success');
   },
 
-  async uploadSelectedFile(endpoint, category, extraFields = {}) {
+  async uploadSelectedFile(endpoint, category, extraFields = {}, expectedFileCategory) {
     const file = this._stagedFile?.file;
     if (!file) throw new Error('Choose a file before uploading.');
+    if (expectedFileCategory && this._stagedFile.category !== expectedFileCategory) {
+      throw new Error('Choose a file using the upload control for this form.');
+    }
 
     const form = new FormData();
     form.append('file', file, file.name);
@@ -1779,7 +1790,12 @@ const BankPortal = {
     } finally {
       clearTimeout(timeoutId);
     }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error(`Upload failed (${response.status}): the API returned an invalid response.`);
+    }
     if (!response.ok || !result.success) {
       throw new Error(result.error || `Upload failed (${response.status}).`);
     }
@@ -1794,14 +1810,17 @@ const BankPortal = {
     if (!a) return;
     const type = document.getElementById('new-inst-type').value;
     const ref = document.getElementById('new-inst-ref').value.trim();
-    if (!ref) return UI.toast('Instrument reference number is required', 'error');
+    const caseNumber = document.getElementById('new-inst-case-number').value.trim();
+    if (!type) return UI.toast('Select an instrument type.', 'error');
+    if (!ref) return UI.toast('Instrument reference number is required.', 'error');
+    if (!caseNumber) return UI.toast('Case number is required.', 'error');
     try {
       const result = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Legal Instrument', {
         title: `${type} ${ref}`,
         instrument_type: type,
         instrument_ref: ref,
-        case_number: document.getElementById('edit-caseRef').value.trim()
-      });
+        case_number: caseNumber
+      }, 'inst');
       const refreshedAsset = Store.getAsset(this.selectedAssetId);
       if (!refreshedAsset) throw new Error('The instrument was uploaded, but the asset could not be refreshed.');
       if (result.instrument && !refreshedAsset.instruments.some(instrument => instrument.id === result.instrument.id)) {
@@ -1860,7 +1879,7 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="upload-zone" onclick="document.getElementById('file-doc-input').click()">
-            <input type="file" id="file-doc-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'doc')">
+            <input type="file" id="file-doc-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'doc')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
             <div id="doc-status-text">Click to choose document file (PDF, DOCX, JPG · max 20MB)</div>
           </div>
@@ -1878,7 +1897,7 @@ const BankPortal = {
     if (!a) return;
     const type = document.getElementById('doc-type').value;
     try {
-      const result = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, type, { title: type });
+      const result = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, type, { title: type }, 'doc');
       a.documentFiles = a.documentFiles || [];
       a.documentFiles.push({ id: result.document_id, type, uploadedAt: new Date().toISOString() });
       UI.toast(`${type} uploaded and queued for review.`, 'success');
@@ -1908,7 +1927,7 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="upload-zone" onclick="document.getElementById('file-photo-input').click()">
-            <input type="file" id="file-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'photo')">
+            <input type="file" id="file-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'photo')">
             <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
             <div id="photo-status-text">Click to choose photo (JPG, PNG · max 10MB)</div>
             <div style="font-size:11px;margin-top:4px;color:var(--text-2)">JPEG, PNG, or WebP · 10MB maximum</div>
@@ -1931,7 +1950,7 @@ const BankPortal = {
         caption: type,
         is_exterior: type === 'exterior' ? '1' : '0',
         is_primary: (a.images || 0) === 0 ? '1' : '0'
-      });
+      }, 'photo');
       a.images = (a.images || 0) + 1;
       if (type === 'exterior') a.exteriorImage = true;
       UI.toast(`${type} photo uploaded successfully.`, 'success');
@@ -1970,7 +1989,7 @@ const BankPortal = {
           </div></div>
           <div class="field"><span class="lbl">Title Document</span><div class="ctl">
             <div class="upload-zone" onclick="document.getElementById('file-title-input').click()">
-            <input type="file" id="file-title-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'title')">
+            <input type="file" id="file-title-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'title')">
             <div id="title-status-text">Upload title deed</div>
             </div>
           </div></div>
@@ -1992,7 +2011,7 @@ const BankPortal = {
       try {
         await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Title Deed', {
           title: `Title Deed ${titleNumber}`
-        });
+        }, 'title');
       } catch (error) {
         return UI.toast(error.message || 'Title document upload failed.', 'error');
       }
@@ -2024,7 +2043,7 @@ const BankPortal = {
           <div class="field"><span class="lbl">Validity (days)</span><div class="ctl"><input id="val-validity" type="number" value="365" min="1"><span class="help">Valuation validity period configured per institutional policy.</span></div></div>
           <div class="field"><span class="lbl">Valuer Name</span><div class="ctl"><input id="val-valuer" value="${a.valuerName || ''}" placeholder="Licensed valuer firm"></div></div>
           <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-val-input').click()">
-            <input type="file" id="file-val-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'val')">
+            <input type="file" id="file-val-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'val')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
             <div id="val-status-text">Upload valuation report (PDF)</div>
           </div>
@@ -2050,7 +2069,7 @@ const BankPortal = {
       try {
         await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Valuation Report', {
           title: `Valuation Report ${dateStr}`
-        });
+        }, 'val');
       } catch (error) {
         return UI.toast(error.message || 'Valuation report upload failed.', 'error');
       }

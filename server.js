@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.disable('x-powered-by');
 const port = process.env.PORT || 5080;
 const workerOrigin = 'https://surge-solutions-api.sedegahkimathi.workers.dev';
 

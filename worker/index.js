@@ -1172,9 +1172,9 @@ export default {
 
         const category = String(form.get('category') || (isPhoto ? 'Asset Photo' : 'Other')).trim().slice(0, 80);
         const isLegalInstrument = !isPhoto && category.toLowerCase() === 'legal instrument';
-        const instrumentType = String(form.get('instrument_type') || '').trim().slice(0, 80);
+        const instrumentTypeInput = String(form.get('instrument_type') || form.get('instrumentType') || '').trim().slice(0, 80);
         const instrumentRef = String(form.get('instrument_ref') || '').trim().slice(0, 130);
-        const caseNumber = String(form.get('case_number') || '').trim().slice(0, 160) || instrumentRef;
+        const caseNumber = String(form.get('case_number') || form.get('caseNumber') || '').trim().slice(0, 160) || instrumentRef;
         const court = String(form.get('court') || '').trim().slice(0, 160) || 'Not provided';
         const supportedInstrumentTypes = [
           'Court Judgment',
@@ -1183,9 +1183,17 @@ export default {
           'Settlement Agreement',
           'Affidavit of Service'
         ];
-        if (isLegalInstrument &&
-          (!supportedInstrumentTypes.includes(instrumentType) || !instrumentRef || !caseNumber)) {
-          return err('A valid instrument type, reference number, and case number are required.', 400);
+        const instrumentType = supportedInstrumentTypes.find(
+          supportedType => supportedType.toLowerCase() === instrumentTypeInput.toLowerCase()
+        ) || '';
+        if (isLegalInstrument && !instrumentType) {
+          return err('Select a supported legal instrument type.', 400);
+        }
+        if (isLegalInstrument && !instrumentRef) {
+          return err('Instrument reference number is required.', 400);
+        }
+        if (isLegalInstrument && !caseNumber) {
+          return err('Case number is required.', 400);
         }
         const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
         const bucketName = isPhoto ? 'surge-assets' : bucketNameForDocumentCategory(category);
@@ -1250,7 +1258,9 @@ export default {
               env.DB.prepare(`
                 INSERT INTO enforcement_cases (id, asset_id, case_number, court, status)
                 VALUES (?, ?, ?, ?, 'Pending Verification')
-                ON CONFLICT(asset_id) DO NOTHING
+                ON CONFLICT(asset_id) DO UPDATE SET
+                  case_number = excluded.case_number,
+                  court = excluded.court
               `).bind(caseId, asset.id, caseNumber, court),
               env.DB.prepare(`
                 INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
