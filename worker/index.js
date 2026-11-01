@@ -1489,14 +1489,8 @@ export default {
           `;
           let stmt;
           if (!canViewAllBanks) {
-            let whereClause = ` WHERE a.bank_id = ?`;
-            const params = [callerBankId];
-            if (callerBranchId) {
-              whereClause += ` AND a.branch_id = ?`;
-              params.push(callerBranchId);
-            }
-            sql += whereClause + ` ORDER BY a.updated_at DESC`;
-            stmt = env.DB.prepare(sql).bind(...params);
+            sql += ` WHERE a.bank_id = ? ORDER BY a.updated_at DESC`;
+            stmt = env.DB.prepare(sql).bind(callerBankId);
           } else {
             sql += ` ORDER BY a.updated_at DESC`;
             stmt = env.DB.prepare(sql);

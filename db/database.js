@@ -654,7 +654,7 @@ function seedData() {
       year: 2017,
       mileage: null,
       fuel: null,
-      created_by: 'e.quaye'
+      created_by: null
     },
     {
       id: 'ast-004',
@@ -716,7 +716,7 @@ function seedData() {
       year: 2018,
       mileage: '6,420 operating hours',
       fuel: 'Diesel',
-      created_by: 'e.quaye'
+      created_by: null
     },
     {
       id: 'ast-006',
@@ -747,7 +747,7 @@ function seedData() {
       year: 2020,
       mileage: '84,100 km',
       fuel: 'Diesel',
-      created_by: 'e.quaye'
+      created_by: null
     }
   ];
 

@@ -73,7 +73,7 @@ const Auth = {
   setSession(token, user, remember) {
     this.token = null;
     this.user = user;
-    this.selectedBranchId = user?.branchId || user?.branch_id || null;
+    this.selectedBranchId = null;
     try {
       sessionStorage.removeItem('surge_token');
       sessionStorage.removeItem('surge_user');
@@ -186,7 +186,7 @@ const Auth = {
       } catch (storageError) {
         console.warn('[Auth Guard] Could not clear legacy browser credentials:', storageError);
       }
-      this.selectedBranchId = data.user.branchId || data.user.branch_id || null;
+      this.selectedBranchId = null;
       try {
         sessionStorage.setItem('surge_session_present', 'true');
       } catch (storageError) {
@@ -2708,7 +2708,7 @@ const AdminPortal = {
     a.legalSubstate = a.legalSubstate || {};
     a.legalSubstate.instrumentsVerified = allVerified;
     a.legalNotes = a.legalNotes || [];
-    a.legalNotes.push({ when: new Date().toISOString(), who: 'S. Adjei (Legal Officer)', decision: 'verified', note: 'Instrument ' + instrumentId + ' verified' });
+    a.legalNotes.push({ when: new Date().toISOString(), who: Auth.getActorName(), decision: 'verified', note: 'Instrument ' + instrumentId + ' verified' });
     Store.addAudit(Auth.getActorName(), 'VERIFY_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Verified', 'Instrument ' + instrumentId);
     UI.toast(allVerified ? 'All instruments verified. You can now issue legal clearance.' : 'Instrument verified. Verify remaining instruments.', 'success');
     this.render();
@@ -3247,7 +3247,7 @@ const AdminPortal = {
         <div class="field">
           <span class="lbl">Staff Full Name <span class="req">*</span></span>
           <div class="ctl">
-            <input id="add-staff-name" style="width:100%" placeholder="e.g. Abena Owusu" oninput="AdminPortal.suggestUsername(this.value)" required>
+            <input id="add-staff-name" style="width:100%" placeholder="Enter staff member’s name" oninput="AdminPortal.suggestUsername(this.value)" required>
           </div>
         </div>
 
@@ -3256,7 +3256,7 @@ const AdminPortal = {
           <div class="ctl">
             <div style="position:relative">
               <span style="position:absolute;left:8px;top:6px;color:var(--text-2);font-family:Consolas,monospace">@</span>
-              <input id="add-staff-username" style="width:100%;padding-left:24px;font-family:Consolas,monospace" placeholder="e.g. a.owusu" required>
+              <input id="add-staff-username" style="width:100%;padding-left:24px;font-family:Consolas,monospace" placeholder="e.g. first.last" required>
             </div>
             <small style="font-size:10.5px;color:var(--text-2)">Used by staff member to log in to the portal</small>
           </div>
@@ -3278,7 +3278,7 @@ const AdminPortal = {
         <div class="field">
           <span class="lbl">Official Email Address <span class="req">*</span></span>
           <div class="ctl">
-            <input type="email" id="add-staff-email" style="width:100%" placeholder="e.g. a.owusu@meridiantrust.com.gh" required>
+            <input type="email" id="add-staff-email" style="width:100%" placeholder="name@organization.com" required>
           </div>
         </div>
 
