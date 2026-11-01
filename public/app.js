@@ -126,15 +126,24 @@ const Auth = {
     }
 
     try {
-      const res = await fetch(Store.API_BASE + '/api/auth/me', {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      let res;
+      let data;
+      try {
+        res = await fetch(Store.API_BASE + '/api/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + token },
+          signal: controller.signal
+        });
+        if (res.ok) data = await res.json();
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!res.ok) {
         console.warn('[Auth Guard] Session invalid or expired. Clearing session.', { status: res.status });
         this.logout();
         return false;
       }
-      const data = await res.json();
       if (!data.authenticated || !data.user) {
         console.warn('[Auth Guard] Session not authenticated. Clearing session.');
         this.logout();

@@ -398,6 +398,7 @@ export default {
         pathname === '/api/v1/kyc' ||
         /^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+\/(approve|reject|publish|unpublish|hold|release-hold|readiness)$/.test(pathname);
       const isAssetApi = /^\/api\/(v1|bank|admin)\/assets(?:\/[a-zA-Z0-9_-]+)?$/.test(pathname);
+      const isAssetSubmitAction = /^\/api\/v1\/assets\/[a-zA-Z0-9_-]+\/submit$/.test(pathname);
       const isBankDataAlias = [
         '/api/v1/branches',
         '/api/v1/leads',
@@ -408,7 +409,7 @@ export default {
       ].includes(pathname);
       if (pathname === '/api/admin' || pathname.startsWith('/api/admin/') || isAdminAlias) {
         await requireAdminAuth();
-      } else if (pathname.startsWith('/api/bank/') || isAssetApi || (isBankDataAlias && method === 'GET')) {
+      } else if (pathname.startsWith('/api/bank/') || isAssetApi || isAssetSubmitAction || (isBankDataAlias && method === 'GET')) {
         await requireBankAuth();
       }
 
@@ -1044,6 +1045,9 @@ export default {
         }
 
         const body = await getBody();
+        if (session.scope !== 'surge' && body.status !== undefined) {
+          return err('Only Surge administrators can change an asset status.', 403);
+        }
         const updates = [];
         const binds = [];
 
@@ -1121,9 +1125,13 @@ export default {
 
       // Asset Workflow Actions: submit, approve, reject, publish, hold, release-hold
       if (pathname.includes('/submit') && method === 'POST') {
+        const session = await requireBankAuth();
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+          return err('Asset not found or access denied.', 404);
+        }
         if (asset.legal_hold_active) return err('Legal hold is active on this asset.', 400);
 
         await env.DB.prepare(`UPDATE assets SET status = 'Submitted by Bank', updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
@@ -1650,13 +1658,13 @@ export default {
       // 10. BRANCH-SCOPED STATISTICS (Dashboard per branch)
       // =========================================================================
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/dashboard$/) && method === 'GET') {
-        const session = await resolveSession();
-        const callerBankId = session?.bank_id || request.headers.get('x-bank-id') || url.searchParams.get('bank_id');
+        const session = await requireBankAuth();
+        const branchId = pathname.split('/')[4];
         let branch;
-        if (callerBankId) {
-          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, callerBankId).first();
-        } else {
+        if (session.scope === 'surge') {
           branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
+        } else {
+          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, session.bank_id).first();
         }
         if (!branch) return err('Branch not found or access denied.', 404);
 
