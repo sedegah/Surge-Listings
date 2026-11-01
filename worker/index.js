@@ -2887,14 +2887,15 @@ export default {
         return json({ success: true, message: `Offer ${offer.offer_ref} rejected.` });
       }
 
-      // Offer Decisions (Bank accepts or rejects verified offers)
-      if (pathname.includes('/decide') && method === 'POST') {
+      // Offer Decisions & Rescission (Bank accepts, declines, or rescinds verified offers)
+      if ((pathname.includes('/decide') || pathname.endsWith('/rescind')) && method === 'POST') {
         const session = await requireBankAuth();
         const offerId = pathname.split('/')[4];
         const body = await getBody();
-        const { decision } = body;
+        const decision = pathname.endsWith('/rescind') ? 'Rescinded' : (body?.decision || 'Rescinded');
+        const reason = body?.reason || '';
 
-        const offer = await env.DB.prepare(`SELECT o.*, a.public_ref as asset_ref, a.bank_id FROM offers o JOIN assets a ON o.asset_id = a.id WHERE o.id = ? OR o.offer_ref = ?`).bind(offerId, offerId).first();
+        const offer = await env.DB.prepare(`SELECT o.*, a.public_ref as asset_ref, a.bank_id, a.status as asset_status FROM offers o JOIN assets a ON o.asset_id = a.id WHERE o.id = ? OR o.offer_ref = ?`).bind(offerId, offerId).first();
         if (!offer) return err('Offer not found', 404);
 
         if (session.scope !== 'surge' && offer.bank_id !== session.bank_id) {
@@ -2902,6 +2903,16 @@ export default {
         }
         if (session.scope !== 'surge' && !offer.surge_verified) {
           return err('This offer has not yet been reviewed and verified by Surge Admin.', 400);
+        }
+
+        if (decision === 'Rescinded') {
+          await env.DB.prepare(`UPDATE offers SET status = 'Rescinded', updated_at = datetime('now') WHERE id = ?`).bind(offer.id).run();
+          // If asset was marked 'Sold', restore it back to 'Live'
+          if (offer.asset_status === 'Sold') {
+            await env.DB.prepare(`UPDATE assets SET status = 'Live', updated_at = datetime('now') WHERE id = ?`).bind(offer.asset_id).run();
+          }
+          await auditLog(actorName, actorRole, session.scope === 'surge' ? 'Surge' : 'Bank', 'OFFER_RESCIND', 'Offer', offer.offer_ref, `Offer acceptance rescinded by Bank${reason ? `: ${reason}` : ''}. Asset restored to Live.`);
+          return json({ success: true, message: `Offer ${offer.offer_ref} rescinded. Asset listing restored to Live status.` });
         }
 
         await env.DB.prepare(`UPDATE offers SET status = ?, updated_at = datetime('now') WHERE id = ?`).bind(decision, offer.id).run();
