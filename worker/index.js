@@ -186,7 +186,9 @@ export default {
     function extensionForMime(mimeType) {
       return ({
         'application/pdf': 'pdf',
+        'application/x-pdf': 'pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/msword': 'doc',
         'image/jpeg': 'jpg',
         'image/png': 'png',
         'image/webp': 'webp'
@@ -194,20 +196,30 @@ export default {
     }
 
     async function isValidFile(file, imageOnly = false) {
-      const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+      let mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+      if (!mimeType || mimeType === 'application/octet-stream') {
+        const name = String(file.name || '').toLowerCase();
+        if (name.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (name.endsWith('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (name.endsWith('.doc')) mimeType = 'application/msword';
+        else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (name.endsWith('.png')) mimeType = 'image/png';
+        else if (name.endsWith('.webp')) mimeType = 'image/webp';
+      }
+      if (mimeType === 'application/x-pdf') mimeType = 'application/pdf';
       const extension = extensionForMime(mimeType);
       if (!extension || (imageOnly && !mimeType.startsWith('image/'))) return false;
       const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
       const startsWith = (...values) => values.every((value, index) => bytes[index] === value);
-      if (mimeType === 'application/pdf') return startsWith(0x25, 0x50, 0x44, 0x46, 0x2d);
+      if (mimeType === 'application/pdf') return startsWith(0x25, 0x50, 0x44, 0x46);
       if (mimeType === 'image/jpeg') return startsWith(0xff, 0xd8, 0xff);
       if (mimeType === 'image/png') return startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
       if (mimeType === 'image/webp') {
         return String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
           String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
       }
-      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        return startsWith(0x50, 0x4b, 0x03, 0x04);
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') {
+        return startsWith(0x50, 0x4b, 0x03, 0x04) || startsWith(0xd0, 0xcf, 0x11, 0xe0);
       }
       return false;
     }
