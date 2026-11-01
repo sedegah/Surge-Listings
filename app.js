@@ -3278,7 +3278,91 @@ const AdminPortal = {
   },
 
   renderOffersView() {
-    return `<div class="page-head"><h1>Offers</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Ref</th><th>Asset</th><th>Buyer</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${Store.offers.map(o => `<tr><td class="ref">${o.ref}</td><td class="ref">${o.assetRef}</td><td>${o.buyer}</td><td class="num">${UI.fmtMoney(o.amount)}</td><td>${UI.badge(o.status)}</td></tr>`).join('')}</tbody></table></div>`;
+    const pendingVerifications = Store.offers.filter(o => o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge')).length;
+    const verifiedOffers = Store.offers.filter(o => o.surgeVerified).length;
+    const acceptedOffers = Store.offers.filter(o => o.status === 'Accepted').length;
+
+    return `
+      <div class="page-head">
+        <h1>Buyer Offers &amp; Surge Verification</h1>
+        <span class="crumb">${Store.offers.length} total offers · ${pendingVerifications} pending verification</span>
+      </div>
+
+      <div class="kpis" style="margin-bottom:16px">
+        <div class="kpi ${pendingVerifications ? 'warn' : 'ok'}">
+          <div class="k">Pending Surge Verification</div>
+          <div class="v">${pendingVerifications}</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Released to Partner Banks</div>
+          <div class="v">${verifiedOffers}</div>
+        </div>
+        <div class="kpi ok">
+          <div class="k">Accepted by Banks</div>
+          <div class="v">${acceptedOffers}</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Total Offers</div>
+          <div class="v">${Store.offers.length}</div>
+        </div>
+      </div>
+
+      <div class="banner info" style="margin-bottom:14px">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><b>Surge Intermediary Gate:</b> As a licensed intermediary, Surge Admin must review and verify every buyer offer before it becomes visible to the recovery bank. Banks cannot see or accept unverified offers.</div>
+      </div>
+
+      <div class="gridwrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Asset</th>
+              <th>Bank</th>
+              <th>Buyer &amp; Contact</th>
+              <th class="num">Amount</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Verification / Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Store.offers.map(o => {
+              const isPending = o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge');
+              return `
+                <tr style="${isPending ? 'background:rgba(255,193,7,0.06)' : ''}">
+                  <td class="ref"><b>${o.ref}</b></td>
+                  <td class="ref">${o.assetRef}</td>
+                  <td>${o.bankName || 'Partner Bank'}</td>
+                  <td>
+                    <b>${UI.escapeHtml(o.buyer)}</b>
+                    ${o.notes ? `<br><small style="color:var(--text-2);font-size:11px">${UI.escapeHtml(o.notes)}</small>` : ''}
+                  </td>
+                  <td class="num">
+                    <b>${UI.fmtMoney(o.amount)}</b>
+                    ${o.belowReserve ? '<br><span style="color:var(--danger);font-size:10.5px">Below Reserve</span>' : ''}
+                  </td>
+                  <td><small>${UI.fmtDateShort(o.date)}</small></td>
+                  <td>${UI.badge(o.status)}</td>
+                  <td>
+                    ${isPending ? `
+                      <div style="display:flex;gap:6px">
+                        <button class="btn small ok" onclick="AdminPortal.verifyOffer('${o.id}')">Verify for Bank</button>
+                        <button class="btn small alert" onclick="AdminPortal.rejectOfferModal('${o.id}')">Reject</button>
+                      </div>
+                    ` : o.surgeVerified ? `
+                      <span style="color:var(--ok);font-size:11.5px;font-weight:600">✓ Verified for Bank</span>
+                    ` : o.status === 'Rejected by Surge' ? `
+                      <span style="color:var(--danger);font-size:11.5px">Rejected by Surge</span>
+                    ` : '—'}
+                  </td>
+                </tr>
+              `;
+            }).join('') || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-2)">No offers submitted yet.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
   },
 
   renderAuditView() {
