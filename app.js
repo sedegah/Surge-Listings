@@ -226,19 +226,33 @@ const Auth = {
 
   updateUIProfile() {
     const u = this.getUser();
-    const name = u ? (u.fullName || u.full_name || u.username || 'Officer') : '';
-    const role = u ? (u.roleCode || u.role_code || 'Recovery Officer') : '';
-    const bank = u ? (u.bankName || u.bank_name || 'Institutional Bank Portal') : '';
-
-    // Update statusbars in enterprise portals
-    document.querySelectorAll('.statusbar').forEach(sb => {
-      const cells = sb.querySelectorAll('.cell');
-      cells.forEach(c => {
-        if (c.innerText.includes('User:') && name) c.innerHTML = `User: <b>${name}</b>`;
-        if (c.innerText.includes('Role:') && role) c.innerHTML = `Role: <b>${role}</b>`;
-        if (c.innerText.includes('Org:') && bank) c.innerHTML = `Org: <b>${bank}</b>`;
-      });
-    });
+    if (!u) return;
+    const roleNames = {
+      BA: 'Bank Administrator',
+      LRO: 'Legal / Recovery Officer',
+      AO: 'Asset Officer',
+      AP: 'Approver',
+      BFO: 'Finance Officer',
+      VW: 'Auditor / Viewer',
+      SA: 'Surge Administrator',
+      PM: 'Property Manager',
+      LO: 'Legal Officer',
+      SG: 'System Guard'
+    };
+    const portal = document.body.dataset.portal;
+    const userName = u.username || u.fullName || u.full_name || 'Unknown user';
+    const roleCode = u.roleCode || u.role_code || '';
+    const roleName = u.roleName || roleNames[roleCode] || roleCode || 'Unknown role';
+    const organization = u.organizationName || u.bankName || u.bank_name
+      || (u.scope === 'surge' ? 'Surge Solutions' : 'Institutional Bank Portal');
+    const profile = {
+      user: document.getElementById(`profile-user-${portal}`),
+      role: document.getElementById(`profile-role-${portal}`),
+      organization: document.getElementById(`profile-org-${portal}`)
+    };
+    if (profile.user) profile.user.textContent = userName;
+    if (profile.role) profile.role.textContent = roleName;
+    if (profile.organization) profile.organization.textContent = organization;
 
   }
 };
@@ -3072,8 +3086,8 @@ const AdminPortal = {
                 </td>
                 <td>
                   <div style="display:flex;align-items:center;gap:6px">
-                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#28a745"></span>
-                    <span style="font-size:11.5px;font-weight:600;color:#28a745">Password Active</span>
+                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${u.hasPassword ? '#28a745' : '#9A6700'}"></span>
+                    <span style="font-size:11.5px;font-weight:600;color:${u.hasPassword ? '#28a745' : '#9A6700'}">${u.hasPassword ? 'Password Active' : 'Password Not Set'}</span>
                     <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" style="margin-left:6px;padding:2px 6px;font-size:11px">
                       Reset Password
                     </button>
@@ -3086,11 +3100,8 @@ const AdminPortal = {
                 </td>
                 <td style="text-align:right">
                   <div style="display:inline-flex;gap:4px">
-                    <button class="btn small" onclick="AdminPortal.modalResetPassword('${u.id}')" title="Assign new password">
-                      Key
-                    </button>
-                    <button class="btn small danger" onclick="Store.deleteUser('${u.id}')" title="Delete account">
-                      ✕
+                    <button class="btn small danger" onclick="Store.deleteUser('${u.id}')" title="Delete account" aria-label="Delete ${u.username} account">
+                      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M5 7l1 14h12l1-14"/><path d="M9 7V4h6v3"/></svg>
                     </button>
                   </div>
                 </td>

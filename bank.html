@@ -20,6 +20,10 @@ body.auth-ready #portal-auth-status { display: none; }
   <a href="admin.html" id="admin-portal-link" class="switcher-link" hidden style="color:#C8C8C8;padding:5px 12px;font-size:12px">Surge Admin</a>
   <a href="marketplace.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</a>
   <span class="note">Surge Disposition Platform</span>
+  <button class="switcher-signout" type="button" onclick="Auth.logout()" aria-label="Sign out of the bank portal">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+    <span>Sign out</span>
+  </button>
 </nav>
 
 <div class="viewport">
@@ -34,7 +38,6 @@ body.auth-ready #portal-auth-status { display: none; }
         <span class="menu-item" onclick="BankPortal.nav('reports')"><u>R</u>eports</span>
         <span class="menu-spacer"></span>
         <span class="menu-env">BANK PORTAL</span>
-        <button class="btn small" type="button" onclick="Auth.logout()">Sign Out</button>
       </div>
       <div class="toolbar">
         <button class="tbtn" onclick="BankPortal.newAsset()"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button>
@@ -67,9 +70,9 @@ body.auth-ready #portal-auth-status { display: none; }
           <div class="doctabs" id="bank-doctabs"></div>
           <main class="work" id="bank-work"></main>
           <footer class="statusbar">
-            <span class="cell">User: <b>j.mensah</b></span>
-            <span class="cell">Role: <b>Legal / Recovery Officer</b></span>
-            <span class="cell">Org: <b>Institutional Bank Portal</b></span>
+            <span class="cell">User: <b id="profile-user-bank">—</b></span>
+            <span class="cell">Role: <b id="profile-role-bank">—</b></span>
+            <span class="cell">Org: <b id="profile-org-bank">—</b></span>
             <span class="cell grow" id="clock-bank"></span>
           </footer>
         </div>

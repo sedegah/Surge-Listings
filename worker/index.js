@@ -123,7 +123,7 @@ export default {
     }
 
     async function hashPassword(password) {
-      const iterations = 120000;
+      const iterations = 100000;
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
       const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
@@ -134,7 +134,7 @@ export default {
       const parts = String(storedHash || '').split('$');
       if (parts.length !== 4 || parts[0] !== 'pbkdf2-sha256') return false;
       const iterations = Number(parts[1]);
-      if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 600000) return false;
+      if (iterations !== 100000) return false;
       const salt = decodeBase64(parts[2]);
       const expected = decodeBase64(parts[3]);
       const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
@@ -298,7 +298,7 @@ export default {
         session = await env.DB.prepare(`
         SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
                b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status,
-               b.public_id as bank_public_id, o.public_id as organization_public_id,
+               b.public_id as bank_public_id, o.public_id as organization_public_id, o.name as organization_name,
                u.public_id as user_public_id
         FROM sessions s
         JOIN users u ON s.user_id = u.id
@@ -313,7 +313,7 @@ export default {
         session = await env.DB.prepare(`
           SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
                  b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status,
-                 b.public_id as bank_public_id, o.public_id as organization_public_id,
+                 b.public_id as bank_public_id, o.public_id as organization_public_id, o.name as organization_name,
                  u.public_id as user_public_id
           FROM sessions s
           JOIN users u ON s.user_id = u.id
@@ -622,7 +622,8 @@ export default {
             id: session.user_public_id, username: session.username, fullName: session.full_name,
             email: session.email, roleCode: session.role_code, scope: session.scope,
             bankId: session.bank_public_id, bankName: session.bank_name, bankCode: session.bank_code,
-            branchId: branch?.public_id || null, organizationId: session.organization_public_id
+            branchId: branch?.public_id || null, organizationId: session.organization_public_id,
+            organizationName: session.organization_name
           }
         });
       }
