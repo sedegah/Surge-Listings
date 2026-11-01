@@ -62,10 +62,10 @@ export default {
       if (responseCookie) headers.set('Set-Cookie', responseCookie);
       return new Response(JSON.stringify(data), { status, headers });
     };
-    const err = (message, status = 400) => {
+    const err = (message, status = 400, details = {}) => {
       const headers = new Headers(corsHeaders);
       if (responseCookie) headers.set('Set-Cookie', responseCookie);
-      return new Response(JSON.stringify({ success: false, error: message }), { status, headers });
+      return new Response(JSON.stringify({ success: false, error: message, ...details }), { status, headers });
     };
 
     const SESSION_COOKIE = '__Host-surge_session';
@@ -250,6 +250,34 @@ export default {
         oldVal ? JSON.stringify(oldVal) : null,
         newVal ? JSON.stringify(newVal) : null
       ).run();
+    }
+
+    async function getAssetReadiness(asset) {
+      const injunctionRow = await env.DB.prepare(`
+        SELECT li.injunction_active, li.verification_status, li.instrument_ref
+        FROM legal_instruments li
+        JOIN enforcement_cases ec ON li.case_id = ec.id
+        WHERE ec.asset_id = ? AND li.injunction_active = 1
+      `).bind(asset.id).first();
+      const activeInjunction = !!injunctionRow;
+
+      const title = await env.DB.prepare(`SELECT verification_status FROM title_records WHERE asset_id = ?`).bind(asset.id).first();
+      const titleVerified = title?.verification_status === 'Verified';
+
+      const valuation = await env.DB.prepare(`SELECT status, review_required FROM valuations WHERE asset_id = ? ORDER BY valuation_date DESC LIMIT 1`).bind(asset.id).first();
+      const valuationValid = valuation ? valuation.status === 'Valid' && valuation.review_required === 0 : true;
+
+      const imageCount = await env.DB.prepare(`SELECT COUNT(*) as c FROM asset_images WHERE asset_id = ?`).bind(asset.id).first();
+      const photoRequirementMet = (imageCount?.c || 0) >= 1;
+      const reservePriceSet = !!asset.reserve_price && asset.reserve_price > 0;
+      const gates = [
+        { gate: 'LG-2 Injunction & Legal Clear', passed: !activeInjunction, detail: activeInjunction ? `Active Injunction on ${injunctionRow.instrument_ref}` : 'Court enforcement clear' },
+        { gate: 'TL-2 Title Perfection', passed: titleVerified, detail: titleVerified ? 'Title verified by Surge Legal' : 'Pending verification' },
+        { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuationValid ? 'Valuation active within 180 days' : 'Valuation expired / review required' },
+        { gate: 'AS-4 Photo Documentation', passed: photoRequirementMet, detail: `${imageCount?.c || 0} media assets verified` },
+        { gate: 'AS-8 Reserve Price Guard', passed: reservePriceSet, detail: `GHS ${asset.reserve_price?.toLocaleString()}` }
+      ];
+      return { allPass: gates.every(gate => gate.passed) && !asset.legal_hold_active, gates };
     }
 
     // ============================================================
@@ -618,6 +646,7 @@ export default {
           userId = existing.id;
           await env.DB.prepare(`UPDATE users SET password_hash = ?, full_name = COALESCE(?, full_name), status = 'Active' WHERE id = ?`)
             .bind(await hashPassword(password.trim()), full_name || null, userId).run();
+          await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'PASSWORD_RESET' WHERE user_id = ? AND revoked = 0`).bind(userId).run();
         } else {
           userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
           const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(invite.bank_id).first();
@@ -672,7 +701,7 @@ export default {
         /^\/api\/v1\/users\/[a-zA-Z0-9_-]+(?:\/reset-password)?$/.test(pathname) ||
         pathname === '/api/v1/audit-logs' ||
         pathname === '/api/v1/kyc' ||
-        /^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+\/(approve|reject|publish|unpublish|hold|release-hold|readiness)$/.test(pathname);
+        /^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+\/(review|approve|request-changes|reject|publish|unpublish|hold|release-hold|readiness)$/.test(pathname);
       const isAssetApi = /^\/api\/(v1|bank|admin)\/assets(?:\/[a-zA-Z0-9_-]+)?$/.test(pathname);
       const isAssetSubmitAction = /^\/api\/v1\/assets\/[a-zA-Z0-9_-]+\/submit$/.test(pathname);
       const isBankDataAlias = [
@@ -860,12 +889,13 @@ export default {
         const id = parts[parts.length - 2];
         const body = await getBody();
         const { password } = body;
-        if (!password || password.trim().length < 6) return err('Password must be at least 6 characters.', 400);
+        if (!password || password.trim().length < 8) return err('Password must be at least 8 characters.', 400);
 
         const user = await env.DB.prepare(`SELECT username, full_name, public_id FROM users WHERE id = ?`).bind(id).first();
         if (!user) return err('User not found', 404);
 
         await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(await hashPassword(password.trim()), id).run();
+        await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'PASSWORD_RESET' WHERE user_id = ? AND revoked = 0`).bind(id).run();
         await auditLog(actorName, actorRole, 'Surge Solutions', 'RESET_PASSWORD', 'User', user.public_id, `Password reset for user @${user.username}`);
         return json({ success: true, message: `Password reset successfully for @${user.username}.` });
       }
@@ -875,43 +905,16 @@ export default {
         const id = pathname.replace('/api/admin/assets/', '').replace('/api/v1/assets/', '').replace('/readiness', '');
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-
-        const injunctionRow = await env.DB.prepare(`
-          SELECT li.injunction_active, li.verification_status, li.instrument_ref
-          FROM legal_instruments li
-          JOIN enforcement_cases ec ON li.case_id = ec.id
-          WHERE ec.asset_id = ? AND li.injunction_active = 1
-        `).bind(asset.id).first();
-        const activeInjunction = !!injunctionRow;
-
-        const title = await env.DB.prepare(`SELECT * FROM title_records WHERE asset_id = ?`).bind(asset.id).first();
-        const titleVerified = title ? title.verification_status === 'Verified' : false;
-
-        const valuation = await env.DB.prepare(`SELECT * FROM valuations WHERE asset_id = ? ORDER BY valuation_date DESC LIMIT 1`).bind(asset.id).first();
-        const valuationValid = valuation ? (valuation.status === 'Valid' && valuation.review_required === 0) : true;
-
-        const imgCount = await env.DB.prepare(`SELECT COUNT(*) as c FROM asset_images WHERE asset_id = ?`).bind(asset.id).first();
-        const photoRequirementMet = (imgCount?.c || 0) >= 1;
-        const reservePriceSet = !!asset.reserve_price && asset.reserve_price > 0;
-
-        const gates = [
-          { gate: 'LG-2 Injunction & Legal Clear', passed: !activeInjunction, detail: activeInjunction ? `Active Injunction on ${injunctionRow.instrument_ref}` : 'Court enforcement clear' },
-          { gate: 'TL-2 Title Perfection', passed: titleVerified, detail: titleVerified ? 'Title verified by Surge Legal' : 'Pending verification' },
-          { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuationValid ? 'Valuation active within 180 days' : 'Valuation expired / review required' },
-          { gate: 'AS-4 Photo Documentation', passed: photoRequirementMet, detail: `${imgCount?.c || 0} media assets verified` },
-          { gate: 'AS-8 Reserve Price Guard', passed: reservePriceSet, detail: `GHS ${asset.reserve_price?.toLocaleString()}` }
-        ];
-
-        const allPass = gates.every(g => g.passed) && !asset.legal_hold_active;
+        const readiness = await getAssetReadiness(asset);
         return json({
           success: true,
           asset_id: asset.id,
           public_ref: asset.public_ref,
           status: asset.status,
           legal_hold_active: !!asset.legal_hold_active,
-          can_publish: allPass && asset.status === 'Approved',
-          allPass,
-          gates
+          can_publish: readiness.allPass && asset.status === 'Approved',
+          allPass: readiness.allPass,
+          gates: readiness.gates
         });
       }
 
@@ -1627,14 +1630,43 @@ export default {
         return json({ success: true, message: 'Asset submitted for Surge review.' });
       }
 
+      if (pathname.includes('/review') && !pathname.includes('/readiness') && method === 'POST') {
+        const id = pathname.split('/')[4];
+        const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
+        if (!asset) return err('Asset not found', 404);
+        if (!['Submitted by Bank', 'Submitted', 'Under Review'].includes(asset.status)) {
+          return err('Only submitted assets can enter review.', 400);
+        }
+
+        await env.DB.prepare(`UPDATE assets SET status = 'Under Review', updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'START_REVIEW', 'Asset', asset.public_ref, 'Review started', { status: asset.status }, { status: 'Under Review' });
+        return json({ success: true, message: 'Review started.' });
+      }
+
       if (pathname.includes('/approve') && method === 'POST') {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (asset.status !== 'Under Review') return err('Only assets under review can be approved.', 400);
+        const readiness = await getAssetReadiness(asset);
+        if (!readiness.allPass) return err('Approval is blocked because one or more statutory readiness gates have not passed.', 400, { gates: readiness.gates });
 
-        await env.DB.prepare(`UPDATE assets SET status = 'Approved', updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
-        await auditLog(actorName, actorRole, 'Surge Solutions', 'APPROVE', 'Asset', asset.public_ref, 'Asset approved');
+        await env.DB.prepare(`UPDATE assets SET status = 'Approved', review_required = 0, review_required_reason = NULL, updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'APPROVE', 'Asset', asset.public_ref, 'Asset approved', { status: asset.status }, { status: 'Approved' });
         return json({ success: true, message: 'Asset approved.' });
+      }
+
+      if (pathname.includes('/request-changes') && method === 'POST') {
+        const id = pathname.split('/')[4];
+        const body = await getBody();
+        const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : 'Changes required';
+        const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
+        if (!asset) return err('Asset not found', 404);
+        if (asset.status !== 'Under Review') return err('Only assets under review can be returned for changes.', 400);
+
+        await env.DB.prepare(`UPDATE assets SET status = 'Changes Required', review_required = 1, review_required_reason = ?, updated_at = datetime('now') WHERE id = ?`).bind(reason, asset.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'REQUEST_CHANGES', 'Asset', asset.public_ref, `Changes requested: ${reason}`, { status: asset.status }, { status: 'Changes Required', reason });
+        return json({ success: true, message: 'Changes requested successfully.' });
       }
 
       if (pathname.includes('/reject') && method === 'POST') {
@@ -1642,41 +1674,49 @@ export default {
         const body = await getBody();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (asset.status !== 'Under Review') return err('Only assets under review can be rejected.', 400);
 
-        await env.DB.prepare(`UPDATE assets SET status = 'Changes Required', review_required = 1, review_required_reason = ?, updated_at = datetime('now') WHERE id = ?`).bind(body.reason || 'Changes required', asset.id).run();
-        await auditLog(actorName, actorRole, 'Surge Solutions', 'REJECT', 'Asset', asset.public_ref, `Changes requested: ${body.reason || 'None'}`);
-        return json({ success: true, message: 'Changes requested successfully.' });
+        const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : 'Rejected by Surge review.';
+        await env.DB.prepare(`UPDATE assets SET status = 'Rejected', review_required = 0, review_required_reason = ?, updated_at = datetime('now') WHERE id = ?`).bind(reason, asset.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'REJECT', 'Asset', asset.public_ref, `Asset rejected: ${reason}`, { status: asset.status }, { status: 'Rejected', reason });
+        return json({ success: true, message: 'Asset rejected.' });
       }
 
-      if (pathname.includes('/publish') && method === 'POST') {
+      if (pathname.endsWith('/publish') && method === 'POST') {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (asset.legal_hold_active) return err('Cannot publish: Legal hold active.', 400);
+        if (asset.status !== 'Approved') return err('Only approved assets can be published.', 400);
+        const readiness = await getAssetReadiness(asset);
+        if (!readiness.allPass) return err('Publication is blocked because one or more statutory readiness gates have not passed.', 400, { gates: readiness.gates });
 
         await env.DB.prepare(`UPDATE assets SET status = 'Live', updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
-        await auditLog(actorName, actorRole, 'Surge Solutions', 'PUBLISH', 'Asset', asset.public_ref, 'Published to Marketplace');
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'PUBLISH', 'Asset', asset.public_ref, 'Published to Marketplace', { status: asset.status }, { status: 'Live' });
         return json({ success: true, message: 'Asset published to Marketplace.' });
       }
 
-      if (pathname.includes('/unpublish') && method === 'POST') {
+      if (pathname.endsWith('/unpublish') && method === 'POST') {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (asset.status !== 'Live') return err('Only published assets can be unpublished.', 400);
 
         await env.DB.prepare(`UPDATE assets SET status = 'Approved', updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
         await auditLog(actorName, actorRole, 'Surge Solutions', 'UNPUBLISH', 'Asset', asset.public_ref, 'Unpublished from Marketplace');
         return json({ success: true, message: 'Asset unpublished.' });
       }
 
-      if (pathname.includes('/hold') && method === 'POST') {
+      if (pathname.endsWith('/hold') && method === 'POST') {
         const id = pathname.split('/')[4];
         const body = await getBody();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+        if (!reason) return err('A reason is required to place a legal hold.', 400);
+        if (asset.legal_hold_active) return err('A legal hold is already active on this asset.', 400);
 
-        await env.DB.prepare(`UPDATE assets SET legal_hold_active = 1, legal_hold_reason = ?, status = 'Legal Hold', updated_at = datetime('now') WHERE id = ?`).bind(body.reason || 'Legal investigation pending', asset.id).run();
-        await auditLog(actorName, actorRole, 'Surge Solutions', 'LEGAL_HOLD', 'Asset', asset.public_ref, `Legal hold imposed: ${body.reason}`);
+        await env.DB.prepare(`UPDATE assets SET legal_hold_active = 1, legal_hold_reason = ?, status = 'Legal Hold', updated_at = datetime('now') WHERE id = ?`).bind(reason, asset.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'LEGAL_HOLD', 'Asset', asset.public_ref, `Legal hold imposed: ${reason}`, { status: asset.status, legal_hold_active: !!asset.legal_hold_active }, { status: 'Legal Hold', legal_hold_active: true, reason });
         return json({ success: true, message: 'Legal hold placed.' });
       }
 
@@ -1684,9 +1724,10 @@ export default {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (!asset.legal_hold_active) return err('No legal hold is active on this asset.', 400);
 
         await env.DB.prepare(`UPDATE assets SET legal_hold_active = 0, legal_hold_reason = NULL, status = 'Approved', updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
-        await auditLog(actorName, actorRole, 'Surge Solutions', 'RELEASE_HOLD', 'Asset', asset.public_ref, 'Legal hold released');
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'RELEASE_HOLD', 'Asset', asset.public_ref, 'Legal hold released', { status: asset.status, legal_hold_active: true }, { status: 'Approved', legal_hold_active: false });
         return json({ success: true, message: 'Legal hold released.' });
       }
 

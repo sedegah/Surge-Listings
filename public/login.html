@@ -282,7 +282,7 @@ input[aria-invalid=true] { border-color: var(--danger) }
         }
         tries++; btn.textContent = 'Sign in'; btn.disabled = false; pass.value = '';
         if (res.status === 423 || res.status === 429 || tries >= MAX_TRIES) { startLock(); return; }
-        if (res.status === 403) return showError(res.json.error || 'This account is disabled. Contact your Surge administrator.', ['u']);
+        if (res.status === 403) return showError(res.json.error || 'Sign-in is not allowed for this account. Contact your Surge administrator.', ['u']);
         showError('The username or password is incorrect. ' + (MAX_TRIES - tries) + ' attempt' + (MAX_TRIES - tries === 1 ? '' : 's') + ' left.', ['p']);
       })
       .catch(function () {

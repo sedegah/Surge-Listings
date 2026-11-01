@@ -711,7 +711,14 @@ const Store = {
   addActivity(assetId, who, what) {
     const asset = this.getAsset(assetId);
     if (asset) {
-      asset.activity.push({ when: new Date().toISOString(), who, what });
+      const user = Auth.getUser();
+      asset.activity.push({
+        when: new Date().toISOString(),
+        who,
+        what,
+        actorPublicId: user?.id || null,
+        actorRole: user?.roleCode || null
+      });
       this.persist();
     }
   },
@@ -833,8 +840,8 @@ const UI = {
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
   fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
   auditActor(entry) {
-    if (entry.actorPublicId) return `${entry.who} · ${entry.actorPublicId}`;
-    if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') return `${entry.who} · external actor`;
+    if (entry.actorPublicId) return `${this.escapeHtml(entry.who || 'Signed-in user')} · ${this.escapeHtml(entry.actorPublicId)}`;
+    if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') return `${this.escapeHtml(entry.who || 'Buyer')} · external actor`;
     return 'Legacy event · actor not verified';
   },
   fmtDateShort(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
@@ -1087,7 +1094,7 @@ const BankPortal = {
               <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span>
                 <div class="tl-when">${UI.fmtDate(a.when)}</div>
                 <div class="tl-what">${a.detail || a.action}</div>
-                <div class="tl-who">${a.who}</div>
+                <div class="tl-who">${UI.auditActor(a)}</div>
               </li>
             `).join('') || '<li style="color:var(--text-2)">No recent activity</li>'}
           </ul>
@@ -1148,6 +1155,44 @@ const BankPortal = {
 
   openSubPage(name) { this.subPage = name; this.render(); },
   closeSubPage() { this.subPage = null; this.render(); },
+
+  async performAssetAction(action, successMessage, body = {}, assetId = this.selectedAssetId) {
+    if (!assetId) {
+      UI.toast('Select an asset before continuing.', 'warn');
+      return false;
+    }
+    try {
+      const response = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/${action}`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify(body)
+      });
+      let result;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error(`The API returned an invalid response (${response.status}).`);
+      }
+      if (!response.ok || !result.success) {
+        const failedGates = Array.isArray(result.gates)
+          ? result.gates.filter(gate => !gate.passed).map(gate => gate.gate).join(', ')
+          : '';
+        throw new Error([result.error || `Action failed (${response.status}).`, failedGates].filter(Boolean).join(' Missing requirements: '));
+      }
+      await Store.fetchRemote();
+      UI.toast(successMessage || result.message || 'Asset updated.', 'success');
+      this.render();
+      PublicMarket.render();
+      BankPortal.render();
+      return true;
+    } catch (error) {
+      console.error(`Asset ${action} failed:`, error);
+      UI.toast(error.message || `Could not ${action.replace('-', ' ')} the asset. Please retry.`, 'error');
+      return false;
+    }
+  },
 
   renderAssetDetail(id) {
     const a = Store.getAsset(id);
@@ -1406,7 +1451,7 @@ const BankPortal = {
             <li><span class="dot ${act.what.includes('Legal hold') ? 'red' : act.what.includes('Published') ? 'green' : ''}"></span>
               <div class="tl-when">${UI.fmtDate(act.when)}</div>
               <div class="tl-what">${act.what}</div>
-              <div class="tl-who">${act.who}</div>
+              <div class="tl-who">${UI.auditActor(act)}</div>
             </li>
           `).join('')}
         </ul>
@@ -2403,7 +2448,7 @@ const AdminPortal = {
         <div class="kpi" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Partner Banks</div><div class="v">${Store.banks.length}</div></div>
         <div class="kpi ok" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Active Staff</div><div class="v">${Store.users.length}</div></div>
       </div>
-      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `<li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${a.action}</b> ${a.entityRef} — ${a.detail || ''}</div><div class="tl-who">${a.who}</div></li>`).join('')}</ul></div></div>
+      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `      <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${a.action}</b> ${a.entityRef} — ${a.detail || ''}</div><div class="tl-who">${UI.auditActor(a)}</div></li>`).join('')}</ul></div></div>
     `;
   },
 
@@ -2421,7 +2466,6 @@ const AdminPortal = {
     const a = Store.getAsset(id);
     if (!a) return '<div class="empty-state"><h3>No Asset Selected</h3><p>Select an asset from the list to view details.</p></div>';
     const readiness = Store.checkPublishReadiness(a);
-    const canPublish = readiness.allPass && a.status === 'Approved';
     const isLive = a.status === 'Live';
     const tab = this.detailTab;
     
@@ -2460,18 +2504,18 @@ const AdminPortal = {
           <div class="body">
             <div class="form-actions" style="justify-content:flex-start;gap:10px">
               
-              ${a.status === 'Submitted' ? `
+              ${['Submitted', 'Submitted by Bank'].includes(a.status) ? `
                 <button class="btn primary" onclick="AdminPortal.startReview()">Begin Review</button>
               ` : ''}
               
               ${a.status === 'Under Review' ? `
-                <button class="btn primary" onclick="AdminPortal.approveAsset()" ${!readiness.allPass ? 'disabled title="Gates failing"' : ''}>Approve Asset</button>
+                <button class="btn primary" onclick="AdminPortal.approveAsset()">Approve Asset</button>
                 <button class="btn" onclick="AdminPortal.requestChanges()">Request Changes</button>
                 <button class="btn danger" onclick="AdminPortal.rejectAsset()">Reject</button>
               ` : ''}
               
               ${a.status === 'Approved' ? `
-                <button class="btn success" onclick="AdminPortal.publishAsset()" ${!canPublish ? 'disabled title="Gates failing"' : ''}>Publish Listing</button>
+                <button class="btn success" onclick="AdminPortal.publishAsset()">Publish Listing</button>
                 
               ` : ''}
               
@@ -2533,11 +2577,11 @@ const AdminPortal = {
   },
 
   renderActivityTab(a) {
-    return `<div class="group"><div class="caption">Activity</div><div class="body"><ul class="timeline">${a.activity.slice().reverse().map(act => `<li><span class="dot ${act.what.includes('Legal hold') ? 'red' : act.what.includes('Published') ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(act.when)}</div><div class="tl-what">${act.what}</div><div class="tl-who">${act.who}</div></li>`).join('')}</ul></div></div>`;
+    return `<div class="group"><div class="caption">Activity</div><div class="body"><ul class="timeline">${a.activity.slice().reverse().map(act => `<li><span class="dot ${act.what.includes('Legal hold') ? 'red' : act.what.includes('Published') ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(act.when)}</div><div class="tl-what">${act.what}</div><div class="tl-who">${UI.auditActor(act)}</div></li>`).join('')}</ul></div></div>`;
   },
 
   renderAuditTab(a) {
-    return `<div class="group"><div class="caption">Audit</div><div class="body">${Store.auditLog.filter(x => x.entityRef === a.ref).map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${x.who}</div><div class="ae-what"><b>${x.action}</b>${x.oldValue ? ` — <span class="ae-old">${x.oldValue}</span> → <span class="ae-new">${x.newValue}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${x.detail}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
+    return `<div class="group"><div class="caption">Audit</div><div class="body">${Store.auditLog.filter(x => x.entityRef === a.ref).map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${x.action}</b>${x.oldValue ? ` — <span class="ae-old">${x.oldValue}</span> → <span class="ae-new">${x.newValue}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${x.detail}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
   },
 
   renderReviewQueue() {
@@ -2560,7 +2604,7 @@ const AdminPortal = {
   },
 
   renderAuditView() {
-    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${x.who}</div><div class="ae-what"><b>${x.action}</b> ${x.entityRef}${x.oldValue ? ` — <span class="ae-old">${x.oldValue}</span> → <span class="ae-new">${x.newValue}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${x.detail}</span>` : ''}</div></div>`).join('')}</div></div>`;
+    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${x.action}</b> ${x.entityRef}${x.oldValue ? ` — <span class="ae-old">${x.oldValue}</span> → <span class="ae-new">${x.newValue}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${x.detail}</span>` : ''}</div></div>`).join('')}</div></div>`;
   },
 
   renderSubPage() {
@@ -2739,69 +2783,30 @@ const AdminPortal = {
     this.closeSubPage();
   },
 
-  startReview() { 
-    if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { status: 'Under Review' }, Auth.getActorName(), 'Review started');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Review started');
-    this.render(); 
+  startReview() {
+    return this.performAssetAction('review', 'Review started.');
   },
   
-  approveAsset() { 
-    if (!this.selectedAssetId) return; 
-    const a = Store.getAsset(this.selectedAssetId); 
-    const r = Store.checkPublishReadiness(a); 
-    
-    // Strict 5-gate readiness check enforcement — no bypass
-    if (!r.allPass) {
-      const fails = r.checks.filter(c => !c.pass).map(c => c.label).join('; ');
-      return UI.toast(`Approval blocked by platform guards: ${fails}`, 'error');
-    } 
-    
-    Store.updateAsset(this.selectedAssetId, { status: 'Approved' }, Auth.getActorName(), 'Approved');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Approved');
-    UI.toast('Asset approved. Ready for marketplace publication.', 'success');
-    this.render(); 
+  approveAsset() {
+    return this.performAssetAction('approve', 'Asset approved. Ready for marketplace publication.');
   },
   
-  requestChanges() { 
-    if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { status: 'Changes Required' }, Auth.getActorName(), 'Changes requested');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Changes requested');
-    UI.toast('Changes requested successfully.', 'warn'); 
-    this.render(); 
+  requestChanges() {
+    return this.performAssetAction('request-changes', 'Changes requested successfully.');
   },
   
-  rejectAsset() { 
-    if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { status: 'Rejected' }, Auth.getActorName(), 'Rejected');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Rejected');
-    this.render(); 
+  rejectAsset() {
+    return this.performAssetAction('reject', 'Asset rejected.');
   },
   
   publishCurrent() { this.publishAsset(); },
   
   publishAsset() {
-    if (!this.selectedAssetId) return UI.toast('Select an asset before continuing.', 'warn');
-    const a = Store.getAsset(this.selectedAssetId);
-    const r = Store.checkPublishReadiness(a);
-    
-    if (!r.allPass) {
-      return UI.toast('This action is unavailable because the following requirements are incomplete: ' + r.checks.filter(c => !c.pass).map(c => c.label).join('; '), 'error');
-    }
-    if (a.status !== 'Approved') {
-      return UI.toast('This asset must be approved before publication.', 'error');
-    }
-    
-    Store.updateAsset(this.selectedAssetId, { status: 'Live', publicationStatus: 'Published' }, Auth.getActorName(), 'Published to Marketplace');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Published to Marketplace');
-    UI.toast('Asset published to Marketplace.', 'success');
-    this.render(); PublicMarket.render(); BankPortal.render();
+    return this.performAssetAction('publish', 'Asset published to Marketplace.');
   },
   
-  unpublishAsset() { 
-    if (!this.selectedAssetId) return; 
-    Store.updateAsset(this.selectedAssetId, { publicationStatus: 'Unpublished', status: 'Approved' }, Auth.getActorName(), 'Unpublished');
-    this.render(); PublicMarket.render(); BankPortal.render(); 
+  unpublishAsset() {
+    return this.performAssetAction('unpublish', 'Asset unpublished from Marketplace.');
   },
   
   holdCurrent() { this.placeLegalHold(); },
@@ -2812,24 +2817,17 @@ const AdminPortal = {
   },
   
   confirmHold() {
-    const reason = document.getElementById('hold-reason')?.value || 'No reason';
-    const a = Store.getAsset(this.selectedAssetId);
-    Store.updateAsset(this.selectedAssetId, { legalHold: true, legalHoldReason: reason, status: 'Legal Hold', publicationStatus: 'Suspended' }, Auth.getActorName(), 'Legal hold: ' + reason);
-    a.legalSubstate.holdClear = false;
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Legal hold placed: ' + reason);
-    UI.closeModal();
-    UI.toast('Legal hold placed', 'error');
-    this.render(); PublicMarket.render(); BankPortal.render();
+    const reason = document.getElementById('hold-reason')?.value?.trim();
+    if (!reason) return UI.toast('A reason is required to place a legal hold.', 'error');
+    return this.performAssetAction('hold', 'Legal hold placed.', { reason }).then(success => {
+      if (success) UI.closeModal();
+    });
   },
   
   releaseLegalHold(assetId) {
     const id = assetId || this.selectedAssetId;
     if (!id) return;
-    Store.updateAsset(id, { legalHold: false, legalHoldReason: null, status: 'Approved', publicationStatus: 'Unpublished' }, Auth.getActorName(), 'Legal hold released');
-    Store.getAsset(id).legalSubstate.holdClear = true;
-    Store.addActivity(id, Auth.getActorName(), 'Legal hold released');
-    UI.toast('Legal hold released. Asset returns to Approved.', 'success');
-    this.render(); PublicMarket.render(); BankPortal.render();
+    return this.performAssetAction('release-hold', 'Legal hold released. Asset returns to Approved.', {}, id);
   },
 
   // ============================================================
