@@ -469,6 +469,10 @@ const Store = {
             caseRef: d.enforcement_case_number || '',
             images: d.image_count || 0,
             documents: d.document_count || 0,
+            deletionRequested: !!d.deletion_requested,
+            deletionRequestReason: d.deletion_request_reason || '',
+            deletionRequestedBy: d.deletion_requested_by || '',
+            deletionRequestedAt: d.deletion_requested_at || null,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
             createdBy: d.created_by || 'Not recorded',
@@ -515,9 +519,15 @@ const Store = {
         if (json.success && Array.isArray(json.data)) {
           this.offers = json.data.map(o => ({
             id: o.id, ref: o.offer_ref, assetId: o.asset_id, assetRef: o.asset_ref || '',
+            assetTitle: o.asset_title || '',
+            bankName: o.bank_name || '',
             buyer: o.buyer_name, amount: o.amount, status: o.status,
             belowReserve: !!o.below_reserve, date: o.created_at,
-            validity: o.validity_date, notes: o.notes || ''
+            validity: o.validity_date, notes: o.notes || '',
+            surgeVerified: !!o.surge_verified,
+            surgeVerifiedBy: o.surge_verified_by || '',
+            surgeVerifiedAt: o.surge_verified_at || null,
+            rejectionReason: o.rejection_reason || ''
           }));
         }
       }
@@ -948,6 +958,8 @@ const UI = {
     const map = {
       'Live': 'live', 'Published': 'live', 'Verified': 'ok', 'Cleared': 'ok',
       'Draft': 'draft', 'Submitted': 'pending', 'Under Review': 'pending', 'Pending Approval': 'pending',
+      'Under Bank Review': 'pending', 'Pending Surge Verification': 'warn', 'Rejected by Surge': 'rejected',
+      'Accepted': 'ok', 'Deletion Requested': 'warn',
       'Legal Hold': 'hold', 'Suspended': 'hold', 'Rejected': 'rejected', 'Withdrawn': 'rejected',
       'Approved': 'info', 'Changes Required': 'warn', 'Sold': 'sale', 'Completed': 'sale', 'Sale': 'sale',
       'KYC Verified': 'ok', 'Contacted': 'info', 'New': 'draft', 'Unpublished': 'draft',
@@ -1349,6 +1361,7 @@ const BankPortal = {
       </div>
 
       ${a.legalHold ? `<div class="banner red"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1"/><path d="M8 10V7a4 4 0 018 0v3"/></svg><div><b>LEGAL HOLD ACTIVE.</b> Reason: ${a.legalHoldReason || 'See audit log'}. Contact Surge legal.</div></div>` : ''}
+      ${a.deletionRequested ? `<div class="banner warn"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div><b>DELETION REQUEST PENDING.</b> A request to delete this published listing has been submitted to Surge Admin. Reason: "${UI.escapeHtml(a.deletionRequestReason || 'Requested by bank')}".</div></div>` : ''}
 
       <div class="detailhead">
         <span class="ref">${a.ref}</span>
@@ -1370,7 +1383,11 @@ const BankPortal = {
           ${canEdit ? `<button class="btn primary" onclick="BankPortal.saveOverview()">Save Asset Details</button>` : ''}
           ${canEdit ? `<button class="btn" onclick="BankPortal.submitForReview()">Submit for Review</button>` : ''}
           ${a.status === 'Changes Required' ? `<button class="btn primary" onclick="BankPortal.resubmitAsset()">Resubmit</button>` : ''}
-          ${a.status === 'Draft' ? `<button class="btn danger" onclick="BankPortal.deleteAsset('${a.id}')">Delete Draft</button>` : ''}
+          ${a.status === 'Live' ? (
+            a.deletionRequested
+              ? `<button class="btn" disabled style="opacity:0.7">Deletion Pending Surge Approval</button>`
+              : `<button class="btn alert" onclick="BankPortal.requestDeletionModal('${a.id}')">Request Deletion</button>`
+          ) : `<button class="btn danger" onclick="BankPortal.deleteAsset('${a.id}')">Delete Asset</button>`}
           <button class="btn" onclick="BankPortal.closeAsset()">Close</button>
         </div>
       </div>
@@ -2469,27 +2486,72 @@ const BankPortal = {
     }
   },
 
-  deleteAsset(id) {
+  async deleteAsset(id) {
     const a = Store.getAsset(id);
     if (!a) return;
-    if (a.status !== 'Draft') {
-      return UI.toast('Only draft assets can be deleted', 'error');
+    if (a.status === 'Live') {
+      return UI.toast('Published assets cannot be deleted directly. Please use "Request Deletion" to notify Surge Admin.', 'warn');
     }
-    if (!confirm(`Are you sure you want to permanently delete draft asset ${a.ref}?`)) {
+    if (!confirm(`Are you sure you want to permanently delete asset ${a.ref}? This action cannot be undone.`)) {
       return;
     }
-    Store.assets = Store.assets.filter(x => x.id !== id);
-    Store.addAudit(Auth.getActorName(), 'DELETE', 'Asset', a.ref, 'Draft', 'Deleted', `Draft asset ${a.ref} deleted`);
-    Store.persist();
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch(`/api/v1/assets/${id}?scope=bank`, {
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
-      }).catch(() => {});
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete asset');
+      UI.toast(json.message || `Asset ${a.ref} deleted successfully.`, 'success');
+      this.closeAsset();
+      await Store.fetchRemote();
+    } catch (err) {
+      UI.toast(err.message, 'error');
     }
-    this.closeAsset();
-    this.render();
-    UI.toast(`Draft asset ${a.ref} deleted successfully.`, 'success');
+  },
+
+  requestDeletionModal(id) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    const bodyHtml = `
+      <p style="font-size:13px;color:var(--text-1);margin-bottom:12px">
+        This asset is currently published on the live marketplace. Bank staff cannot delete published listings directly.
+        Please provide the reason below to request deletion by Surge Solutions Admin.
+      </p>
+      <div class="field">
+        <span class="lbl">Reason for Deletion <span class="req">*</span></span>
+        <div class="ctl">
+          <textarea id="req-del-reason" style="width:100%;height:80px;font-family:inherit;font-size:13px" placeholder="e.g. Asset redeemed by borrower, settled out of court, sold privately..."></textarea>
+        </div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn alert" onclick="BankPortal.submitRequestDeletion('${id}')">Submit Request to Admin</button>
+    `;
+    UI.modal('Request Listing Deletion', bodyHtml, footerHtml);
+  },
+
+  async submitRequestDeletion(id) {
+    const reason = document.getElementById('req-del-reason')?.value?.trim();
+    if (!reason) {
+      return UI.toast('Please provide a reason for the deletion request.', 'error');
+    }
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}/request-deletion`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ reason })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to submit request');
+      UI.closeModal();
+      UI.toast(json.message || 'Deletion request submitted to Surge Admin.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
   },
 
   saveOverview() {
