@@ -469,6 +469,10 @@ const Store = {
             caseRef: d.enforcement_case_number || '',
             images: d.image_count || 0,
             documents: d.document_count || 0,
+            deletionRequested: !!d.deletion_requested,
+            deletionRequestReason: d.deletion_request_reason || '',
+            deletionRequestedBy: d.deletion_requested_by || '',
+            deletionRequestedAt: d.deletion_requested_at || null,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
             createdBy: d.created_by || 'Not recorded',
@@ -515,9 +519,15 @@ const Store = {
         if (json.success && Array.isArray(json.data)) {
           this.offers = json.data.map(o => ({
             id: o.id, ref: o.offer_ref, assetId: o.asset_id, assetRef: o.asset_ref || '',
+            assetTitle: o.asset_title || '',
+            bankName: o.bank_name || '',
             buyer: o.buyer_name, amount: o.amount, status: o.status,
             belowReserve: !!o.below_reserve, date: o.created_at,
-            validity: o.validity_date, notes: o.notes || ''
+            validity: o.validity_date, notes: o.notes || '',
+            surgeVerified: !!o.surge_verified,
+            surgeVerifiedBy: o.surge_verified_by || '',
+            surgeVerifiedAt: o.surge_verified_at || null,
+            rejectionReason: o.rejection_reason || ''
           }));
         }
       }
@@ -948,6 +958,8 @@ const UI = {
     const map = {
       'Live': 'live', 'Published': 'live', 'Verified': 'ok', 'Cleared': 'ok',
       'Draft': 'draft', 'Submitted': 'pending', 'Under Review': 'pending', 'Pending Approval': 'pending',
+      'Under Bank Review': 'pending', 'Pending Surge Verification': 'warn', 'Rejected by Surge': 'rejected',
+      'Accepted': 'ok', 'Deletion Requested': 'warn',
       'Legal Hold': 'hold', 'Suspended': 'hold', 'Rejected': 'rejected', 'Withdrawn': 'rejected',
       'Approved': 'info', 'Changes Required': 'warn', 'Sold': 'sale', 'Completed': 'sale', 'Sale': 'sale',
       'KYC Verified': 'ok', 'Contacted': 'info', 'New': 'draft', 'Unpublished': 'draft',
@@ -1349,6 +1361,7 @@ const BankPortal = {
       </div>
 
       ${a.legalHold ? `<div class="banner red"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1"/><path d="M8 10V7a4 4 0 018 0v3"/></svg><div><b>LEGAL HOLD ACTIVE.</b> Reason: ${a.legalHoldReason || 'See audit log'}. Contact Surge legal.</div></div>` : ''}
+      ${a.deletionRequested ? `<div class="banner warn"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div><b>DELETION REQUEST PENDING.</b> A request to delete this published listing has been submitted to Surge Admin. Reason: "${UI.escapeHtml(a.deletionRequestReason || 'Requested by bank')}".</div></div>` : ''}
 
       <div class="detailhead">
         <span class="ref">${a.ref}</span>
@@ -1370,7 +1383,11 @@ const BankPortal = {
           ${canEdit ? `<button class="btn primary" onclick="BankPortal.saveOverview()">Save Asset Details</button>` : ''}
           ${canEdit ? `<button class="btn" onclick="BankPortal.submitForReview()">Submit for Review</button>` : ''}
           ${a.status === 'Changes Required' ? `<button class="btn primary" onclick="BankPortal.resubmitAsset()">Resubmit</button>` : ''}
-          ${a.status === 'Draft' ? `<button class="btn danger" onclick="BankPortal.deleteAsset('${a.id}')">Delete Draft</button>` : ''}
+          ${a.status === 'Live' ? (
+            a.deletionRequested
+              ? `<button class="btn" disabled style="opacity:0.7">Deletion Pending Surge Approval</button>`
+              : `<button class="btn alert" onclick="BankPortal.requestDeletionModal('${a.id}')">Request Deletion</button>`
+          ) : `<button class="btn danger" onclick="BankPortal.deleteAsset('${a.id}')">Delete Asset</button>`}
           <button class="btn" onclick="BankPortal.closeAsset()">Close</button>
         </div>
       </div>
@@ -2319,7 +2336,49 @@ const BankPortal = {
   },
 
   renderOffersView() {
-    return `<div class="page-head"><h1>Offers &amp; Decisions</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Offer Ref</th><th>Asset</th><th>Buyer</th><th class="num">Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>${Store.offers.map(o => `<tr><td class="ref">${o.ref}</td><td class="ref">${o.assetRef}</td><td>${o.buyer}</td><td class="num">${UI.fmtMoney(o.amount)}</td><td>${UI.badge(o.status)}</td><td>${o.status === 'Under Review' ? `<button class="btn small primary" onclick="BankPortal.decideOffer('${o.id}','Accepted')">Accept</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+    return `
+      <div class="page-head">
+        <h1>Offers &amp; Decisions</h1>
+        <span class="crumb">${Store.offers.length} verified offer${Store.offers.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="banner info" style="margin-bottom:14px">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><b>Surge Verified Offers.</b> All offers listed below have been pre-screened and verified by Surge Solutions before being released to your bank for decision.</div>
+      </div>
+      <div class="gridwrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Offer Ref</th>
+              <th>Asset</th>
+              <th>Buyer</th>
+              <th class="num">Amount</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Store.offers.map(o => `
+              <tr>
+                <td class="ref">${o.ref}</td>
+                <td class="ref">${o.assetRef}</td>
+                <td>${o.buyer}</td>
+                <td class="num">${UI.fmtMoney(o.amount)}${o.belowReserve ? ' <span style="color:var(--danger);font-size:10.5px">(Below Reserve)</span>' : ''}</td>
+                <td>${UI.badge(o.status)}</td>
+                <td>
+                  ${['Under Bank Review', 'Under Review'].includes(o.status) ? `
+                    <div style="display:flex;gap:6px">
+                      <button class="btn small ok" onclick="BankPortal.decideOffer('${o.id}','Accepted')">Accept</button>
+                      <button class="btn small alert" onclick="BankPortal.decideOffer('${o.id}','Rejected')">Reject</button>
+                    </div>
+                  ` : '—'}
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-2)">No verified offers currently pending for your bank.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
   },
 
   renderReportsView() {
@@ -2469,27 +2528,72 @@ const BankPortal = {
     }
   },
 
-  deleteAsset(id) {
+  async deleteAsset(id) {
     const a = Store.getAsset(id);
     if (!a) return;
-    if (a.status !== 'Draft') {
-      return UI.toast('Only draft assets can be deleted', 'error');
+    if (a.status === 'Live') {
+      return UI.toast('Published assets cannot be deleted directly. Please use "Request Deletion" to notify Surge Admin.', 'warn');
     }
-    if (!confirm(`Are you sure you want to permanently delete draft asset ${a.ref}?`)) {
+    if (!confirm(`Are you sure you want to permanently delete asset ${a.ref}? This action cannot be undone.`)) {
       return;
     }
-    Store.assets = Store.assets.filter(x => x.id !== id);
-    Store.addAudit(Auth.getActorName(), 'DELETE', 'Asset', a.ref, 'Draft', 'Deleted', `Draft asset ${a.ref} deleted`);
-    Store.persist();
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch(`/api/v1/assets/${id}?scope=bank`, {
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
-      }).catch(() => {});
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete asset');
+      UI.toast(json.message || `Asset ${a.ref} deleted successfully.`, 'success');
+      this.closeAsset();
+      await Store.fetchRemote();
+    } catch (err) {
+      UI.toast(err.message, 'error');
     }
-    this.closeAsset();
-    this.render();
-    UI.toast(`Draft asset ${a.ref} deleted successfully.`, 'success');
+  },
+
+  requestDeletionModal(id) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    const bodyHtml = `
+      <p style="font-size:13px;color:var(--text-1);margin-bottom:12px">
+        This asset is currently published on the live marketplace. Bank staff cannot delete published listings directly.
+        Please provide the reason below to request deletion by Surge Solutions Admin.
+      </p>
+      <div class="field">
+        <span class="lbl">Reason for Deletion <span class="req">*</span></span>
+        <div class="ctl">
+          <textarea id="req-del-reason" style="width:100%;height:80px;font-family:inherit;font-size:13px" placeholder="e.g. Asset redeemed by borrower, settled out of court, sold privately..."></textarea>
+        </div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn alert" onclick="BankPortal.submitRequestDeletion('${id}')">Submit Request to Admin</button>
+    `;
+    UI.modal('Request Listing Deletion', bodyHtml, footerHtml);
+  },
+
+  async submitRequestDeletion(id) {
+    const reason = document.getElementById('req-del-reason')?.value?.trim();
+    if (!reason) {
+      return UI.toast('Please provide a reason for the deletion request.', 'error');
+    }
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}/request-deletion`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ reason })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to submit request');
+      UI.closeModal();
+      UI.toast(json.message || 'Deletion request submitted to Surge Admin.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
   },
 
   saveOverview() {
@@ -2602,19 +2706,24 @@ const BankPortal = {
     return this.submitForReview();
   },
 
-  decideOffer(offerId, decision) {
+  async decideOffer(offerId, decision) {
     const offer = Store.offers.find(o => o.id === offerId);
     if (!offer) return;
-    offer.status = decision;
-    Store.addAudit(Auth.getActorName(), 'OFFER_' + decision.toUpperCase(), 'Offer', offer.ref, 'Under Review', decision, 'Bank decision');
-    if (decision === 'Accepted') {
-      const asset = Store.getAssetByRef(offer.assetRef);
-      if (asset) {
-        Store.updateAsset(asset.id, { status: 'Sale', publicationStatus: 'Withdrawn' }, Auth.getActorName(), 'Offer accepted');
-        UI.toast('Offer accepted. Sale processing can now begin.', 'success');
-      }
-    } else UI.toast('Offer ' + decision.toLowerCase(), 'success');
-    this.render();
+    if (!confirm(`Are you sure you want to mark offer ${offer.ref} as ${decision}?`)) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/decide`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ decision })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to record decision');
+      UI.toast(json.message || `Offer marked as ${decision.toLowerCase()}.`, 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
   },
 };
 
@@ -2920,6 +3029,18 @@ const AdminPortal = {
         <span class="crumb">${a.bankName}</span>
       </div>
       ${a.legalHold ? `<div class="banner red"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1"/><path d="M8 10V7a4 4 0 018 0v3"/></svg><div><b>LEGAL HOLD.</b> ${a.legalHoldReason}</div></div>` : ''}
+      ${a.deletionRequested ? `
+        <div class="banner warn" style="background:#FFF3CD;border:1px solid #FFEEBA;color:#856404;padding:12px 16px;margin-bottom:14px;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <b>⚠ DELETION REQUESTED BY PARTNER BANK</b><br>
+            <span style="font-size:12px">Requested by <b>${UI.escapeHtml(a.deletionRequestedBy || 'Bank Staff')}</b>${a.deletionRequestedAt ? ` on ${UI.fmtDateShort(a.deletionRequestedAt)}` : ''}: "${UI.escapeHtml(a.deletionRequestReason || 'No reason provided')}"</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button class="btn danger small" onclick="AdminPortal.deleteAsset('${a.id}')">Approve &amp; Delete Listing</button>
+            <button class="btn small" onclick="AdminPortal.rejectDeletionRequest('${a.id}')">Dismiss Request</button>
+          </div>
+        </div>
+      ` : ''}
       <div class="detailhead">
         <span class="ref">${a.ref}</span>
         <span class="title">${a.category} — ${a.assetType}</span>
@@ -2967,6 +3088,7 @@ const AdminPortal = {
               ` : `
                 <button class="btn success" onclick="AdminPortal.releaseLegalHold()">Release Legal Hold</button>
               `}
+              <button class="btn danger" onclick="AdminPortal.deleteAsset('${a.id}')">Delete Listing</button>
             </div>
             ${!readiness.allPass && (a.status === 'Under Review' || a.status === 'Approved') ? `
               <p style="font-size:11.5px;color:var(--warning);margin:8px 0 0">
@@ -3156,7 +3278,91 @@ const AdminPortal = {
   },
 
   renderOffersView() {
-    return `<div class="page-head"><h1>Offers</h1></div><div class="gridwrap"><table class="grid"><thead><tr><th>Ref</th><th>Asset</th><th>Buyer</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${Store.offers.map(o => `<tr><td class="ref">${o.ref}</td><td class="ref">${o.assetRef}</td><td>${o.buyer}</td><td class="num">${UI.fmtMoney(o.amount)}</td><td>${UI.badge(o.status)}</td></tr>`).join('')}</tbody></table></div>`;
+    const pendingVerifications = Store.offers.filter(o => o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge')).length;
+    const verifiedOffers = Store.offers.filter(o => o.surgeVerified).length;
+    const acceptedOffers = Store.offers.filter(o => o.status === 'Accepted').length;
+
+    return `
+      <div class="page-head">
+        <h1>Buyer Offers &amp; Surge Verification</h1>
+        <span class="crumb">${Store.offers.length} total offers · ${pendingVerifications} pending verification</span>
+      </div>
+
+      <div class="kpis" style="margin-bottom:16px">
+        <div class="kpi ${pendingVerifications ? 'warn' : 'ok'}">
+          <div class="k">Pending Surge Verification</div>
+          <div class="v">${pendingVerifications}</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Released to Partner Banks</div>
+          <div class="v">${verifiedOffers}</div>
+        </div>
+        <div class="kpi ok">
+          <div class="k">Accepted by Banks</div>
+          <div class="v">${acceptedOffers}</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Total Offers</div>
+          <div class="v">${Store.offers.length}</div>
+        </div>
+      </div>
+
+      <div class="banner info" style="margin-bottom:14px">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div><b>Surge Intermediary Gate:</b> As a licensed intermediary, Surge Admin must review and verify every buyer offer before it becomes visible to the recovery bank. Banks cannot see or accept unverified offers.</div>
+      </div>
+
+      <div class="gridwrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Asset</th>
+              <th>Bank</th>
+              <th>Buyer &amp; Contact</th>
+              <th class="num">Amount</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Verification / Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Store.offers.map(o => {
+              const isPending = o.status === 'Pending Surge Verification' || (!o.surgeVerified && o.status !== 'Rejected by Surge');
+              return `
+                <tr style="${isPending ? 'background:rgba(255,193,7,0.06)' : ''}">
+                  <td class="ref"><b>${o.ref}</b></td>
+                  <td class="ref">${o.assetRef}</td>
+                  <td>${o.bankName || 'Partner Bank'}</td>
+                  <td>
+                    <b>${UI.escapeHtml(o.buyer)}</b>
+                    ${o.notes ? `<br><small style="color:var(--text-2);font-size:11px">${UI.escapeHtml(o.notes)}</small>` : ''}
+                  </td>
+                  <td class="num">
+                    <b>${UI.fmtMoney(o.amount)}</b>
+                    ${o.belowReserve ? '<br><span style="color:var(--danger);font-size:10.5px">Below Reserve</span>' : ''}
+                  </td>
+                  <td><small>${UI.fmtDateShort(o.date)}</small></td>
+                  <td>${UI.badge(o.status)}</td>
+                  <td>
+                    ${isPending ? `
+                      <div style="display:flex;gap:6px">
+                        <button class="btn small ok" onclick="AdminPortal.verifyOffer('${o.id}')">Verify for Bank</button>
+                        <button class="btn small alert" onclick="AdminPortal.rejectOfferModal('${o.id}')">Reject</button>
+                      </div>
+                    ` : o.surgeVerified ? `
+                      <span style="color:var(--ok);font-size:11.5px;font-weight:600">✓ Verified for Bank</span>
+                    ` : o.status === 'Rejected by Surge' ? `
+                      <span style="color:var(--danger);font-size:11.5px">Rejected by Surge</span>
+                    ` : '—'}
+                  </td>
+                </tr>
+              `;
+            }).join('') || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-2)">No offers submitted yet.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
   },
 
   renderAuditView() {
@@ -4134,6 +4340,118 @@ const AdminPortal = {
     if (ok) {
       UI.closeModal();
       this.render();
+    }
+  },
+
+  async verifyOffer(offerId) {
+    const offer = Store.offers.find(o => o.id === offerId);
+    const label = offer ? `offer ${offer.ref} (${UI.fmtMoney(offer.amount)})` : 'this offer';
+    if (!confirm(`Verify ${label}? Once verified, the recovery bank will be able to see the offer and decide whether to accept or reject it.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/verify`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to verify offer');
+      UI.toast(json.message || 'Offer verified and released to the bank.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  rejectOfferModal(offerId) {
+    const offer = Store.offers.find(o => o.id === offerId);
+    if (!offer) return;
+    const bodyHtml = `
+      <p style="font-size:13px;color:var(--text-1);margin-bottom:12px">
+        Reject offer <b>${offer.ref}</b> from <b>${UI.escapeHtml(offer.buyer)}</b> (${UI.fmtMoney(offer.amount)}).
+        The offer will not be released to the recovery bank.
+      </p>
+      <div class="field">
+        <span class="lbl">Rejection Reason <span class="req">*</span></span>
+        <div class="ctl">
+          <textarea id="reject-offer-reason" style="width:100%;height:80px;font-family:inherit;font-size:13px" placeholder="e.g. Unrealistic offer below minimum threshold, KYC qualification failed, fraudulent contact details..."></textarea>
+        </div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn" onclick="UI.closeModal()">Cancel</button>
+      <button class="btn danger" onclick="AdminPortal.submitRejectOffer('${offerId}')">Confirm Rejection</button>
+    `;
+    UI.modal('Reject Offer', bodyHtml, footerHtml);
+  },
+
+  async submitRejectOffer(offerId) {
+    const reason = document.getElementById('reject-offer-reason')?.value?.trim();
+    if (!reason) {
+      return UI.toast('Please provide a reason for rejecting the offer.', 'error');
+    }
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/reject`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({ reason })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to reject offer');
+      UI.closeModal();
+      UI.toast(json.message || 'Offer rejected.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  async deleteAsset(id = this.selectedAssetId) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    const promptMsg = a.status === 'Live'
+      ? `Are you sure you want to permanently delete listing ${a.ref}?\n\nThis listing is currently PUBLISHED on the live marketplace. Deleting it will remove it from the marketplace and delete all associated records (documents, valuations, titles, offers). This action CANNOT be undone.`
+      : `Are you sure you want to permanently delete asset ${a.ref}? All associated records will be deleted.`;
+    if (!confirm(promptMsg)) return;
+
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete listing');
+      UI.toast(json.message || `Listing ${a.ref} deleted successfully.`, 'success');
+      this.closeAsset();
+      await Store.fetchRemote();
+      this.render();
+      if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
+    }
+  },
+
+  async rejectDeletionRequest(id = this.selectedAssetId) {
+    const a = Store.getAsset(id);
+    if (!a) return;
+    if (!confirm(`Dismiss the deletion request for ${a.ref}? The listing will remain published.`)) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}/reject-deletion-request`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to dismiss request');
+      UI.toast(json.message || 'Deletion request dismissed.', 'success');
+      await Store.fetchRemote();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message, 'error');
     }
   }
 };
