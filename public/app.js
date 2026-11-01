@@ -2062,10 +2062,22 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="field"><span class="lbl">Title Document</span><div class="ctl">
-            ${titleDocument ? `<div class="kv-row">${UI.escapeHtml(titleDocument.title)} · ${UI.escapeHtml(titleDocument.file_size || '')} <button type="button" class="btn small" data-document-download="${UI.escapeHtml(titleDocument.id)}">Download current deed</button></div>` : '<p style="color:var(--danger);margin:0 0 8px">A title deed is required before requesting verification.</p>'}
+            ${titleDocument ? `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                  <svg class="ico" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--primary);flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <div style="min-width:0">
+                    <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${UI.escapeHtml(titleDocument.title)}</div>
+                    <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(!titleDocument.file_size || titleDocument.file_size === '0.0 MB' ? 'PDF Deed · Stored securely' : titleDocument.file_size)}</div>
+                  </div>
+                </div>
+                <button type="button" class="btn small" data-document-download="${UI.escapeHtml(titleDocument.id)}" style="flex-shrink:0">Download current deed</button>
+              </div>
+            ` : '<p style="color:var(--danger);font-size:12.5px;margin:0 0 8px">A title deed is required before requesting verification.</p>'}
             <div class="upload-zone" onclick="document.getElementById('file-title-input').click()">
-            <input type="file" id="file-title-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'title')">
-            <div id="title-status-text">Upload title deed</div>
+              <input type="file" id="file-title-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'title')">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
+              <div id="title-status-text">${titleDocument ? 'Upload replacement title deed' : 'Upload title deed'}</div>
             </div>
           </div></div>
         </div>
@@ -2138,11 +2150,27 @@ const BankPortal = {
           <div class="field"><span class="lbl">Valuation Date <span class="req">*</span></span><div class="ctl"><input id="val-date" type="date" value="${a.valuationDate ? a.valuationDate.split('T')[0] : ''}" required></div></div>
           <div class="field"><span class="lbl">Validity (days) <span class="req">*</span></span><div class="ctl"><input id="val-validity" type="number" value="${a.valuationValidityDays || 180}" min="1" max="3650" required><span class="help">The valuation remains valid through its expiry date.</span></div></div>
           <div class="field"><span class="lbl">Valuer Name <span class="req">*</span></span><div class="ctl"><input id="val-valuer" maxlength="160" value="${UI.escapeHtml(a.valuerName || '')}" placeholder="Licensed valuer firm" required></div></div>
-          ${valuationDocument ? `<div class="kv-row">${UI.escapeHtml(valuationDocument.title)} · ${UI.escapeHtml(valuationDocument.file_size || '')} <button type="button" class="btn small" data-document-download="${UI.escapeHtml(valuationDocument.id)}">Download current report</button></div>` : '<p style="color:var(--danger);margin:0 0 8px">A valuation report is required before submitting.</p>'}
-          <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-val-input').click()">
-            <input type="file" id="file-val-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'val')">
-            <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
-            <div id="val-status-text">Upload valuation report (PDF)</div>
+          <div class="field">
+            <span class="lbl">Valuation Report</span>
+            <div class="ctl">
+              ${valuationDocument ? `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
+                  <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                    <svg class="ico" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--primary);flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <div style="min-width:0">
+                      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${UI.escapeHtml(valuationDocument.title)}</div>
+                      <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(!valuationDocument.file_size || valuationDocument.file_size === '0.0 MB' ? 'PDF Document · Stored securely' : valuationDocument.file_size)}</div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn small" data-document-download="${UI.escapeHtml(valuationDocument.id)}" style="flex-shrink:0">Download report</button>
+                </div>
+              ` : '<p style="color:var(--danger);font-size:12.5px;margin:0 0 8px">A valuation report is required before submitting.</p>'}
+              <div class="upload-zone" onclick="document.getElementById('file-val-input').click()">
+                <input type="file" id="file-val-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'val')">
+                <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
+                <div id="val-status-text">${valuationDocument ? 'Upload replacement valuation report (PDF)' : 'Upload valuation report (PDF)'}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2767,12 +2795,12 @@ const AdminPortal = {
         Number(right.record_order || 0) - Number(left.record_order || 0)
       )[0];
     if (valuation) {
-      this.selectedAssetId = assetId;
-      this.selectedValuationId = valuation.id;
-      this.subPage = 'valuation-verify';
-      this.render();
-      return;
-    }
+        this.selectedAssetId = assetId;
+        this.selectedValuationId = valuation.id;
+        this.subPage = 'valuation-verify';
+        this.render();
+        return;
+      }
     this.nav('valuations');
     UI.toast('The asset has no valuation record yet. The valuation review queue is open.', 'warn');
   },
@@ -2877,6 +2905,9 @@ const AdminPortal = {
           <div class="caption">Review &amp; Publication Actions</div>
           <div class="body">
             <div class="form-actions" style="justify-content:flex-start;gap:10px">
+              ${readiness.allPass && !isLive ? `
+                <button class="btn success" onclick="AdminPortal.publishAsset()">Publish</button>
+              ` : ''}
               
               ${['Submitted', 'Submitted by Bank'].includes(a.status) ? `
                 <button class="btn primary" onclick="AdminPortal.startReview()">Begin Review</button>
@@ -2888,9 +2919,8 @@ const AdminPortal = {
                 <button class="btn danger" onclick="AdminPortal.rejectAsset()">Reject</button>
               ` : ''}
               
-              ${a.status === 'Approved' ? `
+              ${a.status === 'Approved' && !readiness.allPass ? `
                 <button class="btn success" onclick="AdminPortal.publishAsset()">Publish Listing</button>
-                
               ` : ''}
               
               ${isLive ? `
@@ -3084,7 +3114,6 @@ const AdminPortal = {
         <h1>Valuation Review</h1>
         <span class="crumb">${pendingCount} pending · ${records.length} total</span>
       </div>
-      <div class="banner info"><div>Open a valuation record to review the submitted values and supporting report. Verification is saved to Cloudflare and remains visible after refresh.</div></div>
       <div class="gridwrap"><table class="grid">
         <thead><tr><th>Asset</th><th>Bank</th><th>Market Value</th><th>Forced Sale Value</th><th>Valuation Date</th><th>Expiry</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:var(--text-2);padding:20px">No valuation records submitted yet.</td></tr>'}</tbody>
@@ -3100,7 +3129,18 @@ const AdminPortal = {
   },
 
   renderSubPage() {
-    const a = Store.getAsset(this.selectedAssetId);
+    let a = Store.getAsset(this.selectedAssetId);
+    if (!a && this.subPage === 'valuation-verify' && this.selectedValuationId) {
+      const v = Store.valuations.find(record => record.id === this.selectedValuationId);
+      if (v) {
+        a = Store.getAsset(v.asset_id) || {
+          id: v.asset_id,
+          ref: v.asset_ref || v.asset_id,
+          bankName: v.bank_name || 'Bank Partner',
+          valuationDocumentId: v.document_id
+        };
+      }
+    }
     if (!a) return '<div class="empty-state"><p>Select an asset to continue.</p></div>';
     switch (this.subPage) {
       case 'legal-review': return this.renderLegalWorkspace(a);
@@ -3344,7 +3384,6 @@ const AdminPortal = {
         <h1>Valuation Review</h1>${UI.badge(valuation.status)}
         <span class="crumb">${UI.escapeHtml(a.ref)} · ${UI.escapeHtml(a.bankName)}</span>
       </div>
-      <div class="banner info"><div>To verify, tick “Verified by Surge Solutions” to open the report. Review the report, then tick again to save the decision. Verified valuations remain in the queue and can be revoked.</div></div>
       <div class="group"><div class="caption">Submitted Valuation</div><div class="body">
         <div class="kv-row"><span class="kv-k">Valuer</span><span class="kv-v">${UI.escapeHtml(valuation.valuer_name || '—')}</span></div>
         <div class="kv-row"><span class="kv-k">Market Value</span><span class="kv-v">${UI.fmtMoney(valuation.market_value)}</span></div>
@@ -3358,14 +3397,9 @@ const AdminPortal = {
       </div></div>
       <div class="group"><div class="caption">Review Decision</div><div class="body">
         <textarea id="valuation-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(valuation.notes || '')}</textarea>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <label class="field" style="display:flex;align-items:center;gap:8px;margin:12px 0">
-            <input type="checkbox" ${valuation.status === 'Valid' && !valuation.review_required ? 'checked disabled' : ''}
-              onchange="AdminPortal.toggleValuationVerification('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}',this.checked)"
-              ${!documentId ? 'disabled' : ''}>
-            <span>Verified by Surge Solutions</span>
-          </label>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:12px;flex-wrap:wrap">
           ${!['Valid', 'Rejected', 'Revoked'].includes(valuation.status) ? `<button class="btn danger" onclick="AdminPortal.rejectValuation('${UI.escapeHtml(valuation.id)}')">Reject Valuation</button>` : ''}
+          ${valuation.status !== 'Valid' ? `<button class="btn success" onclick="AdminPortal.verifyValuation('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}')" ${!documentId ? 'disabled' : ''}>Verify Valuation</button>` : ''}
           ${valuation.status === 'Valid' ? `<button class="btn danger" onclick="AdminPortal.revokeValuation('${UI.escapeHtml(valuation.id)}')">Revoke Verification</button>` : ''}
         </div>
       </div></div>`;
@@ -3414,7 +3448,7 @@ const AdminPortal = {
   },
 
   verifyValuation(recordId, documentId) {
-    return this.verifyWithEvidence('valuations', recordId, documentId);
+    return this.submitVerificationDecision('valuations', recordId, 'verify');
   },
 
   toggleValuationVerification(recordId, documentId, checked) {

@@ -3384,7 +3384,6 @@ const AdminPortal = {
         <h1>Valuation Review</h1>${UI.badge(valuation.status)}
         <span class="crumb">${UI.escapeHtml(a.ref)} · ${UI.escapeHtml(a.bankName)}</span>
       </div>
-      <div class="banner info"><div>To verify, tick “Verified by Surge Solutions” to open the report. Review the report, then tick again to save the decision. Verified valuations remain in the queue and can be revoked.</div></div>
       <div class="group"><div class="caption">Submitted Valuation</div><div class="body">
         <div class="kv-row"><span class="kv-k">Valuer</span><span class="kv-v">${UI.escapeHtml(valuation.valuer_name || '—')}</span></div>
         <div class="kv-row"><span class="kv-k">Market Value</span><span class="kv-v">${UI.fmtMoney(valuation.market_value)}</span></div>
@@ -3398,14 +3397,9 @@ const AdminPortal = {
       </div></div>
       <div class="group"><div class="caption">Review Decision</div><div class="body">
         <textarea id="valuation-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(valuation.notes || '')}</textarea>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <label class="field" style="display:flex;align-items:center;gap:8px;margin:12px 0">
-            <input type="checkbox" ${valuation.status === 'Valid' && !valuation.review_required ? 'checked disabled' : ''}
-              onchange="AdminPortal.toggleValuationVerification('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}',this.checked)"
-              ${!documentId ? 'disabled' : ''}>
-            <span>Verified by Surge Solutions</span>
-          </label>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:12px;flex-wrap:wrap">
           ${!['Valid', 'Rejected', 'Revoked'].includes(valuation.status) ? `<button class="btn danger" onclick="AdminPortal.rejectValuation('${UI.escapeHtml(valuation.id)}')">Reject Valuation</button>` : ''}
+          ${valuation.status !== 'Valid' ? `<button class="btn success" onclick="AdminPortal.verifyValuation('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}')" ${!documentId ? 'disabled' : ''}>Verify Valuation</button>` : ''}
           ${valuation.status === 'Valid' ? `<button class="btn danger" onclick="AdminPortal.revokeValuation('${UI.escapeHtml(valuation.id)}')">Revoke Verification</button>` : ''}
         </div>
       </div></div>`;
@@ -3454,7 +3448,7 @@ const AdminPortal = {
   },
 
   verifyValuation(recordId, documentId) {
-    return this.verifyWithEvidence('valuations', recordId, documentId);
+    return this.submitVerificationDecision('valuations', recordId, 'verify');
   },
 
   toggleValuationVerification(recordId, documentId, checked) {
