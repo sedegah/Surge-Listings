@@ -261,7 +261,7 @@ const Auth = {
 // SHARED DATA STORE
 // ============================================================
 const Store = {
-  assets: [], documents: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [], branches: [],
+  assets: [], documents: [], titles: [], valuations: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [], branches: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
   deploymentVersion: null,
   deploymentVersionTimer: null,
@@ -269,6 +269,8 @@ const Store = {
 
   getAuthHeaders() {
     const h = { 'Content-Type': 'application/json' };
+    const token = Auth.getToken();
+    if (token) h.Authorization = 'Bearer ' + token;
     return h;
   },
 
@@ -281,6 +283,8 @@ const Store = {
     } catch (e) {}
     this.assets = [];
     this.documents = [];
+    this.titles = [];
+    this.valuations = [];
     this.auditLog = [];
     this.leads = [];
     this.offers = [];
@@ -362,7 +366,7 @@ const Store = {
       const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : '/api/v1/assets' + scopeParam;
       const documentsEndpoint = portal === 'admin' ? '/api/admin/documents' : portal === 'bank' ? '/api/bank/documents' : null;
       const skipAdminData = portal !== 'admin';
-      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes, documentsRes] = await Promise.allSettled([
+      const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes, documentsRes, titlesRes, valuationsRes] = await Promise.allSettled([
         fetch(this.API_BASE + assetsEndpoint, { headers, cache: 'no-store' }),
         fetch(this.API_BASE + '/api/v1/leads' + scopeParam, { headers, cache: 'no-store' }),
         fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' }),
@@ -372,6 +376,8 @@ const Store = {
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers, cache: 'no-store' }),
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers, cache: 'no-store' }),
         documentsEndpoint ? fetch(this.API_BASE + documentsEndpoint, { headers, cache: 'no-store' }) : Promise.resolve(null),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/admin/titles', { headers, cache: 'no-store' }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/admin/valuations', { headers, cache: 'no-store' }),
       ]);
 
       // Assets
@@ -401,16 +407,28 @@ const Store = {
             status: d.status,
             publicationStatus: d.status === 'Live' ? 'Published' : (d.status === 'Approved' ? 'Pending Approval' : 'Unpublished'),
             legalStatus: d.legal_hold_active ? 'On Hold' : (d.status === 'Live' || d.status === 'Approved' ? 'Cleared' : (d.status === 'Draft' ? 'Not Started' : 'Pending')),
-            valuationAmount: d.reserve_price,
-            valuationDate: d.created_at,
-            valuationExpiry: null,
+            valuationAmount: d.valuation_market_value || 0,
+            forcedSaleValue: d.valuation_forced_sale_value || 0,
+            valuationDate: d.valuation_date || null,
+            valuationExpiry: d.valuation_expiry_date || null,
+            valuationValidityDays: d.valuation_validity_period_days || 180,
+            valuerName: d.valuation_valuer_name || '',
+            valuationStatus: d.valuation_status || '',
+            valuationReviewRequired: !!d.valuation_review_required,
+            valuationDocumentId: d.valuation_document_id || d.latest_valuation_document_id || '',
             landSearchValid: !d.legal_hold_active,
             injunctionActive: !!d.legal_hold_active,
             legalHold: !!d.legal_hold_active,
             legalHoldReason: d.legal_hold_reason || '',
             exteriorImage: (d.image_count || 0) > 0,
-            titleVerified: d.status === 'Live' || d.status === 'Approved',
-            titleDetails: d.status !== 'Draft',
+            titleNumber: d.title_certificate_number || '',
+            titleType: d.title_type || '',
+            titleOwner: d.title_registered_owner || '',
+            titlePerfection: d.title_perfection_status || '',
+            titleVerificationStatus: d.title_verification_status || '',
+            titleDocumentId: d.title_document_id || d.latest_title_document_id || '',
+            titleVerified: d.title_verification_status === 'Verified',
+            titleDetails: !!d.title_certificate_number,
             enforcementBasis: d.internal_bank_ref ? 'Court Judgment' : '',
             caseRef: d.enforcement_case_number || d.internal_bank_ref || '',
             images: d.image_count || 0,
@@ -556,6 +574,16 @@ const Store = {
       if (documentsRes.status === 'fulfilled' && documentsRes.value?.ok) {
         const json = await documentsRes.value.json();
         if (json.success && Array.isArray(json.data)) this.documents = json.data;
+      }
+
+      if (titlesRes.status === 'fulfilled' && titlesRes.value?.ok) {
+        const json = await titlesRes.value.json();
+        if (json.success && Array.isArray(json.data)) this.titles = json.data;
+      }
+
+      if (valuationsRes.status === 'fulfilled' && valuationsRes.value?.ok) {
+        const json = await valuationsRes.value.json();
+        if (json.success && Array.isArray(json.data)) this.valuations = json.data;
       }
 
       // Re-render all active portals
@@ -747,6 +775,14 @@ const Store = {
   },
 
   checkPublishReadiness(asset) {
+    const valuationExpiry = asset.valuationExpiry
+      ? new Date(`${String(asset.valuationExpiry).slice(0, 10)}T23:59:59Z`)
+      : null;
+    const valuationNotExpired = !!valuationExpiry && valuationExpiry >= new Date();
+    const valuationValid = !!asset.valuationAmount &&
+      asset.valuationStatus === 'Valid' &&
+      !asset.valuationReviewRequired &&
+      valuationNotExpired;
     const checks = [
       {
         key: 'legal', label: 'Legal and enforcement verified', pass: asset.legalStatus === 'Cleared',
@@ -767,11 +803,12 @@ const Store = {
         ],
       },
       {
-        key: 'valuation', label: 'Current valuation on file', pass: !!asset.valuationAmount && new Date(asset.valuationExpiry) > new Date(),
+        key: 'valuation', label: 'Current valuation on file', pass: valuationValid,
         fixRole: 'valuation-officer',
         diagnostics: [
           { label: 'Valuation amount recorded', pass: !!asset.valuationAmount, fixWho: 'Bank uploads valuation report' },
-          { label: 'Valuation not expired', pass: new Date(asset.valuationExpiry) > new Date(), fixWho: 'Bank re-upload new valuation' },
+          { label: 'Valuation verified by Surge', pass: asset.valuationStatus === 'Valid' && !asset.valuationReviewRequired, fixWho: 'Surge valuation reviewer' },
+          { label: 'Valuation not expired', pass: valuationNotExpired, fixWho: 'Bank re-upload new valuation' },
         ],
       },
       {
@@ -996,7 +1033,6 @@ const BankPortal = {
     }
     this.render();
   },
-
   onRegionChange(region) {
     const distEl = document.getElementById('edit-ov-district');
     if (distEl) {
@@ -1961,6 +1997,7 @@ const BankPortal = {
   },
 
   renderEditTitle(a) {
+    const titleDocument = Store.documents.find(doc => doc.id === a.titleDocumentId && doc.category === 'Title Deed');
     return `
       <div class="page-head">
         <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Asset</button>
@@ -1971,23 +2008,24 @@ const BankPortal = {
       <div class="group">
         <div class="caption">Title Particulars</div>
         <div class="body">
-          <div class="field"><span class="lbl">Title Number <span class="req">*</span></span><div class="ctl"><input id="title-number" value="${a.titleNumber || ''}" placeholder="e.g. TD-2024-01234"></div></div>
+          <div class="field"><span class="lbl">Title Number <span class="req">*</span></span><div class="ctl"><input id="title-number" maxlength="160" value="${UI.escapeHtml(a.titleNumber || '')}" placeholder="e.g. TD-2024-01234"></div></div>
           <div class="field"><span class="lbl">Title Type</span><div class="ctl">
             <select id="title-type">
-              <option ${a.titleType === 'Freehold' ? 'selected' : ''}>Freehold</option>
-              <option ${a.titleType === 'Leasehold' ? 'selected' : ''}>Leasehold</option>
-              <option ${a.titleType === 'Registered' ? 'selected' : ''}>Registered</option>
+              <option value="Freehold" ${a.titleType === 'Freehold' ? 'selected' : ''}>Freehold</option>
+              <option value="Leasehold" ${a.titleType === 'Leasehold' ? 'selected' : ''}>Leasehold</option>
+              <option value="Registered" ${a.titleType === 'Registered' ? 'selected' : ''}>Registered</option>
             </select>
           </div></div>
-          <div class="field"><span class="lbl">Registered Owner</span><div class="ctl"><input id="title-owner" value="${a.titleOwner || ''}" placeholder="Per title deed"></div></div>
+          <div class="field"><span class="lbl">Registered Owner</span><div class="ctl"><input id="title-owner" maxlength="160" value="${UI.escapeHtml(a.titleOwner || '')}" placeholder="Per title deed"></div></div>
           <div class="field"><span class="lbl">Perfection Status</span><div class="ctl">
             <select id="title-perfection">
-              <option ${a.titlePerfection === 'Perfected' ? 'selected' : ''}>Perfected</option>
-              <option ${a.titlePerfection === 'Unperfected' ? 'selected' : ''}>Unperfected</option>
-              <option ${a.titlePerfection === 'In Progress' ? 'selected' : ''}>In Progress</option>
+              <option value="Perfected" ${a.titlePerfection === 'Perfected' ? 'selected' : ''}>Perfected</option>
+              <option value="Unperfected" ${a.titlePerfection === 'Unperfected' ? 'selected' : ''}>Unperfected</option>
+              <option value="In Progress" ${a.titlePerfection === 'In Progress' ? 'selected' : ''}>In Progress</option>
             </select>
           </div></div>
           <div class="field"><span class="lbl">Title Document</span><div class="ctl">
+            ${titleDocument ? `<div class="kv-row">${UI.escapeHtml(titleDocument.title)} · ${UI.escapeHtml(titleDocument.file_size || '')} <button type="button" class="btn small" data-document-download="${UI.escapeHtml(titleDocument.id)}">Download current deed</button></div>` : '<p style="color:var(--danger);margin:0 0 8px">A title deed is required before requesting verification.</p>'}
             <div class="upload-zone" onclick="document.getElementById('file-title-input').click()">
             <input type="file" id="file-title-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'title')">
             <div id="title-status-text">Upload title deed</div>
@@ -2007,28 +2045,43 @@ const BankPortal = {
     if (!a) return;
     const titleNumber = document.getElementById('title-number').value.trim();
     if (!titleNumber) return UI.toast('Title number is required', 'error');
+    const titleType = document.getElementById('title-type').value;
+    const registeredOwner = document.getElementById('title-owner').value.trim();
+    const perfectionStatus = document.getElementById('title-perfection').value;
+    let documentId = a.titleDocumentId || '';
     if (this._stagedFile?.category === 'title') {
       try {
-        await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Title Deed', {
+        const uploaded = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Title Deed', {
           title: `Title Deed ${titleNumber}`
         }, 'title');
+        documentId = uploaded.document_id;
       } catch (error) {
         return UI.toast(error.message || 'Title document upload failed.', 'error');
       }
+    } else if (this._stagedFile) {
+      return UI.toast('The selected file is for a different form. Choose the title deed here.', 'error');
     }
-    Store.updateAsset(this.selectedAssetId, {
-      titleNumber,
-      titleType: document.getElementById('title-type').value,
-      titleOwner: document.getElementById('title-owner').value.trim(),
-      titlePerfection: document.getElementById('title-perfection').value,
-      titleDetails: true,
-    }, Auth.getActorName(), 'Title verification pending');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Title verification pending');
-    UI.toast('Title information saved. Surge Property Manager will verify.', 'success');
-    this.closeSubPage();
+    if (!documentId) return UI.toast('Upload a title deed before requesting verification.', 'error');
+    try {
+      const response = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(a.id)}/title`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({ certificateNumber: titleNumber, titleType, registeredOwner, perfectionStatus, documentId })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Title submission failed (${response.status}).`);
+      await Store.fetchRemote();
+      UI.toast(result.message || 'Title details submitted for verification.', 'success');
+      this.closeSubPage();
+    } catch (error) {
+      UI.toast(error.message || 'Title details could not be saved.', 'error');
+    }
   },
 
   renderEditValuation(a) {
+    const valuationDocument = Store.documents.find(doc => doc.id === a.valuationDocumentId && doc.category === 'Valuation Report');
     return `
       <div class="page-head">
         <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Asset</button>
@@ -2038,10 +2091,12 @@ const BankPortal = {
       <div class="group">
         <div class="caption">Valuation Record</div>
         <div class="body">
-          <div class="field"><span class="lbl">Valuation Amount (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="number" value="${a.valuationAmount || ''}" min="0"></div></div>
-          <div class="field"><span class="lbl">Valuation Date <span class="req">*</span></span><div class="ctl"><input id="val-date" type="date" value="${a.valuationDate ? a.valuationDate.split('T')[0] : ''}"></div></div>
-          <div class="field"><span class="lbl">Validity (days)</span><div class="ctl"><input id="val-validity" type="number" value="365" min="1"><span class="help">Valuation validity period configured per institutional policy.</span></div></div>
-          <div class="field"><span class="lbl">Valuer Name</span><div class="ctl"><input id="val-valuer" value="${a.valuerName || ''}" placeholder="Licensed valuer firm"></div></div>
+          <div class="field"><span class="lbl">Market Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="number" value="${a.valuationAmount || ''}" min="0.01" step="0.01" required></div></div>
+          <div class="field"><span class="lbl">Forced Sale Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-forced-sale" class="money" type="number" value="${a.forcedSaleValue || ''}" min="0.01" step="0.01" required></div></div>
+          <div class="field"><span class="lbl">Valuation Date <span class="req">*</span></span><div class="ctl"><input id="val-date" type="date" value="${a.valuationDate ? a.valuationDate.split('T')[0] : ''}" required></div></div>
+          <div class="field"><span class="lbl">Validity (days) <span class="req">*</span></span><div class="ctl"><input id="val-validity" type="number" value="${a.valuationValidityDays || 180}" min="1" max="3650" required><span class="help">The valuation remains valid through its expiry date.</span></div></div>
+          <div class="field"><span class="lbl">Valuer Name <span class="req">*</span></span><div class="ctl"><input id="val-valuer" maxlength="160" value="${UI.escapeHtml(a.valuerName || '')}" placeholder="Licensed valuer firm" required></div></div>
+          ${valuationDocument ? `<div class="kv-row">${UI.escapeHtml(valuationDocument.title)} · ${UI.escapeHtml(valuationDocument.file_size || '')} <button type="button" class="btn small" data-document-download="${UI.escapeHtml(valuationDocument.id)}">Download current report</button></div>` : '<p style="color:var(--danger);margin:0 0 8px">A valuation report is required before submitting.</p>'}
           <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-val-input').click()">
             <input type="file" id="file-val-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleFileSelect(event, 'val')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
@@ -2060,32 +2115,48 @@ const BankPortal = {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const amount = Number(document.getElementById('val-amount').value);
+    const forcedSaleValue = Number(document.getElementById('val-forced-sale').value);
     const dateStr = document.getElementById('val-date').value;
-    const validityDays = Number(document.getElementById('val-validity').value) || 365;
+    const validityDays = Number(document.getElementById('val-validity').value);
     const valuerName = document.getElementById('val-valuer').value.trim();
     if (!amount || amount <= 0) return UI.toast('Valuation amount is required', 'error');
+    if (!forcedSaleValue || forcedSaleValue <= 0) return UI.toast('Forced sale value is required', 'error');
     if (!dateStr) return UI.toast('Valuation date is required', 'error');
+    if (!Number.isInteger(validityDays) || validityDays < 1 || validityDays > 3650) return UI.toast('Validity must be between 1 and 3650 days.', 'error');
+    if (!valuerName) return UI.toast('Valuer name is required.', 'error');
+    let documentId = a.valuationDocumentId || '';
     if (this._stagedFile?.category === 'val') {
       try {
-        await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Valuation Report', {
+        const uploaded = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Valuation Report', {
           title: `Valuation Report ${dateStr}`
         }, 'val');
+        documentId = uploaded.document_id;
       } catch (error) {
         return UI.toast(error.message || 'Valuation report upload failed.', 'error');
       }
+    } else if (this._stagedFile) {
+      return UI.toast('The selected file is for a different form. Choose the valuation report here.', 'error');
     }
-    const valDate = new Date(dateStr);
-    const expiry = new Date(valDate);
-    expiry.setDate(expiry.getDate() + validityDays);
-    Store.updateAsset(this.selectedAssetId, {
-      valuationAmount: amount,
-      valuationDate: valDate.toISOString(),
-      valuationExpiry: expiry.toISOString(),
-      valuerName,
-    }, Auth.getActorName(), 'Valuation updated');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Valuation updated: ' + UI.fmtMoney(amount) + ' valid to ' + UI.fmtDateShort(expiry.toISOString()));
-    UI.toast('Valuation saved successfully', 'success');
-    this.closeSubPage();
+    if (!documentId) return UI.toast('Upload a valuation report before submitting.', 'error');
+    try {
+      const response = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(a.id)}/valuations`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({
+          marketValue: amount, forcedSaleValue, valuationDate: dateStr,
+          validityDays, valuerName, documentId
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Valuation submission failed (${response.status}).`);
+      await Store.fetchRemote();
+      UI.toast(result.message || 'Valuation submitted for review.', 'success');
+      this.closeSubPage();
+    } catch (error) {
+      UI.toast(error.message || 'Valuation could not be saved.', 'error');
+    }
   },
 
   requestVerification(assetId, kind) {
@@ -2429,7 +2500,7 @@ const BankPortal = {
 // ============================================================
 const AdminPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
-  activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '',
+  activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '', selectedValuationId: null,
 
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
@@ -2459,7 +2530,11 @@ const AdminPortal = {
     this.renderDoctabs();
     const el = document.getElementById('admin-work');
     if (!el) return;
-    if (this.subPage) { el.innerHTML = this.renderSubPage(); return; }
+    if (this.subPage) {
+      el.innerHTML = this.renderSubPage();
+      this.bindDocumentDownloads(el);
+      return;
+    }
     switch (this.currentView) {
       case 'dashboard': el.innerHTML = this.renderDashboard(); break;
       case 'assets': el.innerHTML = this.selectedAssetId ? this.renderAssetDetail(this.selectedAssetId) : this.renderAssetList(); break;
@@ -2470,6 +2545,39 @@ const AdminPortal = {
       case 'audit': el.innerHTML = this.renderAuditView(); break;
       case 'banks': el.innerHTML = this.renderBanksAndStaffView(); break;
       default: el.innerHTML = this.renderAssetList();
+    }
+    this.bindDocumentDownloads(el);
+  },
+
+  bindDocumentDownloads(container) {
+    container.querySelectorAll('[data-admin-document-download]').forEach(button => {
+      button.addEventListener('click', () => this.downloadDocument(button.dataset.adminDocumentDownload));
+    });
+  },
+
+  async downloadDocument(documentId) {
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/documents/${encodeURIComponent(documentId)}/download`,
+        { headers: Store.getAuthHeaders(), cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Download failed (${response.status}).`);
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      UI.toast(error.message || 'Document download failed.', 'error');
     }
   },
 
@@ -2512,10 +2620,26 @@ const AdminPortal = {
   },
 
   openAsset(id) { this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },
+  openValuation(assetId, valuationId) {
+    this.selectedAssetId = assetId;
+    this.selectedValuationId = valuationId;
+    this.currentView = 'title';
+    this.detailTab = 'overview';
+    this.subPage = 'valuation-verify';
+    this.render();
+  },
+  openTitleReview(assetId) {
+    this.selectedAssetId = assetId;
+    this.selectedValuationId = null;
+    this.currentView = 'title';
+    this.detailTab = 'overview';
+    this.subPage = 'title-verify';
+    this.render();
+  },
   closeAsset() { this.selectedAssetId = null; this.subPage = null; this.render(); },
   setTab(t) { this.detailTab = t; this.render(); },
   openSubPage(name) { this.subPage = name; this.render(); },
-  closeSubPage() { this.subPage = null; this.render(); },
+  closeSubPage() { this.subPage = null; if (this.currentView === 'title') { this.selectedAssetId = null; this.selectedValuationId = null; } this.render(); },
 
   renderAssetDetail(id) {
     const a = Store.getAsset(id);
@@ -2650,8 +2774,49 @@ const AdminPortal = {
   },
 
   renderTitleQueue() {
-    const pending = Store.assets.filter(a => !a.titleVerified);
-    return `<div class="page-head"><h1>Title &amp; Valuation Queue</h1><span class="crumb">${pending.length} pending verification</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Bank</th><th>Title Details</th><th>Title Verified</th><th>Action</th></tr></thead><tbody>${pending.map(a => `<tr><td class="ref">${a.ref}</td><td>${a.bankName}</td><td>${a.titleDetails ? UI.badge('Submitted') : UI.badge('Not Provided')}</td><td>${a.titleVerified ? UI.badge('Verified') : UI.badge('Pending')}</td><td>${a.titleDetails ? `<button class="btn small primary" onclick="AdminPortal.openAsset('${a.id}');AdminPortal.openSubPage('title-verify')">Verify Title</button>` : '<span style="font-size:11px;color:var(--text-2)">Awaiting bank submission</span>'}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-2);padding:20px">All titles verified</td></tr>'}</tbody></table></div>`;
+    const titleRows = Store.titles.map(title => {
+      const asset = Store.getAsset(title.asset_id);
+      return `<tr>
+        <td class="ref">${UI.escapeHtml(title.public_ref || asset?.ref || '')}</td>
+        <td>${UI.escapeHtml(title.bank_name || asset?.bankName || '')}</td>
+        <td>${UI.escapeHtml(title.certificate_number || '')}</td>
+        <td>${UI.escapeHtml(title.title_type || '')}</td>
+        <td>${UI.badge(title.verification_status || 'Pending')}</td>
+        <td>${title.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(title.document_id)}">Open deed</button>` : UI.badge('No deed')}</td>
+        <td><button class="btn small primary" onclick="AdminPortal.openTitleReview('${UI.escapeHtml(title.asset_id)}')">Review</button></td>
+      </tr>`;
+    }).join('');
+    const uploadedWithoutDetails = Store.assets.filter(asset =>
+      !asset.titleDetails && asset.titleDocumentId
+    ).map(asset => `<tr>
+      <td class="ref">${UI.escapeHtml(asset.ref)}</td><td>${UI.escapeHtml(asset.bankName)}</td>
+      <td colspan="3">${UI.badge('Deed uploaded · title details missing')}</td>
+      <td><button class="btn small" data-admin-document-download="${UI.escapeHtml(asset.titleDocumentId)}">Open deed</button></td>
+      <td><button class="btn small" onclick="AdminPortal.openTitleReview('${UI.escapeHtml(asset.id)}')">Review</button></td>
+    </tr>`).join('');
+    const valuationRows = Store.valuations.map(valuation => `<tr>
+      <td class="ref">${UI.escapeHtml(valuation.public_ref || '')}</td>
+      <td>${UI.escapeHtml(valuation.bank_name || '')}</td>
+      <td>${UI.fmtMoney(valuation.market_value)}</td>
+      <td>${UI.fmtMoney(valuation.forced_sale_value)}</td>
+      <td>${UI.escapeHtml(valuation.valuation_date || '')}</td>
+      <td>${UI.escapeHtml(valuation.expiry_date || '')}</td>
+      <td>${UI.badge(valuation.status || 'Pending Review')}</td>
+      <td>${valuation.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(valuation.document_id)}">Open report</button>` : UI.badge('No report')}</td>
+      <td><button class="btn small primary" onclick="AdminPortal.openValuation('${UI.escapeHtml(valuation.asset_id)}','${UI.escapeHtml(valuation.id)}')">Review</button></td>
+    </tr>`).join('');
+    return `
+      <div class="page-head"><h1>Title &amp; Valuation Review</h1>
+        <span class="crumb">${Store.titles.filter(item => item.verification_status !== 'Verified').length} title reviews · ${Store.valuations.filter(item => item.status !== 'Valid').length} valuation reviews</span>
+      </div>
+      <div class="group"><div class="caption">Title Records · ${Store.titles.length}</div><div class="gridwrap"><table class="grid">
+        <thead><tr><th>Asset</th><th>Bank</th><th>Title Number</th><th>Type</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
+        <tbody>${titleRows}${uploadedWithoutDetails || ''}${titleRows || uploadedWithoutDetails ? '' : '<tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:20px">No title submissions yet.</td></tr>'}</tbody>
+      </table></div></div>
+      <div class="group"><div class="caption">Valuation Records · ${Store.valuations.length}</div><div class="gridwrap"><table class="grid">
+        <thead><tr><th>Asset</th><th>Bank</th><th>Market Value</th><th>Forced Sale Value</th><th>Valuation Date</th><th>Expiry</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
+        <tbody>${valuationRows || '<tr><td colspan="9" style="text-align:center;color:var(--text-2);padding:20px">No valuation submissions yet.</td></tr>'}</tbody>
+      </table></div></div>`;
   },
 
   renderOffersView() {
@@ -2668,6 +2833,7 @@ const AdminPortal = {
     switch (this.subPage) {
       case 'legal-review': return this.renderLegalWorkspace(a);
       case 'title-verify': return this.renderTitleWorkspace(a);
+      case 'valuation-verify': return this.renderValuationWorkspace(a);
       default: return this.renderAssetDetail(a.id);
     }
   },
@@ -2790,52 +2956,129 @@ const AdminPortal = {
   },
 
   renderTitleWorkspace(a) {
+    const title = Store.titles.find(record => record.asset_id === a.id);
+    const documentId = title?.document_id || a.titleDocumentId;
+    const document = Store.documents.find(item => item.id === documentId);
     return `
       <div class="page-head">
         <button class="btn small" onclick="AdminPortal.closeSubPage()">← Back to Asset</button>
-        <h1>Title Verification</h1>
+        <h1>Title Verification</h1>${title ? UI.badge(title.verification_status) : ''}
         <span class="crumb">${a.ref} · ${a.bankName}</span>
       </div>
-      <div class="banner info"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div>Verify the title particulars submitted by the bank against the uploaded title deed.</div></div>
+      <div class="banner info"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg><div>Review the D1-submitted title particulars against the supporting deed. Verification can be revoked later from this queue.</div></div>
 
       <div class="group">
         <div class="caption">Submitted Title Information</div>
         <div class="body">
-          <div class="kv-row"><span class="kv-k">Title Number</span><span class="kv-v">${a.titleNumber || '<span style="color:var(--danger)">Not provided</span>'}</span></div>
-          <div class="kv-row"><span class="kv-k">Title Type</span><span class="kv-v">${a.titleType || '—'}</span></div>
-          <div class="kv-row"><span class="kv-k">Registered Owner</span><span class="kv-v">${a.titleOwner || '—'}</span></div>
-          <div class="kv-row"><span class="kv-k">Perfection Status</span><span class="kv-v">${a.titlePerfection || '—'}</span></div>
+          <div class="kv-row"><span class="kv-k">Title Number</span><span class="kv-v">${UI.escapeHtml(title?.certificate_number || a.titleNumber || 'Not provided')}</span></div>
+          <div class="kv-row"><span class="kv-k">Title Type</span><span class="kv-v">${UI.escapeHtml(title?.title_type || a.titleType || '—')}</span></div>
+          <div class="kv-row"><span class="kv-k">Registered Owner</span><span class="kv-v">${UI.escapeHtml(title?.registered_owner || a.titleOwner || '—')}</span></div>
+          <div class="kv-row"><span class="kv-k">Perfection Status</span><span class="kv-v">${UI.escapeHtml(title?.perfection_status || a.titlePerfection || '—')}</span></div>
+          <div class="kv-row"><span class="kv-k">Verification Notes</span><span class="kv-v">${UI.escapeHtml(title?.notes || '—')}</span></div>
+          <div class="kv-row"><span class="kv-k">Supporting Deed</span><span class="kv-v">${document ? `${UI.escapeHtml(document.title)} · ${UI.escapeHtml(document.file_size || '')}` : 'No deed linked'}</span>
+            ${documentId ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(documentId)}">Download deed</button>` : ''}</div>
         </div>
       </div>
 
       <div class="group">
         <div class="caption">Verification Actions</div>
         <div class="body">
-          ${!a.titleDetails ? '<p style="color:var(--danger);margin:0 0 10px">Bank has not submitted title details yet. Ask bank to complete the Title Information page.</p>' : ''}
-          <textarea id="title-notes" placeholder="Verification notes" style="width:100%;height:60px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px"></textarea>
+          ${!title ? '<p style="color:var(--danger);margin:0 0 10px">No persisted title record is available. The bank must submit title details and link a deed before verification.</p>' : ''}
+          ${title?.perfection_status !== 'Perfected' ? '<p style="color:var(--warning);margin:0 0 10px">The submitted title is not marked Perfected. The API will not allow verification until this is corrected.</p>' : ''}
+          <textarea id="title-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(title?.notes || '')}</textarea>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn success" onclick="AdminPortal.verifyTitle('${a.id}')" ${!a.titleDetails ? 'disabled' : ''}>Verify Title</button>
-            <button class="btn danger" onclick="AdminPortal.rejectTitle('${a.id}')" ${!a.titleDetails ? 'disabled' : ''}>Reject Title</button>
+            ${title && title.verification_status !== 'Verified' ? `<button class="btn success" onclick="AdminPortal.verifyTitle('${UI.escapeHtml(title.id)}')" ${title.perfection_status !== 'Perfected' || !documentId ? 'disabled' : ''}>Verify Title</button>` : ''}
+            ${title && !['Verified', 'Rejected', 'Revoked'].includes(title.verification_status) ? `<button class="btn danger" onclick="AdminPortal.rejectTitle('${UI.escapeHtml(title.id)}')">Reject Title</button>` : ''}
+            ${title?.verification_status === 'Verified' ? `<button class="btn danger" onclick="AdminPortal.revokeTitle('${UI.escapeHtml(title.id)}')">Revoke Verification</button>` : ''}
           </div>
         </div>
       </div>
     `;
   },
 
-  verifyTitle(assetId) {
-    const a = Store.getAsset(assetId);
-    if (!a) return;
-    const notes = document.getElementById('title-notes')?.value || '';
-    Store.updateAsset(assetId, { titleVerified: true, landSearchValid: true, landSearchExpiry: new Date(Date.now() + 180*86400000).toISOString() }, Auth.getActorName(), 'Title verified');
-    Store.addActivity(assetId, Auth.getActorName(), 'Title verified — gate now PASS' + (notes ? ': ' + notes : ''));
-    UI.toast('Title verified. "Title information verified" gate now passes.', 'success');
-    this.closeSubPage();
+  renderValuationWorkspace(a) {
+    const valuation = Store.valuations.find(record => record.id === this.selectedValuationId);
+    const documentId = valuation?.document_id || a.valuationDocumentId;
+    const file = Store.documents.find(item => item.id === documentId);
+    if (!valuation) return '<div class="empty-state"><p>Valuation record is unavailable. Refresh the admin queue and try again.</p></div>';
+    return `
+      <div class="page-head">
+        <button class="btn small" onclick="AdminPortal.closeSubPage()">← Back to Queue</button>
+        <h1>Valuation Review</h1>${UI.badge(valuation.status)}
+        <span class="crumb">${UI.escapeHtml(a.ref)} · ${UI.escapeHtml(a.bankName)}</span>
+      </div>
+      <div class="banner info"><div>Review the submitted valuation and report. Verified valuations remain available in the queue and can be revoked.</div></div>
+      <div class="group"><div class="caption">Submitted Valuation</div><div class="body">
+        <div class="kv-row"><span class="kv-k">Valuer</span><span class="kv-v">${UI.escapeHtml(valuation.valuer_name || '—')}</span></div>
+        <div class="kv-row"><span class="kv-k">Market Value</span><span class="kv-v">${UI.fmtMoney(valuation.market_value)}</span></div>
+        <div class="kv-row"><span class="kv-k">Forced Sale Value</span><span class="kv-v">${UI.fmtMoney(valuation.forced_sale_value)}</span></div>
+        <div class="kv-row"><span class="kv-k">Valuation Date</span><span class="kv-v">${UI.escapeHtml(valuation.valuation_date || '—')}</span></div>
+        <div class="kv-row"><span class="kv-k">Expiry Date</span><span class="kv-v">${UI.escapeHtml(valuation.expiry_date || '—')}</span></div>
+        <div class="kv-row"><span class="kv-k">Validity</span><span class="kv-v">${UI.escapeHtml(String(valuation.validity_period_days || '—'))} days</span></div>
+        <div class="kv-row"><span class="kv-k">Review Notes</span><span class="kv-v">${UI.escapeHtml(valuation.notes || '—')}</span></div>
+        <div class="kv-row"><span class="kv-k">Supporting Report</span><span class="kv-v">${file ? `${UI.escapeHtml(file.title)} · ${UI.escapeHtml(file.file_size || '')}` : 'No report linked'}</span>
+          ${documentId ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(documentId)}">Download report</button>` : ''}</div>
+      </div></div>
+      <div class="group"><div class="caption">Review Decision</div><div class="body">
+        <textarea id="valuation-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(valuation.notes || '')}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${valuation.status !== 'Valid' ? `<button class="btn success" onclick="AdminPortal.verifyValuation('${UI.escapeHtml(valuation.id)}')">Verify Valuation</button>` : ''}
+          ${!['Valid', 'Rejected', 'Revoked'].includes(valuation.status) ? `<button class="btn danger" onclick="AdminPortal.rejectValuation('${UI.escapeHtml(valuation.id)}')">Reject Valuation</button>` : ''}
+          ${valuation.status === 'Valid' ? `<button class="btn danger" onclick="AdminPortal.revokeValuation('${UI.escapeHtml(valuation.id)}')">Revoke Verification</button>` : ''}
+        </div>
+      </div></div>`;
   },
 
-  rejectTitle(assetId) {
-    Store.addAudit(Auth.getActorName(), 'REJECT_TITLE', 'Asset', Store.getAsset(assetId).ref, null, null, 'Title rejected');
-    UI.toast('Title rejected. Bank notified to correct.', 'warn');
-    this.closeSubPage();
+  async submitVerificationDecision(kind, recordId, action) {
+    const notesId = kind === 'titles' ? 'title-notes' : 'valuation-notes';
+    const notes = document.getElementById(notesId)?.value.trim() || '';
+    if (['reject', 'revoke'].includes(action) && !notes) {
+      UI.toast('Add a reason before rejecting or revoking verification.', 'error');
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/${kind}/${encodeURIComponent(recordId)}/${action}`,
+        {
+          method: 'POST',
+          headers: Store.getAuthHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: JSON.stringify({ notes })
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Review action failed (${response.status}).`);
+      await Store.fetchRemote();
+      UI.toast(result.message || 'Review decision saved.', 'success');
+      this.closeSubPage();
+    } catch (error) {
+      UI.toast(error.message || 'Review decision could not be saved.', 'error');
+    }
+  },
+
+  verifyTitle(recordId) {
+    return this.submitVerificationDecision('titles', recordId, 'verify');
+  },
+
+  rejectTitle(recordId) {
+    return this.submitVerificationDecision('titles', recordId, 'reject');
+  },
+
+  revokeTitle(recordId) {
+    return this.submitVerificationDecision('titles', recordId, 'revoke');
+  },
+
+  verifyValuation(recordId) {
+    return this.submitVerificationDecision('valuations', recordId, 'verify');
+  },
+
+  rejectValuation(recordId) {
+    return this.submitVerificationDecision('valuations', recordId, 'reject');
+  },
+
+  revokeValuation(recordId) {
+    return this.submitVerificationDecision('valuations', recordId, 'revoke');
   },
 
   startReview() {

@@ -261,19 +261,33 @@ export default {
       `).bind(asset.id).first();
       const activeInjunction = !!injunctionRow;
 
-      const title = await env.DB.prepare(`SELECT verification_status FROM title_records WHERE asset_id = ?`).bind(asset.id).first();
-      const titleVerified = title?.verification_status === 'Verified';
+      const title = await env.DB.prepare(`
+        SELECT tr.verification_status,
+          EXISTS(SELECT 1 FROM documents d WHERE d.id = tr.document_id AND d.asset_id = tr.asset_id) AS has_document
+        FROM title_records tr WHERE tr.asset_id = ?
+      `).bind(asset.id).first();
+      const titleVerified = title?.verification_status === 'Verified' && title.has_document === 1;
 
-      const valuation = await env.DB.prepare(`SELECT status, review_required FROM valuations WHERE asset_id = ? ORDER BY valuation_date DESC LIMIT 1`).bind(asset.id).first();
-      const valuationValid = valuation ? valuation.status === 'Valid' && valuation.review_required === 0 : true;
+      const valuation = await env.DB.prepare(`
+        SELECT v.status, v.review_required, v.expiry_date,
+          EXISTS(SELECT 1 FROM documents d WHERE d.id = v.document_id AND d.asset_id = v.asset_id) AS has_document
+        FROM valuations v WHERE asset_id = ?
+        ORDER BY valuation_date DESC, rowid DESC LIMIT 1
+      `).bind(asset.id).first();
+      const valuationValid = !!valuation && (
+        valuation.status === 'Valid' &&
+        valuation.review_required === 0 &&
+        valuation.has_document === 1 &&
+        Date.parse(`${valuation.expiry_date}T23:59:59Z`) >= Date.now()
+      );
 
       const imageCount = await env.DB.prepare(`SELECT COUNT(*) as c FROM asset_images WHERE asset_id = ?`).bind(asset.id).first();
       const photoRequirementMet = (imageCount?.c || 0) >= 1;
       const reservePriceSet = !!asset.reserve_price && asset.reserve_price > 0;
       const gates = [
         { gate: 'LG-2 Injunction & Legal Clear', passed: !activeInjunction, detail: activeInjunction ? `Active Injunction on ${injunctionRow.instrument_ref}` : 'Court enforcement clear' },
-        { gate: 'TL-2 Title Perfection', passed: titleVerified, detail: titleVerified ? 'Title verified by Surge Legal' : 'Pending verification' },
-        { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuationValid ? 'Valuation active within 180 days' : 'Valuation expired / review required' },
+        { gate: 'TL-2 Title Perfection', passed: titleVerified, detail: titleVerified ? 'Title and deed verified by Surge' : 'Title details and supporting deed pending verification' },
+        { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuation ? `${valuation.status}${valuation.review_required ? ' — review required' : ''}; expires ${valuation.expiry_date}` : 'No valuation submitted' },
         { gate: 'AS-4 Photo Documentation', passed: photoRequirementMet, detail: `${imageCount?.c || 0} media assets verified` },
         { gate: 'AS-8 Reserve Price Guard', passed: reservePriceSet, detail: `GHS ${asset.reserve_price?.toLocaleString()}` }
       ];
@@ -1038,6 +1052,121 @@ export default {
       }
 
       // Legal & Title Queue (/api/admin/legal, /api/admin/titles, /api/admin/valuations)
+      const bankTitleMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/title$/);
+      if (bankTitleMatch && method === 'POST') {
+        const session = await requireBankAuth();
+        const assetRef = decodeURIComponent(bankTitleMatch[1]);
+        const asset = await env.DB.prepare(`
+          SELECT id, public_ref FROM assets
+          WHERE (id = ? OR public_ref = ?) AND bank_id = ?
+        `).bind(assetRef, assetRef, session.bank_id).first();
+        if (!asset) return err('Asset not found or access denied.', 404);
+
+        const body = await getBody();
+        const certificateNumber = String(body.certificateNumber || '').trim().slice(0, 160);
+        const titleType = String(body.titleType || '').trim();
+        const registeredOwner = String(body.registeredOwner || '').trim().slice(0, 160);
+        const perfectionStatus = String(body.perfectionStatus || '').trim();
+        if (!certificateNumber) return err('Title number is required.', 400);
+        if (!['Freehold', 'Leasehold', 'Registered'].includes(titleType)) return err('Select a valid title type.', 400);
+        if (!['Perfected', 'Unperfected', 'In Progress'].includes(perfectionStatus)) {
+          return err('Select a valid perfection status.', 400);
+        }
+
+        let documentId = String(body.documentId || '').trim();
+        if (documentId) {
+          const doc = await env.DB.prepare(`
+            SELECT id FROM documents
+            WHERE id = ? AND asset_id = ? AND category = 'Title Deed'
+          `).bind(documentId, asset.id).first();
+          if (!doc) return err('The selected title deed does not belong to this asset.', 400);
+        } else {
+          const doc = await env.DB.prepare(`
+            SELECT id FROM documents
+            WHERE asset_id = ? AND category = 'Title Deed'
+            ORDER BY uploaded_at DESC LIMIT 1
+          `).bind(asset.id).first();
+          documentId = doc?.id || '';
+        }
+        if (!documentId) return err('Upload a title deed before requesting verification.', 400);
+
+        const titleRecordId = 'tr-' + crypto.randomUUID();
+        await env.DB.prepare(`
+          INSERT INTO title_records (
+            id, asset_id, certificate_number, title_type, registered_owner, registry,
+            document_id, perfection_status, verification_status, verified_by, verified_at, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NULL, NULL, NULL)
+          ON CONFLICT(asset_id) DO UPDATE SET
+            certificate_number = excluded.certificate_number,
+            title_type = excluded.title_type,
+            registered_owner = excluded.registered_owner,
+            registry = excluded.registry,
+            document_id = excluded.document_id,
+            perfection_status = excluded.perfection_status,
+            verification_status = 'Pending',
+            verified_by = NULL,
+            verified_at = NULL,
+            notes = NULL
+        `).bind(
+          titleRecordId, asset.id, certificateNumber, titleType, registeredOwner,
+          titleType, documentId, perfectionStatus
+        ).run();
+        await auditLog(session.full_name, session.role_code, session.bank_id, 'SUBMIT_TITLE', 'TitleRecord', asset.public_ref,
+          `Title details submitted for ${asset.public_ref}`);
+        return json({ success: true, message: 'Title details and deed submitted for verification.' }, 201);
+      }
+
+      const bankValuationMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/valuations$/);
+      if (bankValuationMatch && method === 'POST') {
+        const session = await requireBankAuth();
+        const assetRef = decodeURIComponent(bankValuationMatch[1]);
+        const asset = await env.DB.prepare(`
+          SELECT id, public_ref FROM assets
+          WHERE (id = ? OR public_ref = ?) AND bank_id = ?
+        `).bind(assetRef, assetRef, session.bank_id).first();
+        if (!asset) return err('Asset not found or access denied.', 404);
+
+        const body = await getBody();
+        const marketValue = Number(body.marketValue);
+        const forcedSaleValue = Number(body.forcedSaleValue);
+        const valuationDate = String(body.valuationDate || '').trim();
+        const validityDays = Number(body.validityDays);
+        const valuerName = String(body.valuerName || '').trim().slice(0, 160);
+        const documentId = String(body.documentId || '').trim();
+        if (!Number.isFinite(marketValue) || marketValue <= 0 ||
+          !Number.isFinite(forcedSaleValue) || forcedSaleValue <= 0) {
+          return err('Enter valid market and forced-sale values greater than zero.', 400);
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(valuationDate) || !Number.isFinite(Date.parse(valuationDate))) {
+          return err('Enter a valid valuation date.', 400);
+        }
+        if (!Number.isInteger(validityDays) || validityDays < 1 || validityDays > 3650) {
+          return err('Valuation validity must be between 1 and 3650 days.', 400);
+        }
+        if (!valuerName) return err('Valuer name is required.', 400);
+        const document = documentId ? await env.DB.prepare(`
+          SELECT id FROM documents
+          WHERE id = ? AND asset_id = ? AND category = 'Valuation Report'
+        `).bind(documentId, asset.id).first() : null;
+        if (!document) return err('Upload a valuation report before submitting the valuation.', 400);
+
+        const expiryDate = new Date(Date.parse(`${valuationDate}T00:00:00Z`) + validityDays * 86400000)
+          .toISOString().slice(0, 10);
+        const valuationId = 'val-' + crypto.randomUUID();
+        await env.DB.prepare(`
+          INSERT INTO valuations (
+            id, asset_id, valuer_name, market_value, forced_sale_value, valuation_date,
+            expiry_date, validity_period_days, status, review_required, document_id, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', 1, ?, NULL)
+        `).bind(
+          valuationId, asset.id, valuerName, marketValue, forcedSaleValue,
+          valuationDate, expiryDate, validityDays, documentId
+        ).run();
+        await auditLog(session.full_name, session.role_code, session.bank_id, 'SUBMIT_VALUATION', 'Valuation', asset.public_ref,
+          `Valuation submitted for ${asset.public_ref}`);
+        return json({ success: true, id: valuationId, message: 'Valuation and supporting report submitted for review.' }, 201);
+      }
+
       if (pathname === '/api/admin/legal' && method === 'GET') {
         const cases = await env.DB.prepare(`
           SELECT ec.*, a.public_ref, a.title as asset_title, b.legal_name as bank_name
@@ -1051,10 +1180,12 @@ export default {
 
       if (pathname === '/api/admin/titles' && method === 'GET') {
         const titles = await env.DB.prepare(`
-          SELECT tr.*, a.public_ref, a.title as asset_title, b.legal_name as bank_name
+          SELECT tr.*, a.public_ref, a.title as asset_title, b.legal_name as bank_name,
+            d.title AS document_title, d.category AS document_category, d.file_size AS document_size
           FROM title_records tr
           JOIN assets a ON tr.asset_id = a.id
           JOIN banks b ON a.bank_id = b.id
+          LEFT JOIN documents d ON d.id = tr.document_id
           ORDER BY tr.verification_status ASC
         `).all();
         return json({ success: true, count: titles.results.length, data: titles.results });
@@ -1062,13 +1193,74 @@ export default {
 
       if (pathname === '/api/admin/valuations' && method === 'GET') {
         const vals = await env.DB.prepare(`
-          SELECT v.*, a.public_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name
+          SELECT v.*, a.public_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name,
+            d.title AS document_title, d.category AS document_category, d.file_size AS document_size
           FROM valuations v
           JOIN assets a ON v.asset_id = a.id
           JOIN banks b ON a.bank_id = b.id
           ORDER BY v.valuation_date DESC
         `).all();
         return json({ success: true, count: vals.results.length, data: vals.results });
+      }
+
+      const titleReviewMatch = pathname.match(/^\/api\/admin\/titles\/([a-zA-Z0-9_-]+)\/(verify|reject|revoke)$/);
+      if (titleReviewMatch && method === 'POST') {
+        const title = await env.DB.prepare(`
+          SELECT tr.*, a.public_ref FROM title_records tr
+          JOIN assets a ON a.id = tr.asset_id WHERE tr.id = ?
+        `).bind(titleReviewMatch[1]).first();
+        if (!title) return err('Title record not found.', 404);
+        const action = titleReviewMatch[2];
+        const body = await getBody();
+        const notes = String(body.notes || '').trim().slice(0, 2000);
+        if (['reject', 'revoke'].includes(action) && !notes) return err('A reason is required to reject or revoke title verification.', 400);
+        if (action === 'verify' && title.perfection_status !== 'Perfected') {
+          return err('The bank must mark the title as Perfected before it can be verified.', 400);
+        }
+        if (action === 'verify') {
+          const deed = await env.DB.prepare(`
+            SELECT id FROM documents WHERE id = ? AND asset_id = ? AND category = 'Title Deed'
+          `).bind(title.document_id, title.asset_id).first();
+          if (!deed) return err('A linked title deed is required before verification.', 400);
+        }
+        const status = action === 'verify' ? 'Verified' : action === 'reject' ? 'Rejected' : 'Revoked';
+        const verifiedBy = action === 'verify' ? actorName : null;
+        await env.DB.prepare(`
+          UPDATE title_records
+          SET verification_status = ?, verified_by = ?, verified_at = ?, notes = ?
+          WHERE id = ?
+        `).bind(status, verifiedBy, verifiedBy ? new Date().toISOString() : null, notes || null, title.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', `${action.toUpperCase()}_TITLE`, 'TitleRecord',
+          title.public_ref, `Title verification ${status.toLowerCase()}${notes ? `: ${notes}` : ''}`);
+        return json({ success: true, status, message: `Title verification ${status.toLowerCase()}.` });
+      }
+
+      const valuationReviewMatch = pathname.match(/^\/api\/admin\/valuations\/([a-zA-Z0-9_-]+)\/(verify|reject|revoke)$/);
+      if (valuationReviewMatch && method === 'POST') {
+        const valuation = await env.DB.prepare(`
+          SELECT v.*, a.public_ref FROM valuations v
+          JOIN assets a ON a.id = v.asset_id WHERE v.id = ?
+        `).bind(valuationReviewMatch[1]).first();
+        if (!valuation) return err('Valuation record not found.', 404);
+        const action = valuationReviewMatch[2];
+        const body = await getBody();
+        const notes = String(body.notes || '').trim().slice(0, 2000);
+        if (['reject', 'revoke'].includes(action) && !notes) return err('A reason is required to reject or revoke valuation verification.', 400);
+        const expired = Date.parse(`${valuation.expiry_date}T23:59:59Z`) < Date.now();
+        if (action === 'verify' && expired) return err('This valuation has expired. Ask the bank to submit a current valuation.', 400);
+        if (action === 'verify') {
+          const report = await env.DB.prepare(`
+            SELECT id FROM documents WHERE id = ? AND asset_id = ? AND category = 'Valuation Report'
+          `).bind(valuation.document_id, valuation.asset_id).first();
+          if (!report) return err('A linked valuation report is required before verification.', 400);
+        }
+        const status = action === 'verify' ? 'Valid' : action === 'reject' ? 'Rejected' : 'Revoked';
+        await env.DB.prepare(`
+          UPDATE valuations SET status = ?, review_required = ?, notes = ? WHERE id = ?
+        `).bind(status, action === 'verify' ? 0 : 1, notes || null, valuation.id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', `${action.toUpperCase()}_VALUATION`, 'Valuation',
+          valuation.public_ref, `Valuation ${status.toLowerCase()}${notes ? `: ${notes}` : ''}`);
+        return json({ success: true, status, message: `Valuation ${status.toLowerCase()}.` });
       }
 
       // Settings (/api/admin/settings)
@@ -1584,6 +1776,23 @@ export default {
             SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
               owner_bank.legal_name as owner_bank_name,
               (SELECT case_number FROM enforcement_cases WHERE asset_id = a.id LIMIT 1) as enforcement_case_number,
+              (SELECT certificate_number FROM title_records WHERE asset_id = a.id LIMIT 1) as title_certificate_number,
+              (SELECT title_type FROM title_records WHERE asset_id = a.id LIMIT 1) as title_type,
+              (SELECT registered_owner FROM title_records WHERE asset_id = a.id LIMIT 1) as title_registered_owner,
+              (SELECT perfection_status FROM title_records WHERE asset_id = a.id LIMIT 1) as title_perfection_status,
+              (SELECT verification_status FROM title_records WHERE asset_id = a.id LIMIT 1) as title_verification_status,
+              (SELECT document_id FROM title_records WHERE asset_id = a.id LIMIT 1) as title_document_id,
+              (SELECT id FROM documents WHERE asset_id = a.id AND category = 'Title Deed' ORDER BY uploaded_at DESC LIMIT 1) as latest_title_document_id,
+              (SELECT market_value FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_market_value,
+              (SELECT forced_sale_value FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_forced_sale_value,
+              (SELECT valuation_date FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_date,
+              (SELECT expiry_date FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_expiry_date,
+              (SELECT validity_period_days FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_validity_period_days,
+              (SELECT valuer_name FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_valuer_name,
+              (SELECT status FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_status,
+              (SELECT review_required FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_review_required,
+              (SELECT document_id FROM valuations WHERE asset_id = a.id ORDER BY valuation_date DESC, rowid DESC LIMIT 1) as valuation_document_id,
+              (SELECT id FROM documents WHERE asset_id = a.id AND category = 'Valuation Report' ORDER BY uploaded_at DESC LIMIT 1) as latest_valuation_document_id,
               (SELECT COUNT(*) FROM asset_images WHERE asset_id = a.id) as image_count,
               (SELECT COUNT(*) FROM documents WHERE asset_id = a.id) as document_count,
               (SELECT COUNT(*) FROM offers WHERE asset_id = a.id) as offer_count
@@ -1874,7 +2083,7 @@ export default {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (!['Submitted by Bank', 'Submitted', 'Under Review'].includes(asset.status)) {
+        if (!['Submitted by Bank', 'Submitted', 'Under Review', 'Changes Required'].includes(asset.status)) {
           return err('Only submitted assets can enter review.', 400);
         }
 
