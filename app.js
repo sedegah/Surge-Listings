@@ -1043,8 +1043,160 @@ const UI = {
     document.body.removeChild(link);
     UI.toast('Exported ' + filename, 'success');
   },
-  exportPDF() {
-    window.print();
+  exportPDF(reportType = 'portfolio') {
+    const assets = Store.assets || [];
+    const bankAssets = typeof Store.getBankAssets === 'function' ? Store.getBankAssets() : assets;
+    const invoices = Store.invoices || [];
+    const offers = Store.offers || [];
+    const acceptedOffers = offers.filter(o => o.status === 'Accepted');
+    const totalRealized = acceptedOffers.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const totalBilled = invoices.reduce((sum, i) => sum + (i.status !== 'Cancelled' ? Number(i.amount) || 0 : 0), 0);
+    const user = Auth.getUser();
+    const bankName = user?.organizationName || user?.bankName || user?.bank_name || 'Surge Solutions';
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GH', { day: '2-digit', month: 'long', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' });
+
+    let title = 'Portfolio Summary Report';
+    let bodyContent = '';
+
+    if (reportType === 'portfolio' || reportType === 'assets') {
+      title = 'Asset Portfolio Summary Report';
+      const live = bankAssets.filter(a => a.status === 'Live').length;
+      const drafts = bankAssets.filter(a => a.status === 'Draft').length;
+      const sold = bankAssets.filter(a => a.status === 'Sold').length;
+      const review = bankAssets.filter(a => ['Submitted', 'Under Review'].includes(a.status)).length;
+      bodyContent = `
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">Total Assets</div><div class="kpi-value">${bankAssets.length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Live on Market</div><div class="kpi-value green">${live}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Drafts</div><div class="kpi-value">${drafts}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Under Review</div><div class="kpi-value amber">${review}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Disposed / Sold</div><div class="kpi-value green">${sold}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Realized</div><div class="kpi-value">${this.fmtMoney(totalRealized)}</div></div>
+        </div>
+        <h3>Asset Register</h3>
+        <table>
+          <thead><tr><th>Reference</th><th>Category</th><th>Type</th><th>Region</th><th>Location</th><th style="text-align:right">Reserve (GHS)</th><th>Status</th></tr></thead>
+          <tbody>
+            ${bankAssets.map(a => `<tr><td class="mono">${a.ref}</td><td>${a.category || ''}</td><td>${a.assetType || ''}</td><td>${a.region || ''}</td><td>${a.publicLocation || a.town || ''}</td><td style="text-align:right">${a.showReserve || a.reserve ? this.fmtMoney(a.reserve || 0) : 'P.O.A.'}</td><td><span class="status-pill ${a.status === 'Live' ? 'green' : a.status === 'Sold' ? 'blue' : a.status === 'Draft' ? 'grey' : 'amber'}">${a.status}</span></td></tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    if (reportType === 'invoices' || reportType === 'billing') {
+      title = 'Billing & Invoice Report';
+      bodyContent += `
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">Total Invoices</div><div class="kpi-value">${invoices.length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Billed</div><div class="kpi-value">${this.fmtMoney(totalBilled)}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Paid</div><div class="kpi-value green">${invoices.filter(i => i.status === 'Paid').length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Outstanding</div><div class="kpi-value amber">${invoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled').length}</div></div>
+        </div>
+        <h3>Invoice Register</h3>
+        <table>
+          <thead><tr><th>Invoice #</th><th>Description</th><th>Issue Date</th><th>Due Date</th><th style="text-align:right">Amount (GHS)</th><th>Status</th></tr></thead>
+          <tbody>
+            ${invoices.map(i => `<tr><td class="mono">${i.ref}</td><td>${this.escapeHtml(i.description || '')}</td><td>${i.issuedAt ? this.fmtDateShort(i.issuedAt) : '—'}</td><td>${i.dueDate ? this.fmtDateShort(i.dueDate) : '—'}</td><td style="text-align:right">${this.fmtMoney(i.amount || 0)}</td><td><span class="status-pill ${i.status === 'Paid' ? 'green' : i.status === 'Overdue' ? 'red' : 'amber'}">${i.status}</span></td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No invoices on record.</td></tr>'}
+          </tbody>
+        </table>`;
+    }
+
+    if (reportType === 'disposal') {
+      title = 'Disposal & Transaction Realization Report';
+      bodyContent = `
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">Accepted Offers</div><div class="kpi-value">${acceptedOffers.length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Realized</div><div class="kpi-value green">${this.fmtMoney(totalRealized)}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Surge Fees Billed</div><div class="kpi-value">${this.fmtMoney(totalBilled)}</div></div>
+        </div>
+        <h3>Accepted Offers</h3>
+        <table>
+          <thead><tr><th>Offer Ref</th><th>Asset</th><th>Purchaser</th><th style="text-align:right">Realized Amount</th><th>Date</th></tr></thead>
+          <tbody>
+            ${acceptedOffers.map(o => `<tr><td class="mono">${o.ref}</td><td class="mono">${o.assetRef || ''}</td><td>${this.escapeHtml(o.buyer || '')}</td><td style="text-align:right">${this.fmtMoney(o.amount || 0)}</td><td>${this.fmtDateShort(o.date)}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No accepted offers on record.</td></tr>'}
+          </tbody>
+        </table>`;
+    }
+
+    if (reportType === 'audit') {
+      title = 'Audit Trail Report';
+      const logs = Store.auditLog.slice(0, 200);
+      bodyContent = `
+        <p style="color:#555;margin-bottom:16px">Showing most recent ${logs.length} of ${Store.auditLog.length} audit entries.</p>
+        <table>
+          <thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Entity</th><th>Reference</th><th>Detail</th></tr></thead>
+          <tbody>
+            ${logs.map(a => `<tr><td style="white-space:nowrap">${this.fmtDate(a.when)}</td><td>${this.escapeHtml(a.who || '')}</td><td class="mono">${a.action}</td><td>${a.entity}</td><td class="mono">${a.entityRef || ''}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(a.detail || '')}</td></tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — Surge Solutions</title>
+    <style>
+      @page { size: A4 landscape; margin: 18mm 15mm; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', 'Inter', Arial, sans-serif; font-size: 11px; color: #1A2B3C; line-height: 1.45; padding: 28px 32px; }
+      .report-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0E2A47; padding-bottom: 14px; margin-bottom: 20px; }
+      .report-header .brand { display: flex; align-items: center; gap: 10px; }
+      .report-header .brand .logo { width: 34px; height: 34px; background: #0E2A47; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 13px; letter-spacing: -0.5px; }
+      .report-header .brand h1 { font-size: 18px; font-weight: 700; color: #0E2A47; letter-spacing: -0.3px; }
+      .report-header .brand .sub { font-size: 10.5px; color: #6B7B8D; margin-top: 1px; }
+      .report-header .meta { text-align: right; font-size: 10.5px; color: #6B7B8D; line-height: 1.6; }
+      .report-header .meta strong { color: #1A2B3C; }
+      .report-title { font-size: 15px; font-weight: 700; color: #0E2A47; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #E0E5EA; }
+      .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+      .kpi-card { background: #F7F9FB; border: 1px solid #E0E5EA; border-radius: 4px; padding: 10px 12px; }
+      .kpi-label { font-size: 9.5px; color: #6B7B8D; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+      .kpi-value { font-size: 18px; font-weight: 700; color: #1A2B3C; margin-top: 2px; }
+      .kpi-value.green { color: #1A7F37; }
+      .kpi-value.amber { color: #9A6700; }
+      .kpi-value.red { color: #CF222E; }
+      h3 { font-size: 12.5px; font-weight: 700; color: #0E2A47; margin: 16px 0 8px; }
+      table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 18px; }
+      thead { background: #F0F3F7; }
+      th { padding: 7px 8px; text-align: left; font-weight: 600; color: #3D4F5F; border-bottom: 2px solid #D0D7DD; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+      td { padding: 6px 8px; border-bottom: 1px solid #ECEFF2; color: #1A2B3C; }
+      tbody tr:nth-child(even) { background: #FAFBFC; }
+      .mono { font-family: 'Consolas', 'Courier New', monospace; font-size: 10px; font-weight: 600; }
+      .status-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+      .status-pill.green { background: #DAFBE1; color: #1A7F37; }
+      .status-pill.amber { background: #FFF8C5; color: #9A6700; }
+      .status-pill.red { background: #FFEBE9; color: #CF222E; }
+      .status-pill.blue { background: #DDF4FF; color: #0969DA; }
+      .status-pill.grey { background: #F0F3F7; color: #57606A; }
+      .report-footer { margin-top: 24px; padding-top: 12px; border-top: 2px solid #E0E5EA; display: flex; justify-content: space-between; font-size: 9.5px; color: #8B95A1; }
+      .confidential { color: #CF222E; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+      @media print { body { padding: 0; } .no-print { display: none !important; } }
+    </style></head><body>
+      <div class="report-header">
+        <div class="brand">
+          <div class="logo">SS</div>
+          <div><h1>Surge Solutions</h1><div class="sub">Licensed Intermediary · Asset Recovery & Disposal</div></div>
+        </div>
+        <div class="meta">
+          <div><strong>Institution:</strong> ${this.escapeHtml(bankName)}</div>
+          <div><strong>Report Date:</strong> ${dateStr} at ${timeStr} GMT</div>
+          <div><strong>Generated by:</strong> ${this.escapeHtml(user?.fullName || user?.username || 'System')}</div>
+          <div><strong>Report ID:</strong> RPT-${Date.now().toString(36).toUpperCase()}</div>
+        </div>
+      </div>
+      <div class="report-title">${title}</div>
+      ${bodyContent}
+      <div class="report-footer">
+        <div class="confidential">Confidential — For Authorised Recipients Only</div>
+        <div>© ${now.getFullYear()} Surge Solutions · Accra, Ghana · All rights reserved</div>
+      </div>
+      <div class="no-print" style="text-align:center;margin-top:24px">
+        <button onclick="window.print()" style="padding:10px 28px;background:#0E2A47;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">Print / Save as PDF</button>
+        <button onclick="window.close()" style="padding:10px 28px;background:#E0E5EA;color:#1A2B3C;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px">Close</button>
+      </div>
+    </body></html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { this.toast('Please allow pop-ups to generate reports.', 'error'); return; }
+    win.document.write(html);
+    win.document.close();
   },
 };
 
@@ -2668,8 +2820,11 @@ const BankPortal = {
       <div class="group">
         <div class="caption">Portfolio Reports &amp; Exports</div>
         <div class="body" style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn" onclick="UI.exportPDF()">Export Summary (PDF)</button>
+          <button class="btn primary" onclick="UI.exportPDF('portfolio')">Asset Portfolio Report (PDF)</button>
+          <button class="btn" onclick="UI.exportPDF('disposal')">Disposal & Realization Report</button>
+          <button class="btn" onclick="UI.exportPDF('billing')">Billing & Invoice Report</button>
           <button class="btn" onclick="UI.exportExcel('assets')">Export Assets (CSV)</button>
+          <button class="btn" onclick="UI.exportExcel('invoices')">Export Invoices (CSV)</button>
         </div>
       </div>
 
@@ -4267,13 +4422,15 @@ const AdminPortal = {
     const banks = Store.banks || [];
     const totalAssets = banks.reduce((sum, b) => sum + (b.assetCount || 0), 0);
     const totalStaff = banks.reduce((sum, b) => sum + (b.staffCount || 0), 0);
+    const activeCount = banks.filter(b => b.status === 'Active').length;
+    const commissionRange = banks.length ? (Math.min(...banks.map(b => Number(b.commissionRate) || 4)).toFixed(1) + '% — ' + Math.max(...banks.map(b => Number(b.commissionRate) || 5)).toFixed(1) + '%') : '4.0% — 5.0%';
 
     return `
       <div class="kpis" style="margin-bottom:18px">
-        <div class="kpi"><div class="k">Institutional Partners</div><div class="v">${banks.length}</div></div>
-        <div class="kpi ok"><div class="k">Active Bank Staff</div><div class="v">${totalStaff}</div></div>
-        <div class="kpi info"><div class="k">Assets in Portfolio</div><div class="v">${totalAssets}</div></div>
-        <div class="kpi alert"><div class="k">Standard Commission</div><div class="v">4.0% — 5.0%</div></div>
+        <div class="kpi"><div class="k">Institutional Partners</div><div class="v">${banks.length}</div><div class="d">${activeCount} active</div></div>
+        <div class="kpi ok"><div class="k">Active Bank Staff</div><div class="v">${totalStaff}</div><div class="d">Across all institutions</div></div>
+        <div class="kpi info"><div class="k">Assets in Portfolio</div><div class="v">${totalAssets}</div><div class="d">Total managed assets</div></div>
+        <div class="kpi alert"><div class="k">Commission Range</div><div class="v">${commissionRange}</div><div class="d">Standard fee structure</div></div>
       </div>
 
       ${banks.length === 0 ? `
@@ -4284,58 +4441,67 @@ const AdminPortal = {
           <button class="btn primary" onclick="AdminPortal.modalAddBank()">+ Onboard First Partner Bank</button>
         </div>
       ` : `
-        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));gap:16px">
-          ${banks.map(b => `
-            <div style="background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);display:flex;flex-direction:column;justify-content:space-between">
-              <div>
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
-                  <div>
-                    <span style="display:inline-block;background:var(--blue);color:#fff;font-family:Consolas,monospace;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:4px">${b.code}</span>
-                    <h3 style="margin:0;font-size:15px;line-height:1.3">${b.name}</h3>
-                  </div>
-                  <span class="badge ${b.status === 'Active' ? 'ok' : 'draft'}">${b.status}</span>
-                </div>
-
-                <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;display:flex;flex-direction:column;gap:4px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>
-                    <span>${b.email || '—'}</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-                    <span>${b.phone || '—'}</span>
-                  </div>
-                </div>
-
-                <div style="background:#F7F9FB;border:1px solid #E8EEF5;border-radius:3px;padding:8px 12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;text-align:center">
-                  <div>
-                    <div style="font-size:11px;color:var(--text-2)">Commission</div>
-                    <div style="font-weight:700;font-size:13px;color:var(--blue)">${b.commissionRate || 4.0}%</div>
-                  </div>
-                  <div>
-                    <div style="font-size:11px;color:var(--text-2)">Assets</div>
-                    <div style="font-weight:700;font-size:13px">${b.assetCount || 0}</div>
-                  </div>
-                  <div>
-                    <div style="font-size:11px;color:var(--text-2)">Staff</div>
-                    <div style="font-weight:700;font-size:13px;color:#28a745">${b.staffCount || 0}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div style="display:flex;gap:6px;border-top:1px solid #ECEFF2;padding-top:12px;margin-top:auto">
-                <button class="btn small ok" onclick="AdminPortal.modalAddStaff('${b.id}')" title="Add new user to this bank" style="flex:1">
-                  + Add Staff
-                </button>
-                <button class="btn small" onclick="AdminPortal.filterBankStaff('${b.id}')" title="View staff for this bank" style="flex:1">
-                  View Staff (${b.staffCount || 0})
-                </button>
-                <button class="btn small danger" onclick="Store.deleteBank('${b.id}')" title="Remove Bank">
-                  ✕
-                </button>
-              </div>
-            </div>
-          `).join('')}
+        <div class="gridwrap">
+          <div class="gridtoolbar" style="display:flex;align-items:center;justify-content:space-between">
+            <strong style="font-size:12.5px">${banks.length} Partner Institution${banks.length !== 1 ? 's' : ''} Registered</strong>
+            <button class="btn small" onclick="UI.exportPDF('portfolio')" style="font-size:11px">Export Report</button>
+          </div>
+          <table class="grid">
+            <thead>
+              <tr>
+                <th style="width:50px">Code</th>
+                <th>Institution</th>
+                <th>Contact</th>
+                <th style="text-align:center">Commission</th>
+                <th style="text-align:center">Assets</th>
+                <th style="text-align:center">Staff</th>
+                <th>Status</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${banks.map(b => `
+                <tr>
+                  <td>
+                    <span style="display:inline-block;background:var(--blue);color:#fff;font-family:Consolas,monospace;font-size:10px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:0.3px">${UI.escapeHtml(b.code)}</span>
+                  </td>
+                  <td>
+                    <div style="font-weight:600;font-size:13px">${UI.escapeHtml(b.name)}</div>
+                    <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(b.region || 'Greater Accra')} · ${UI.escapeHtml(b.branchName || 'Head Office')}</div>
+                  </td>
+                  <td>
+                    <div style="font-size:12px">${UI.escapeHtml(b.email || '—')}</div>
+                    <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(b.phone || '—')}</div>
+                  </td>
+                  <td style="text-align:center">
+                    <span style="font-weight:700;font-size:13px;color:var(--blue)">${b.commissionRate || 4.0}%</span>
+                  </td>
+                  <td style="text-align:center">
+                    <span style="font-weight:700;font-size:13px">${b.assetCount || 0}</span>
+                  </td>
+                  <td style="text-align:center">
+                    <span style="font-weight:700;font-size:13px;color:#28a745">${b.staffCount || 0}</span>
+                  </td>
+                  <td>
+                    <span class="badge ${b.status === 'Active' ? 'ok' : 'draft'}">${b.status}</span>
+                  </td>
+                  <td style="text-align:right">
+                    <div style="display:inline-flex;gap:4px">
+                      <button class="btn small ok" onclick="AdminPortal.modalAddStaff('${b.id}')" title="Add staff member">
+                        <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+                      </button>
+                      <button class="btn small" onclick="AdminPortal.filterBankStaff('${b.id}')" title="View staff (${b.staffCount || 0})">
+                        <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                      </button>
+                      <button class="btn small danger" onclick="Store.deleteBank('${b.id}')" title="Remove bank">
+                        <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M5 7l1 14h12l1-14"/><path d="M9 7V4h6v3"/></svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
       `}
     `;
@@ -4945,23 +5111,88 @@ const PublicMarket = {
     </div>`;
   },
 
-  openDetail(id) { this.selectedAssetId = id; this.currentPage = 'home'; this.render(); },
-  closeDetail() { this.selectedAssetId = null; this.render(); },
+  detailImages: [],
+  activeImageIndex: 0,
+  detailImagesLoading: false,
+
+  async openDetail(id) {
+    this.selectedAssetId = id;
+    this.currentPage = 'home';
+    this.detailImages = [];
+    this.activeImageIndex = 0;
+    this.detailImagesLoading = true;
+    this.render();
+
+    // Fetch images from the public API
+    try {
+      const a = Store.getAsset(id);
+      const ref = a ? (a.ref || id) : id;
+      const resp = await fetch(Store.API_BASE + '/api/marketplace/assets/' + encodeURIComponent(ref), { cache: 'no-store' });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json.success && json.data && Array.isArray(json.data.images)) {
+          this.detailImages = json.data.images.map(img => ({
+            id: img.id,
+            url: img.url,
+            caption: img.caption || '',
+            isPrimary: !!img.is_primary,
+            isExterior: !!img.is_exterior
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load asset images:', e);
+    }
+    this.detailImagesLoading = false;
+    this.render();
+  },
+
+  closeDetail() { this.selectedAssetId = null; this.detailImages = []; this.activeImageIndex = 0; this.render(); },
+
+  selectImage(idx) {
+    this.activeImageIndex = idx;
+    const mainImg = document.querySelector('.gallery .mainimg img');
+    if (mainImg && this.detailImages[idx]) {
+      mainImg.src = this.detailImages[idx].url;
+      mainImg.alt = this.detailImages[idx].caption || 'Property photo';
+    }
+    document.querySelectorAll('.gallery .thumbs .t').forEach((el, i) => {
+      el.classList.toggle('active', i === idx);
+    });
+  },
 
   renderDetail() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return this.renderHome();
+
+    // Build gallery HTML
+    let galleryHtml = '';
+    if (this.detailImagesLoading) {
+      galleryHtml = `<div class="mainimg"><div style="text-align:center;color:#8A9AA9"><svg class="ph" viewBox="0 0 24 24" style="width:40px;height:40px;stroke:#A9B6C2;fill:none;stroke-width:1.2;animation:pulse 1.5s ease-in-out infinite"><circle cx="12" cy="12" r="10"/></svg><div style="margin-top:8px;font-size:12px">Loading photos…</div></div></div>`;
+    } else if (this.detailImages.length > 0) {
+      const activeImg = this.detailImages[this.activeImageIndex] || this.detailImages[0];
+      galleryHtml = `
+        <div class="mainimg">
+          <img src="${UI.escapeHtml(activeImg.url)}" alt="${UI.escapeHtml(activeImg.caption || a.assetType)}" style="width:100%;height:100%;object-fit:cover">
+          <span class="badge live">${this.detailImages.length} Photo${this.detailImages.length > 1 ? 's' : ''}</span>
+        </div>
+        ${this.detailImages.length > 1 ? `<div class="thumbs">${this.detailImages.map((img, idx) => `<div class="t ${idx === this.activeImageIndex ? 'active' : ''}" onclick="PublicMarket.selectImage(${idx})" title="${UI.escapeHtml(img.caption || 'Photo ' + (idx + 1))}"><img src="${UI.escapeHtml(img.url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:1px"></div>`).join('')}</div>` : ''}
+      `;
+    } else if (a.primaryImage) {
+      galleryHtml = `<div class="mainimg"><img src="${UI.escapeHtml(a.primaryImage)}" alt="${UI.escapeHtml(a.assetType)}" style="width:100%;height:100%;object-fit:cover"></div>`;
+    } else {
+      galleryHtml = `<div class="mainimg"><svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></div>`;
+    }
+
     return `
       <div class="page-head"><button class="btn small" onclick="PublicMarket.closeDetail()">← Back</button><h1 style="font-size:16px">${a.assetType}</h1>${UI.badge('Live')}</div>
       <div class="detail-page">
-        <div class="gallery"><div class="mainimg"><svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></div>
-          <div class="thumbs"><div class="t active">Main</div><div class="t">View 2</div><div class="t">View 3</div></div>
-        </div>
+        <div class="gallery">${galleryHtml}</div>
         <div class="detail-side">
           <div class="panelbox"><h4>${a.category} · ${a.assetType}</h4>
             <div class="pricebig">${a.showReserve ? UI.fmtMoney(a.reserve) : 'Price on Application'}</div>
             <p style="font-size:12.5px;color:var(--text-2);margin:6px 0 12px">${a.description}</p>
-            <table class="details"><tr><th>Reference</th><td>${a.ref}</td></tr><tr><th>Location</th><td>${a.publicLocation}</td></tr><tr><th>Region</th><td>${a.region}</td></tr></table>
+            <table class="details"><tr><th>Reference</th><td>${a.ref}</td></tr><tr><th>Location</th><td>${a.publicLocation}</td></tr><tr><th>Region</th><td>${a.region}</td></tr>${a.occupancyStatus ? `<tr><th>Occupancy</th><td>${a.occupancyStatus}</td></tr>` : ''}${a.beds ? `<tr><th>Bedrooms</th><td>${a.beds}</td></tr>` : ''}${a.baths ? `<tr><th>Bathrooms</th><td>${a.baths}</td></tr>` : ''}</table>
           </div>
           <div class="panelbox"><div class="cta-col">
             <button class="btn primary" onclick="PublicMarket.enquiry('${a.id}')">Submit Enquiry</button>

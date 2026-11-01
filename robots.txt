@@ -9,33 +9,3 @@ Disallow: /login.html
 Disallow: /api/
 
 Sitemap: https://surge-listings.vercel.app/sitemap.xml
-
-
-
-
-Updated role-permission matrix
-Role	Create drafts	Edit drafts	Approve changes	Submit to Surge
-Bank Administrator	Yes	Yes	Yes	Yes
-Legal / Recovery Officer	Yes	Yes	Yes	Yes
-Asset Officer	Yes	Yes	Yes	Yes
-Approver	Yes	Yes	Yes	Yes
-Finance Officer (Bank)	Yes	Yes	No	No
-Auditor / Viewer	No	No	No	No
-
-Recommended workflow
-1. Draft creation: All operational bank roles can create asset drafts.
-2. Draft editing: Authorised users can update asset details and supporting documents.
-3. Change approval: Legal / Recovery Officers, Asset Officers, designated Approvers and Bank Administrators can approve or reject changes.
-4. Submission: Those same authorised roles can submit approved assets or changes to Surge.
-5. Surge review: Surge independently reviews the submission.
-One important safeguard
-I recommend separating approving a change from approving your own change.
-
-For example:
-- An Asset Officer creates an asset and submits it for approval.
-- A Legal Officer reviews and approves it.
-- Either an authorised Legal Officer or Asset Officer can submit it to Surge.
-- If an already-approved asset is modified, its approval status resets and it must go through approval again.
-This gives both departments the authority they need while preserving accountability.
-
-One implementation detail: Keep approve_asset_changes and submit_assets_to_surge as separate permissions, even if the same four roles receive both. This gives you flexibility to change institutional policies later without redesigning the permission system.
