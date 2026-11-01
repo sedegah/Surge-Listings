@@ -224,27 +224,32 @@ export default {
     let activeSession = null;
 
     // Helper: Immutable Audit Logging
-    async function auditLog(actorName, actorRole, org, actionType, entityType, entityId, summary, oldVal = null, newVal = null) {
-      try {
-        const id = randomId();
-        await env.DB.prepare(`
-          INSERT INTO audit_logs (id, actor_name, actor_role, organization, action_type, entity_type, entity_id, delta_summary, old_values, new_values, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        `).bind(
-          id,
-          activeSession?.full_name || actorName || 'System',
-          activeSession?.role_code || actorRole || 'System',
-          activeSession?.bank_name || org || 'Surge Solutions',
-          actionType,
-          entityType,
-          entityId,
-          summary,
-          oldVal ? JSON.stringify(oldVal) : null,
-          newVal ? JSON.stringify(newVal) : null
-        ).run();
-      } catch (e) {
-        console.warn('Audit log write warning:', e);
+    async function auditLog(actorName, actorRole, org, actionType, entityType, entityId, summary, oldVal = null, newVal = null, actorUserId = null) {
+      const session = activeSession;
+      const resolvedActorName = session?.full_name || actorName;
+      const resolvedActorRole = session?.role_code || actorRole;
+      const resolvedActorUserId = session?.user_id || actorUserId;
+      if (!resolvedActorName || !resolvedActorRole) {
+        throw new Error(`Audit actor is required for ${actionType} ${entityType} ${entityId}.`);
       }
+
+      const id = randomId();
+      await env.DB.prepare(`
+        INSERT INTO audit_logs (id, actor_user_id, actor_name, actor_role, organization, action_type, entity_type, entity_id, delta_summary, old_values, new_values, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).bind(
+        id,
+        resolvedActorUserId,
+        resolvedActorName,
+        resolvedActorRole,
+        session?.bank_name || org || 'Surge Solutions',
+        actionType,
+        entityType,
+        entityId,
+        summary,
+        oldVal ? JSON.stringify(oldVal) : null,
+        newVal ? JSON.stringify(newVal) : null
+      ).run();
     }
 
     // ============================================================
@@ -383,8 +388,8 @@ export default {
     }
 
     // Legacy context (used by non-auth-gated routes only)
-    const actorName = request.headers.get('x-actor-name') || 'Authorized User';
-    const actorRole = request.headers.get('x-actor-role') || 'User';
+    const actorName = null;
+    const actorRole = null;
 
     try {
       const originError = enforceSameOriginMutation();
@@ -485,11 +490,8 @@ export default {
             }
           }
         } else {
-          // Uninitialized seed accounts can log in with Surge2026! or password, activating their initial password
-          if (password.trim() === 'Surge2026!' || password.trim() === 'password') {
-            validPassword = true;
-            await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(await hashPassword(password.trim()), user.id).run();
-          }
+          await recordFailure('PASSWORD_NOT_CONFIGURED');
+          return err('This account is not configured for sign-in yet. Contact the system owner to reset its password.', 403);
         }
         if (!validPassword) {
           await recordFailure('WRONG_PASSWORD');
@@ -517,7 +519,7 @@ export default {
         await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, attempted_at) VALUES (?, ?, ?, 1, datetime('now'))`)
           .bind(randomId(), uname, ipAddress).run();
         await env.DB.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).bind(user.id).run();
-        await auditLog(user.full_name, user.role_name, user.org_name, 'LOGIN', 'User', user.id, `Signed in from ${ipAddress}`);
+        await auditLog(user.full_name, user.role_code, user.org_name, 'LOGIN', 'User', user.public_id, `Signed in from ${ipAddress}`, null, null, user.id);
 
         return json({
           success: true,
@@ -535,7 +537,10 @@ export default {
       // POST /api/auth/logout — Revoke session
       if (pathname === '/api/auth/logout' && method === 'POST') {
         const session = await resolveSession();
-        if (session) await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'USER_LOGOUT' WHERE id = ?`).bind(session.id).run();
+        if (session) {
+          await auditLog(session.full_name, session.role_code, session.bank_name, 'LOGOUT', 'User', session.user_public_id, 'Signed out.');
+          await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'USER_LOGOUT' WHERE id = ?`).bind(session.id).run();
+        }
         clearSessionCookie();
         return json({ success: true, message: 'Signed out successfully.' });
       }
@@ -612,17 +617,17 @@ export default {
         if (existing) {
           userId = existing.id;
           await env.DB.prepare(`UPDATE users SET password_hash = ?, full_name = COALESCE(?, full_name), status = 'Active' WHERE id = ?`)
-            .bind(password.trim(), full_name || null, userId).run();
+            .bind(await hashPassword(password.trim()), full_name || null, userId).run();
         } else {
           userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
           const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(invite.bank_id).first();
           const username = invite.email.split('@')[0].replace(/[^a-z0-9.]/gi, '').toLowerCase();
           await env.DB.prepare(`
-            INSERT INTO users (id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Active', datetime('now'))
-          `).bind(userId, bank?.organization_id || 'org-surge', invite.bank_id, invite.branch_id || null,
+            INSERT INTO users (id, public_id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Active', datetime('now'))
+          `).bind(userId, randomId(), bank?.organization_id || 'org-surge', invite.bank_id, invite.branch_id || null,
             username, full_name || invite.full_name || invite.email.split('@')[0],
-            invite.email, invite.role_code, password.trim()).run();
+            invite.email, invite.role_code, await hashPassword(password.trim())).run();
         }
 
         // Add organization membership
@@ -633,7 +638,7 @@ export default {
         }
 
         await env.DB.prepare(`UPDATE invitations SET status = 'Accepted', accepted_at = datetime('now') WHERE id = ?`).bind(invite.id).run();
-        await auditLog(invite.email, invite.role_code, invite.bank_id, 'INVITATION_ACCEPTED', 'User', userId, `Account activated via invitation`);
+        await auditLog(invite.email, invite.role_code, invite.bank_id, 'INVITATION_ACCEPTED', 'User', userId, `Account activated via invitation`, null, null, userId);
         return json({ success: true, message: 'Account activated. You can now sign in.' });
       }
 
@@ -702,7 +707,14 @@ export default {
             (SELECT COUNT(*) FROM offers WHERE status = 'Under Bank Review') as activeOffers,
             (SELECT COALESCE(SUM(reserve_price), 0) FROM assets) as totalPortfolioValue
         `).first();
-        const recentActivity = await env.DB.prepare(`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10`).all();
+        const recentActivity = await env.DB.prepare(`
+          SELECT a.id, a.actor_name, a.actor_role, a.organization, a.action_type, a.entity_type,
+                 a.entity_id, a.delta_summary, a.old_values, a.new_values, a.created_at,
+                 u.public_id AS actor_public_id
+          FROM audit_logs a
+          LEFT JOIN users u ON u.id = a.actor_user_id
+          ORDER BY a.created_at DESC LIMIT 10
+        `).all();
         return json({ success: true, data: { stats: counts, recentActivity: recentActivity.results } });
       }
 
@@ -807,6 +819,9 @@ export default {
         if (!username || !full_name || !email || !role_code) {
           return err('Username, full name, email, and role are required.', 400);
         }
+        if (!password || password.trim().length < 8) {
+          return err('An initial password of at least 8 characters is required.', 400);
+        }
 
         const role = await env.DB.prepare(`SELECT scope FROM roles WHERE code = ?`).bind(role_code).first();
         if (!role) return err('The selected role does not exist.', 400);
@@ -827,12 +842,12 @@ export default {
         }
 
         const userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-        const assignedPassword = password ? password.trim() : 'Surge@2026!';
+        const assignedPassword = password ? await hashPassword(password.trim()) : null;
 
         await env.DB.prepare(`
-          INSERT INTO users (id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
-        `).bind(userId, orgId, assignedBankId, assignedBranchId, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), role_code, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1).run();
+          INSERT INTO users (id, public_id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+        `).bind(userId, randomId(), orgId, assignedBankId, assignedBranchId, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), role_code, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1).run();
 
         await auditLog(actorName, actorRole, 'Surge Solutions', 'CREATE_USER', 'User', userId, `Created staff member ${full_name} (@${username})`);
         const createdUser = await env.DB.prepare(`SELECT u.*, b.legal_name as bank_name FROM users u LEFT JOIN banks b ON u.bank_id = b.id WHERE u.id = ?`).bind(userId).first();
@@ -847,11 +862,11 @@ export default {
         const { password } = body;
         if (!password || password.trim().length < 6) return err('Password must be at least 6 characters.', 400);
 
-        const user = await env.DB.prepare(`SELECT username, full_name FROM users WHERE id = ?`).bind(id).first();
+        const user = await env.DB.prepare(`SELECT username, full_name, public_id FROM users WHERE id = ?`).bind(id).first();
         if (!user) return err('User not found', 404);
 
-        await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(password.trim(), id).run();
-        await auditLog(actorName, actorRole, 'Surge Solutions', 'RESET_PASSWORD', 'User', id, `Password reset for user @${user.username}`);
+        await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(await hashPassword(password.trim()), id).run();
+        await auditLog(actorName, actorRole, 'Surge Solutions', 'RESET_PASSWORD', 'User', user.public_id, `Password reset for user @${user.username}`);
         return json({ success: true, message: `Password reset successfully for @${user.username}.` });
       }
 
@@ -1846,7 +1861,14 @@ export default {
 
       // Audit Logs
       if (['/api/v1/audit-logs', '/api/admin/audit-logs'].includes(pathname)) {
-        const logs = await env.DB.prepare(`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 150`).all();
+        const logs = await env.DB.prepare(`
+          SELECT a.id, a.actor_name, a.actor_role, a.organization, a.action_type, a.entity_type,
+                 a.entity_id, a.delta_summary, a.old_values, a.new_values, a.created_at,
+                 u.public_id AS actor_public_id
+          FROM audit_logs a
+          LEFT JOIN users u ON u.id = a.actor_user_id
+          ORDER BY a.created_at DESC LIMIT 150
+        `).all();
         return json({ success: true, count: logs.results.length, data: logs.results });
       }
 
@@ -2108,7 +2130,6 @@ export default {
 
         if (!resolvedRoute) return err('Invalid or expired encrypted route token.', 403);
 
-        await auditLog(actorName, actorRole, 'System', 'ENC_RESOLVE', 'Route', resolvedKey, `Encrypted route resolved: ${resolvedKey}`);
         return json({ success: true, route: resolvedRoute, key: resolvedKey, context: context || null });
       }
 

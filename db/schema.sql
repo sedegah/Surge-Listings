@@ -499,6 +499,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- 34. Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
+  actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   actor_name TEXT NOT NULL,
   actor_role TEXT NOT NULL,
   organization TEXT NOT NULL,

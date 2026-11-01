@@ -65,7 +65,9 @@ const Auth = {
 
   getActorName() {
     const user = this.getUser();
-    return user?.fullName || user?.username || 'Signed-in user';
+    const name = user?.fullName || user?.full_name || user?.username;
+    if (!name) throw new Error('Cannot record this action without a verified signed-in user.');
+    return name;
   },
 
   setSession(token, user, remember) {
@@ -472,7 +474,8 @@ const Store = {
         const json = await auditRes.value.json();
         if (json.success && Array.isArray(json.data)) {
           this.auditLog = json.data.map(a => ({
-            id: a.id, when: a.created_at, who: a.actor_name,
+            id: a.id, when: a.created_at, who: a.actor_name, actorRole: a.actor_role,
+            actorPublicId: a.actor_public_id || null,
             action: a.action_type, entity: a.entity_type,
             entityRef: a.entity_id, detail: a.delta_summary
           }));
@@ -699,6 +702,7 @@ const Store = {
   addAudit(who, action, entity, entityRef, oldValue, newValue, detail) {
     this.auditLog.unshift({
       id: 'au' + Date.now() + Math.random().toString(36).slice(2, 6),
+      actorPublicId: Auth.getUser()?.id || null,
       when: new Date().toISOString(), who, action, entity, entityRef, oldValue, newValue, detail
     });
     this.persist();
@@ -828,6 +832,11 @@ const UI = {
   },
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
   fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
+  auditActor(entry) {
+    if (entry.actorPublicId) return `${entry.who} · ${entry.actorPublicId}`;
+    if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') return `${entry.who} · external actor`;
+    return 'Legacy event · actor not verified';
+  },
   fmtDateShort(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
   badge(status) {
     const map = {
