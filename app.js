@@ -1211,16 +1211,27 @@ const BankPortal = {
       const a = Store.getAsset(this.selectedAssetId);
       el.innerHTML = `
         <div class="dtab" onclick="BankPortal.nav('assets')">Assets</div>
-        <div class="dtab active">${a.ref}${this.subPage ? ' — ' + this.getSubPageTitle() : ''}<span class="x" onclick="event.stopPropagation();BankPortal.closeAsset()">×</span></div>
+        <div class="dtab active">${a ? a.ref : 'Asset'}${this.subPage ? ' — ' + this.getSubPageTitle() : ''}<span class="x" onclick="event.stopPropagation();BankPortal.closeAsset()">×</span></div>
+      `;
+    } else if (this.subPage === 'offer-detail' && this.selectedOfferId) {
+      const o = Store.offers.find(x => x.id === this.selectedOfferId);
+      el.innerHTML = `
+        <div class="dtab" onclick="BankPortal.nav('offers')">Offers</div>
+        <div class="dtab active">${o ? o.ref : 'Offer'}<span class="x" onclick="event.stopPropagation();BankPortal.closeSubPage()">×</span></div>
       `;
     } else {
-      el.innerHTML = `<div class="dtab active">Assets</div>`;
+      const titleMap = {
+        'dashboard': 'Dashboard', 'assets': 'Assets', 'legal': 'Legal Instruments',
+        'documents': 'Documents', 'offers': 'Offers & Decisions', 'reports': 'Reports',
+        'notifications': 'Notifications'
+      };
+      el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
     }
   },
 
   getSubPageTitle() {
     return { 'edit-basics': 'Edit Basics', 'edit-legal': 'Edit Legal', 'edit-docs': 'Manage Documents',
-      'edit-media': 'Manage Media', 'edit-title': 'Edit Title', 'edit-valuation': 'Edit Valuation' }[this.subPage] || '';
+      'edit-media': 'Listing Photos', 'edit-title': 'Edit Title', 'edit-valuation': 'Edit Valuation', 'offer-detail': 'Offer Decision' }[this.subPage] || '';
   },
 
   renderDashboard() {
@@ -1340,6 +1351,12 @@ const BankPortal = {
     }
   },
 
+  openOffer(offerId) {
+    this.selectedOfferId = offerId;
+    this.currentView = 'offers';
+    this.subPage = 'offer-detail';
+    this.render();
+  },
   openSubPage(name) {
     this._stagedFile = null;
     this.subPage = name;
@@ -1351,6 +1368,7 @@ const BankPortal = {
   closeSubPage() {
     this._stagedFile = null;
     this._stagedPhotos = {};
+    this.selectedOfferId = null;
     this.subPage = null;
     this.render();
   },
