@@ -1602,10 +1602,15 @@ export default {
       if ((photoUploadMatch || documentUploadMatch) && method === 'POST') {
         const session = await requireBankAuth();
         const assetRef = decodeURIComponent((photoUploadMatch || documentUploadMatch)[1]);
-        const asset = await env.DB.prepare(`
-          SELECT id, public_ref FROM assets
-          WHERE (id = ? OR public_ref = ?) AND bank_id = ?
-        `).bind(assetRef, assetRef, session.bank_id).first();
+        const asset = session.scope === 'surge'
+          ? await env.DB.prepare(`
+              SELECT id, public_ref, bank_id FROM assets
+              WHERE id = ? OR public_ref = ?
+            `).bind(assetRef, assetRef).first()
+          : await env.DB.prepare(`
+              SELECT id, public_ref, bank_id FROM assets
+              WHERE (id = ? OR public_ref = ?) AND bank_id = ?
+            `).bind(assetRef, assetRef, session.bank_id).first();
         if (!asset) return err('Asset not found or access denied.', 404);
 
         const form = await request.formData();
@@ -1648,7 +1653,16 @@ export default {
         if (isLegalInstrument && !caseNumber) {
           return err('Case number is required.', 400);
         }
-        const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+        let mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+        if (!mimeType || mimeType === 'application/octet-stream') {
+          const name = String(file.name || '').toLowerCase();
+          if (name.endsWith('.pdf')) mimeType = 'application/pdf';
+          else if (name.endsWith('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+          else if (name.endsWith('.png')) mimeType = 'image/png';
+          else if (name.endsWith('.webp')) mimeType = 'image/webp';
+        }
+        if (mimeType === 'application/x-pdf') mimeType = 'application/pdf';
         const bucketName = isPhoto ? 'surge-assets' : bucketNameForDocumentCategory(category);
         const bucket = isPhoto ? env.ASSETS_BUCKET : bucketForStoredDocument(bucketName);
         if (!bucket) return err(`R2 storage binding is missing for ${bucketName}.`, 503);
@@ -1660,14 +1674,24 @@ export default {
           if ((count?.count || 0) >= imageLimit) return err(`This asset already has the maximum of ${imageLimit} photos.`, 409);
         }
 
-        const objectKey = `${isPhoto ? 'assets' : 'documents'}/${asset.id}/${crypto.randomUUID()}.${extensionForMime(mimeType)}`;
-        const sizeLabel = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+        const objectKey = `${isPhoto ? 'assets' : 'documents'}/${asset.id}/${crypto.randomUUID()}.${extensionForMime(mimeType) || 'bin'}`;
+        const sizeLabel = file.size >= 1024 * 1024
+          ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.max(1, Math.round(file.size / 1024))} KB`;
         await bucket.put(objectKey, await file.arrayBuffer(), {
           httpMetadata: { contentType: mimeType },
           customMetadata: {
             assetId: asset.id,
+            assetRef: asset.public_ref,
+            category: category.slice(0, 80),
             uploadedBy: session.user_id,
-            category: category.slice(0, 80)
+            uploadedByName: session.full_name || '',
+            bankId: session.bank_id || asset.bank_id || '',
+            ...(form.get('valuer_name') ? { valuerName: String(form.get('valuer_name')).slice(0, 160) } : {}),
+            ...(form.get('valuation_date') ? { valuationDate: String(form.get('valuation_date')).slice(0, 50) } : {}),
+            ...(form.get('market_value') ? { marketValue: String(form.get('market_value')).slice(0, 50) } : {}),
+            ...(form.get('forced_sale_value') ? { forcedSaleValue: String(form.get('forced_sale_value')).slice(0, 50) } : {}),
+            ...(form.get('title') ? { documentTitle: String(form.get('title')).slice(0, 160) } : {})
           }
         });
 
@@ -1691,13 +1715,15 @@ export default {
               env.DB.prepare(`
                 INSERT INTO asset_images (id, asset_id, url, object_key, storage_bucket, caption, is_primary, is_exterior, sort_order, watermark_applied)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-              `).bind(imageId, asset.id, imageUrl, objectKey, bucketName, String(form.get('caption') || category).slice(0, 160), primary, isExterior, sortOrder)
+              `).bind(imageId, asset.id, imageUrl, objectKey, bucketName, String(form.get('caption') || category).slice(0, 160), primary, isExterior, sortOrder),
+              env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id)
             ]);
-            await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_PHOTO', 'AssetImage', imageId, `Uploaded photo for ${asset.public_ref}`);
+            await auditLog(session.full_name, session.role_code, session.bank_id || asset.bank_id, 'UPLOAD_PHOTO', 'AssetImage', imageId, `Uploaded photo for ${asset.public_ref}`);
             return json({ success: true, image_id: imageId, url: imageUrl, message: 'Photo uploaded successfully.' }, 201);
           }
 
           const documentId = 'doc-' + crypto.randomUUID();
+          const publicDocId = 'doc-pub-' + crypto.randomUUID();
           committedDocumentId = documentId;
           const title = isLegalInstrument
             ? `${instrumentType} ${instrumentRef}`.slice(0, 160)
@@ -1717,16 +1743,17 @@ export default {
                   status = 'Pending Verification'
               `).bind(caseId, asset.id, caseNumber, court),
               env.DB.prepare(`
-                INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
-              `).bind(documentId, asset.id, title, category, objectKey, sizeLabel, mimeType, bucketName),
+                INSERT INTO documents (id, public_id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
+              `).bind(documentId, publicDocId, asset.id, title, category, objectKey, sizeLabel, mimeType, bucketName),
               env.DB.prepare(`
                 INSERT INTO legal_instruments (
                   id, case_id, instrument_type, instrument_ref, court, verification_status, uploaded_by, notes
                 )
                 SELECT ?, id, ?, ?, ?, 'Pending', ?, ?
                 FROM enforcement_cases WHERE asset_id = ?
-              `).bind(instrumentId, instrumentType, instrumentRef, court, session.user_id, `Document ${documentId}`, asset.id)
+              `).bind(instrumentId, instrumentType, instrumentRef, court, session.user_id, `Document ${documentId}`, asset.id),
+              env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id)
             ]);
             const instrument = await env.DB.prepare(`
               SELECT li.id, li.instrument_type, li.instrument_ref, li.verification_status,
@@ -1742,7 +1769,7 @@ export default {
               WHERE li.id = ?
               GROUP BY li.id
             `).bind(instrumentId).first();
-            await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_DOCUMENT', 'LegalInstrument', instrumentId, `Uploaded ${instrumentType} ${instrumentRef} for ${asset.public_ref}`);
+            await auditLog(session.full_name, session.role_code, session.bank_id || asset.bank_id, 'UPLOAD_DOCUMENT', 'LegalInstrument', instrumentId, `Uploaded ${instrumentType} ${instrumentRef} for ${asset.public_ref}`);
             return json({
               success: true,
               document_id: documentId,
@@ -1751,11 +1778,22 @@ export default {
               message: 'Legal instrument uploaded and attached to the asset.'
             }, 201);
           }
-          await env.DB.prepare(`
-            INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
-          `).bind(documentId, asset.id, title, category, objectKey, sizeLabel, mimeType, bucketName).run();
-          await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_DOCUMENT', 'Document', documentId, `Uploaded ${category} for ${asset.public_ref}`);
+
+          const isValuationReport = /valuation/i.test(category);
+          await env.DB.batch([
+            env.DB.prepare(`
+              INSERT INTO documents (id, public_id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
+            `).bind(documentId, publicDocId, asset.id, title, category, objectKey, sizeLabel, mimeType, bucketName),
+            env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id),
+            ...(isValuationReport ? [
+              env.DB.prepare(`
+                UPDATE valuations SET document_id = ?, review_required = 1
+                WHERE asset_id = ? AND (document_id IS NULL OR document_id = '')
+              `).bind(documentId, asset.id)
+            ] : [])
+          ]);
+          await auditLog(session.full_name, session.role_code, session.bank_id || asset.bank_id, 'UPLOAD_DOCUMENT', 'Document', documentId, `Uploaded ${category} for ${asset.public_ref}`);
           return json({ success: true, document_id: documentId, category, message: 'Document uploaded and queued for review.' }, 201);
         } catch (storageCommitError) {
           if (committedInstrumentId) {
@@ -1787,7 +1825,7 @@ export default {
           FROM documents d JOIN assets a ON a.id = d.asset_id
           WHERE d.id = ?
         `).bind(documentId).first();
-        if (!doc || (!isAdmin && doc.bank_id !== session.bank_id)) {
+        if (!doc || (!isAdmin && session.scope !== 'surge' && doc.bank_id !== session.bank_id)) {
           return err('Document not found or access denied.', 404);
         }
         const bucketName = doc.storage_bucket || 'surge-documents';
@@ -1813,7 +1851,7 @@ export default {
         ).run();
 
         const extension = extensionForMime(String(doc.content_type || '').toLowerCase());
-        const baseFilename = String(doc.title || 'document').replace(/["\\r\\n]/g, '_').slice(0, 120);
+        const baseFilename = String(doc.title || 'document').replace(/["\r\n]/g, '_').slice(0, 120);
         const filename = extension && !baseFilename.toLowerCase().endsWith(`.${extension}`)
           ? `${baseFilename}.${extension}`
           : baseFilename;
@@ -1828,25 +1866,44 @@ export default {
       // GET /api/bank/documents
       if ((pathname === '/api/bank/documents' || pathname === '/api/v1/documents') && method === 'GET') {
         const session = await requireBankAuth();
-        const docs = await env.DB.prepare(`
-          SELECT d.*, a.public_ref as asset_ref, a.title as asset_title,
-            EXISTS(
-              SELECT 1 FROM title_records tr
-              WHERE tr.document_id = d.id AND tr.verification_status = 'Verified'
-            ) AS title_verified,
-            EXISTS(
-              SELECT 1 FROM valuations v
-              WHERE v.document_id = d.id AND v.status = 'Valid' AND v.review_required = 0
-            ) AS valuation_verified,
-            EXISTS(
-              SELECT 1 FROM legal_instruments li
-              WHERE li.notes = 'Document ' || d.id AND li.verification_status = 'Verified'
-            ) AS instrument_verified
-          FROM documents d
-          JOIN assets a ON d.asset_id = a.id
-          WHERE a.bank_id = ?
-          ORDER BY d.uploaded_at DESC
-        `).bind(session.bank_id).all();
+        const docs = session.scope === 'surge'
+          ? await env.DB.prepare(`
+              SELECT d.*, a.public_ref as asset_ref, a.title as asset_title,
+                EXISTS(
+                  SELECT 1 FROM title_records tr
+                  WHERE tr.document_id = d.id AND tr.verification_status = 'Verified'
+                ) AS title_verified,
+                EXISTS(
+                  SELECT 1 FROM valuations v
+                  WHERE v.document_id = d.id AND v.status = 'Valid' AND v.review_required = 0
+                ) AS valuation_verified,
+                EXISTS(
+                  SELECT 1 FROM legal_instruments li
+                  WHERE li.notes = 'Document ' || d.id AND li.verification_status = 'Verified'
+                ) AS instrument_verified
+              FROM documents d
+              JOIN assets a ON d.asset_id = a.id
+              ORDER BY d.uploaded_at DESC
+            `).all()
+          : await env.DB.prepare(`
+              SELECT d.*, a.public_ref as asset_ref, a.title as asset_title,
+                EXISTS(
+                  SELECT 1 FROM title_records tr
+                  WHERE tr.document_id = d.id AND tr.verification_status = 'Verified'
+                ) AS title_verified,
+                EXISTS(
+                  SELECT 1 FROM valuations v
+                  WHERE v.document_id = d.id AND v.status = 'Valid' AND v.review_required = 0
+                ) AS valuation_verified,
+                EXISTS(
+                  SELECT 1 FROM legal_instruments li
+                  WHERE li.notes = 'Document ' || d.id AND li.verification_status = 'Verified'
+                ) AS instrument_verified
+              FROM documents d
+              JOIN assets a ON d.asset_id = a.id
+              WHERE a.bank_id = ?
+              ORDER BY d.uploaded_at DESC
+            `).bind(session.bank_id).all();
         return json({ success: true, count: docs.results.length, data: docs.results });
       }
 

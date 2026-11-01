@@ -2122,7 +2122,8 @@ const BankPortal = {
   },
 
   renderEditValuation(a) {
-    const valuationDocument = Store.documents.find(doc => doc.id === a.valuationDocumentId && doc.category === 'Valuation Report');
+    const valuationDocument = Store.documents.find(doc => doc.id === a.valuationDocumentId) ||
+      Store.documents.find(doc => (doc.asset_id === a.id || doc.asset_ref === a.ref) && (doc.category === 'Valuation Report' || /valuation/i.test(doc.category)));
     return `
       <div class="page-head">
         <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Asset</button>
@@ -2169,7 +2170,15 @@ const BankPortal = {
     if (this._stagedFile?.category === 'val') {
       try {
         const uploaded = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Valuation Report', {
-          title: `Valuation Report ${dateStr}`
+          title: `Valuation Report - ${a.ref} (${valuerName || dateStr})`,
+          asset_id: a.id,
+          asset_ref: a.ref,
+          asset_title: a.title,
+          market_value: amount,
+          forced_sale_value: forcedSaleValue,
+          valuation_date: dateStr,
+          validity_days: validityDays,
+          valuer_name: valuerName
         }, 'val');
         documentId = uploaded.document_id;
       } catch (error) {
@@ -2177,6 +2186,10 @@ const BankPortal = {
       }
     } else if (this._stagedFile) {
       return UI.toast('The selected file is for a different form. Choose the valuation report here.', 'error');
+    }
+    if (!documentId) {
+      const existingDoc = Store.documents.find(doc => (doc.asset_id === a.id || doc.asset_ref === a.ref) && (doc.category === 'Valuation Report' || /valuation/i.test(doc.category)));
+      documentId = existingDoc?.id || '';
     }
     if (!documentId) return UI.toast('Upload a valuation report before submitting.', 'error');
     try {
@@ -2186,8 +2199,14 @@ const BankPortal = {
         credentials: 'same-origin',
         cache: 'no-store',
         body: JSON.stringify({
-          marketValue: amount, forcedSaleValue, valuationDate: dateStr,
-          validityDays, valuerName, documentId
+          marketValue: amount,
+          forcedSaleValue,
+          valuationDate: dateStr,
+          validityDays,
+          valuerName,
+          documentId,
+          assetRef: a.ref,
+          assetTitle: a.title
         })
       });
       const result = await response.json();
