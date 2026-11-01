@@ -641,7 +641,7 @@ const Store = {
     try {
       const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
         method: 'DELETE',
-        headers: { 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' }
+        credentials: 'same-origin'
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to delete user');

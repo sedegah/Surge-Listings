@@ -884,6 +884,69 @@ export default {
         return json({ success: true, message: 'Staff user created successfully.', data: createdUser }, 201);
       }
 
+      const deleteUserMatch = pathname.match(/^\/api\/(admin|v1)\/users\/([a-zA-Z0-9_-]+)$/);
+      if (deleteUserMatch && method === 'DELETE') {
+        const session = await requireAdminAuth();
+        const userId = deleteUserMatch[2];
+        const target = await env.DB.prepare(`
+          SELECT u.id, u.public_id, u.username, u.full_name, u.role_code, u.status, r.scope
+          FROM users u
+          LEFT JOIN roles r ON r.code = u.role_code
+          WHERE u.id = ?
+        `).bind(userId).first();
+        if (!target) return err('User not found.', 404);
+        if (target.id === session.user_id) return err('You cannot delete your own account.', 409);
+
+        if (target.role_code === 'SA' && target.status === 'Active') {
+          const adminCount = await env.DB.prepare(`
+            SELECT COUNT(*) AS count
+            FROM users
+            WHERE role_code = 'SA' AND status = 'Active'
+          `).first();
+          if ((adminCount?.count || 0) <= 1) {
+            return err('The last active Surge Administrator cannot be deleted.', 409);
+          }
+        }
+
+        const auditId = randomId();
+        const targetPublicId = target.public_id || target.id;
+        const auditSummary = `Deleted staff account @${target.username} (${target.full_name}).`;
+        const auditOldValues = JSON.stringify({
+          username: target.username,
+          fullName: target.full_name,
+          roleCode: target.role_code,
+          status: target.status
+        });
+        const results = await env.DB.batch([
+          env.DB.prepare(`
+            UPDATE sessions
+            SET revoked = 1, revoke_reason = 'USER_DELETED'
+            WHERE user_id = ? AND revoked = 0
+          `).bind(userId),
+          env.DB.prepare(`
+            INSERT INTO audit_logs (
+              id, actor_user_id, actor_name, actor_role, organization, action_type,
+              entity_type, entity_id, delta_summary, old_values, created_at
+            )
+            SELECT ?, ?, ?, ?, ?, 'DELETE_USER', 'User', ?, ?, ?, datetime('now')
+            FROM users WHERE id = ?
+          `).bind(
+            auditId,
+            session.user_id,
+            session.full_name,
+            session.role_code,
+            session.organization_name || session.bank_name || 'Surge Solutions',
+            targetPublicId,
+            auditSummary,
+            auditOldValues,
+            userId
+          ),
+          env.DB.prepare(`DELETE FROM users WHERE id = ?`).bind(userId)
+        ]);
+        if (!results[2]?.meta?.changes) return err('User was not deleted. Refresh the staff list and try again.', 409);
+        return json({ success: true, message: `Staff account @${target.username} was deleted.` });
+      }
+
       // Password Reset
       if ((pathname.match(/^\/api\/admin\/users\/[a-zA-Z0-9_-]+\/reset-password$/) || pathname.match(/^\/api\/v1\/users\/[a-zA-Z0-9_-]+\/reset-password$/)) && method === 'POST') {
         const parts = pathname.split('/');
