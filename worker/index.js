@@ -1120,7 +1120,12 @@ export default {
           env.DB.prepare(`
             UPDATE enforcement_cases SET status = 'Pending Verification'
             WHERE id = ?
-          `).bind(instrument.enforcement_case_id)
+          `).bind(instrument.enforcement_case_id),
+          ...(action === 'reject' ? [env.DB.prepare(`
+            UPDATE assets SET status = 'Under Review', review_required = 1,
+              review_required_reason = ?, updated_at = datetime('now')
+            WHERE id = ? AND status IN ('Approved', 'Live')
+          `).bind(`Legal instrument rejected: ${notes}`, instrument.asset_id)] : [])
         ]);
         await auditLog(
           session.full_name,
@@ -1181,6 +1186,45 @@ export default {
           `Legal clearance issued for ${asset.public_ref}${notes ? `: ${notes}` : ''}`
         );
         return json({ success: true, message: 'Legal clearance issued and saved.' });
+      }
+
+      const legalClearanceRevokeMatch = pathname.match(/^\/api\/admin\/assets\/([a-zA-Z0-9_-]+)\/legal-clearance\/revoke$/);
+      if (legalClearanceRevokeMatch && method === 'POST') {
+        const session = await requireAdminAuth();
+        const assetRef = decodeURIComponent(legalClearanceRevokeMatch[1]);
+        const asset = await env.DB.prepare(`
+          SELECT id, public_ref FROM assets WHERE id = ? OR public_ref = ?
+        `).bind(assetRef, assetRef).first();
+        if (!asset) return err('Asset not found.', 404);
+        const enforcement = await env.DB.prepare(`
+          SELECT id, status FROM enforcement_cases WHERE asset_id = ?
+        `).bind(asset.id).first();
+        if (!enforcement || enforcement.status !== 'Cleared') {
+          return err('This asset has no active legal clearance to revoke.', 409);
+        }
+        const body = await getBody();
+        const notes = String(body.notes || '').trim().slice(0, 2000);
+        if (!notes) return err('A reason is required to revoke legal clearance.', 400);
+        await env.DB.batch([
+          env.DB.prepare(`
+            UPDATE enforcement_cases SET status = 'Pending Verification', notes = ? WHERE id = ?
+          `).bind(notes, enforcement.id),
+          env.DB.prepare(`
+            UPDATE assets SET status = 'Under Review', review_required = 1,
+              review_required_reason = ?, updated_at = datetime('now')
+            WHERE id = ? AND status IN ('Approved', 'Live')
+          `).bind(`Legal clearance revoked: ${notes}`, asset.id)
+        ]);
+        await auditLog(
+          session.full_name,
+          session.role_code,
+          session.organization_name || 'Surge Solutions',
+          'REVOKE_LEGAL_CLEARANCE',
+          'EnforcementCase',
+          asset.public_ref,
+          `Legal clearance revoked for ${asset.public_ref}: ${notes}`
+        );
+        return json({ success: true, message: 'Legal clearance revoked and saved.' });
       }
 
       const bankTitleMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/title$/);
@@ -1376,11 +1420,18 @@ export default {
         }
         const status = action === 'verify' ? 'Verified' : action === 'reject' ? 'Rejected' : 'Revoked';
         const verifiedBy = action === 'verify' ? activeSession?.full_name || actorName : null;
-        await env.DB.prepare(`
+        await env.DB.batch([
+          env.DB.prepare(`
           UPDATE title_records
           SET verification_status = ?, verified_by = ?, verified_at = ?, notes = ?
           WHERE id = ?
-        `).bind(status, verifiedBy, verifiedBy ? new Date().toISOString() : null, notes || null, title.id).run();
+          `).bind(status, verifiedBy, verifiedBy ? new Date().toISOString() : null, notes || null, title.id),
+          ...(action !== 'verify' ? [env.DB.prepare(`
+            UPDATE assets SET status = 'Under Review', review_required = 1,
+              review_required_reason = ?, updated_at = datetime('now')
+            WHERE id = ? AND status IN ('Approved', 'Live')
+          `).bind(`Title verification ${status.toLowerCase()}: ${notes}`, title.asset_id)] : [])
+        ]);
         await auditLog(actorName, actorRole, 'Surge Solutions', `${action.toUpperCase()}_TITLE`, 'TitleRecord',
           title.public_ref, `Title verification ${status.toLowerCase()}${notes ? `: ${notes}` : ''}`);
         return json({ success: true, status, message: `Title verification ${status.toLowerCase()}.` });
@@ -1406,9 +1457,16 @@ export default {
           if (!report) return err('A linked valuation report is required before verification.', 400);
         }
         const status = action === 'verify' ? 'Valid' : action === 'reject' ? 'Rejected' : 'Revoked';
-        await env.DB.prepare(`
+        await env.DB.batch([
+          env.DB.prepare(`
           UPDATE valuations SET status = ?, review_required = ?, notes = ? WHERE id = ?
-        `).bind(status, action === 'verify' ? 0 : 1, notes || null, valuation.id).run();
+          `).bind(status, action === 'verify' ? 0 : 1, notes || null, valuation.id),
+          ...(action !== 'verify' ? [env.DB.prepare(`
+            UPDATE assets SET status = 'Under Review', review_required = 1,
+              review_required_reason = ?, updated_at = datetime('now')
+            WHERE id = ? AND status IN ('Approved', 'Live')
+          `).bind(`Valuation ${status.toLowerCase()}: ${notes}`, valuation.asset_id)] : [])
+        ]);
         await auditLog(actorName, actorRole, 'Surge Solutions', `${action.toUpperCase()}_VALUATION`, 'Valuation',
           valuation.public_ref, `Valuation ${status.toLowerCase()}${notes ? `: ${notes}` : ''}`);
         return json({ success: true, status, message: `Valuation ${status.toLowerCase()}.` });

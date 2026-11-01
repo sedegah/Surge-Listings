@@ -2542,7 +2542,8 @@ const BankPortal = {
 const AdminPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
   activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '', selectedValuationId: null,
-  openedReviewDocuments: new Set(),
+  openedReviewDocuments: new Set(), gateReadiness: null, gateReadinessAssetId: null,
+  gateReadinessLoading: false, gateReadinessError: '',
 
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
@@ -2739,6 +2740,23 @@ const AdminPortal = {
     }
     this.openValuation(assetId, valuation.id);
   },
+  openAssetValuationReview(assetId) {
+    const valuation = Store.valuations
+      .filter(record => record.asset_id === assetId)
+      .sort((left, right) =>
+        String(right.valuation_date).localeCompare(String(left.valuation_date)) ||
+        Number(right.record_order || 0) - Number(left.record_order || 0)
+      )[0];
+    if (valuation) {
+        this.selectedAssetId = assetId;
+        this.selectedValuationId = valuation.id;
+        this.subPage = 'valuation-verify';
+        this.render();
+        return;
+      }
+    this.nav('valuations');
+    UI.toast('The asset has no valuation record yet. The valuation review queue is open.', 'warn');
+  },
   openTitleReview(assetId) {
     this.selectedAssetId = assetId;
     this.selectedValuationId = null;
@@ -2748,9 +2766,54 @@ const AdminPortal = {
     this.render();
   },
   closeAsset() { this.selectedAssetId = null; this.subPage = null; this.render(); },
-  setTab(t) { this.detailTab = t; this.render(); },
+  setTab(t) {
+    this.detailTab = t;
+    if (t === 'review' && this.selectedAssetId) {
+      void this.loadGateReadiness(this.selectedAssetId);
+      return;
+    }
+    this.render();
+  },
+  async loadGateReadiness(assetId) {
+    this.gateReadinessLoading = true;
+    this.gateReadinessError = '';
+    this.render();
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/readiness`,
+        { headers: Store.getAuthHeaders(), credentials: 'same-origin', cache: 'no-store' }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success || !Array.isArray(result.gates)) {
+        throw new Error(result.error || `Gate review could not be loaded (${response.status}).`);
+      }
+      this.gateReadiness = result;
+      this.gateReadinessAssetId = assetId;
+    } catch (error) {
+      this.gateReadinessError = error.message || 'Gate review could not be loaded.';
+      UI.toast(this.gateReadinessError, 'error');
+    } finally {
+      this.gateReadinessLoading = false;
+      this.render();
+    }
+  },
+  async recheckGate(assetId) {
+    await this.loadGateReadiness(assetId);
+    if (!this.gateReadinessError) UI.toast('Gate status refreshed from Cloudflare.', 'success');
+  },
   openSubPage(name) { this.subPage = name; this.render(); },
-  closeSubPage() { this.subPage = null; if (this.currentView === 'title') { this.selectedAssetId = null; this.selectedValuationId = null; } this.render(); },
+  closeSubPage() {
+    this.subPage = null;
+    if (this.currentView === 'title') {
+      this.selectedAssetId = null;
+      this.selectedValuationId = null;
+    }
+    if (this.currentView === 'assets' && this.detailTab === 'review' && this.selectedAssetId) {
+      void this.loadGateReadiness(this.selectedAssetId);
+      return;
+    }
+    this.render();
+  },
 
   renderAssetDetail(id) {
     const a = Store.getAsset(id);
@@ -2762,6 +2825,7 @@ const AdminPortal = {
     let tabContent = '';
     if (tab === 'overview') tabContent = this.renderOverviewTab(a, readiness);
     else if (tab === 'readiness') tabContent = this.renderReadinessTab(a, readiness);
+    else if (tab === 'review') tabContent = this.renderGateReviewTab(a);
     else if (tab === 'activity') tabContent = this.renderActivityTab(a);
     else if (tab === 'audit') tabContent = this.renderAuditTab(a);
 
@@ -2784,6 +2848,7 @@ const AdminPortal = {
         <div class="tabs-inner">
           <div class="tab-inner ${tab === 'overview' ? 'active' : ''}" onclick="AdminPortal.setTab('overview')">Overview</div>
           <div class="tab-inner ${tab === 'readiness' ? 'active' : ''}" onclick="AdminPortal.setTab('readiness')">Readiness <span class="pill ${readiness.allPass ? 'ok' : 'alert'}">${readiness.checks.filter(c => c.pass).length}/${readiness.checks.length}</span></div>
+          <div class="tab-inner ${tab === 'review' ? 'active' : ''}" onclick="AdminPortal.setTab('review')">Review</div>
           <div class="tab-inner ${tab === 'activity' ? 'active' : ''}" onclick="AdminPortal.setTab('activity')">Activity</div>
           <div class="tab-inner ${tab === 'audit' ? 'active' : ''}" onclick="AdminPortal.setTab('audit')">Audit</div>
         </div>
@@ -2845,14 +2910,56 @@ const AdminPortal = {
     return `<div class="group"><div class="caption">Gates with Diagnostics</div><div class="body">${readiness.checks.map(c => this.renderGateItem(c, a)).join('')}</div></div>`;
   },
 
+  renderGateReviewTab(a) {
+    if (this.gateReadinessLoading) {
+      return '<div class="group"><div class="body">Loading current gate status from Cloudflare…</div></div>';
+    }
+    if (this.gateReadinessError) {
+      return `<div class="group"><div class="body"><p class="error">${UI.escapeHtml(this.gateReadinessError)}</p><button class="btn primary" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Retry</button></div></div>`;
+    }
+    if (this.gateReadinessAssetId !== a.id || !this.gateReadiness) {
+      return `<div class="group"><div class="body"><button class="btn primary" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Load gate review</button></div></div>`;
+    }
+    const rows = this.gateReadiness.gates.map(gate => {
+      const key = gate.gate.startsWith('LG-2') ? 'legal'
+        : gate.gate.startsWith('TL-2') ? 'title'
+          : gate.gate.startsWith('VL-1') ? 'valuation' : '';
+      let action = `<button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Recheck</button>`;
+      if (key === 'legal') {
+        action = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open legal review</button>
+          ${gate.passed ? `<button class="btn small danger" onclick="AdminPortal.revokeLegalClearance('${UI.escapeHtml(a.id)}')">Revoke gate</button>` : ''}`;
+      } else if (key === 'title') {
+        action = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Review / reverify title</button>`;
+      } else if (key === 'valuation') {
+        action = `<button class="btn small primary" onclick="AdminPortal.openAssetValuationReview('${UI.escapeHtml(a.id)}')">Review / reverify valuation</button>`;
+      }
+      return `<tr>
+        <td><b>${UI.escapeHtml(gate.gate)}</b><div style="font-size:11px;color:var(--text-2);margin-top:4px">${UI.escapeHtml(gate.detail || '')}</div></td>
+        <td>${UI.badge(gate.passed ? 'PASS' : 'FAIL')}</td>
+        <td><div style="display:flex;gap:6px;flex-wrap:wrap">${action}</div></td>
+      </tr>`;
+    }).join('');
+    return `
+      <div class="page-head"><h2>Review Readiness Gates</h2>
+        <span class="crumb">${this.gateReadiness.gates.filter(gate => gate.passed).length}/${this.gateReadiness.gates.length} passed · Cloudflare status</span>
+        <button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Recheck all</button>
+      </div>
+      <div class="banner info"><div>Review each gate independently. Legal, title, and valuation decisions can be reopened and revoked; evidence-based gates are recalculated from the current Cloudflare records.</div></div>
+      <div class="group"><div class="caption">Gate-by-gate review</div><div class="gridwrap"><table class="grid">
+        <thead><tr><th>Gate and current evidence</th><th>Status</th><th>Review action</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" style="text-align:center;padding:20px">No readiness gates were returned for this asset.</td></tr>'}</tbody>
+      </table></div></div>
+      <div class="group"><div class="caption">Revoke legal clearance</div><div class="body">
+        <textarea id="gate-review-notes" placeholder="Reason required to revoke legal clearance" style="width:100%;height:64px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px"></textarea>
+      </div></div>`;
+  },
+
   renderGateItem(c, a) {
     let fix = '';
-    if (!c.pass) {
-      if (c.key === 'legal' || c.key === 'injunction' || c.key === 'hold') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open</button>`;
-      else if (c.key === 'title' || c.key === 'landSearch') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Verify Title</button>`;
-      else if (c.key === 'valuation') fix = `<button class="btn small primary" onclick="AdminPortal.openLatestValuation('${UI.escapeHtml(a.id)}')">${Store.valuations.some(record => record.asset_id === a.id) ? 'Review Valuation' : 'Request Valuation'}</button>`;
-      else fix = `<span style="font-size:11px;color:var(--text-2);font-style:italic">Awaiting bank submission</span>`;
-    }
+    if (c.key === 'legal' || c.key === 'injunction' || c.key === 'hold') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open Legal Review</button>`;
+    else if (c.key === 'title' || c.key === 'landSearch') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Open Title Review</button>`;
+    else if (c.key === 'valuation') fix = `<button class="btn small primary" onclick="AdminPortal.openAssetValuationReview('${UI.escapeHtml(a.id)}')">Open Valuation Review</button>`;
+    else if (!c.pass) fix = `<span style="font-size:11px;color:var(--text-2);font-style:italic">Awaiting bank submission</span>`;
     return `
       <div class="gate-item">
         <div class="gate-header">
@@ -3031,6 +3138,7 @@ const AdminPortal = {
             <button class="btn success" onclick="AdminPortal.issueClearance('${a.id}')" ${!a.legalSubstate?.instrumentsVerified ? 'disabled title="Verify all instruments first"' : ''}>
               Issue Legal Clearance
             </button>
+            ${a.legalSubstate?.clearanceIssued ? `<button class="btn danger" onclick="AdminPortal.revokeLegalClearance('${UI.escapeHtml(a.id)}')">Revoke Legal Clearance</button>` : ''}
             ${a.injunctionActive ? `<button class="btn danger" onclick="AdminPortal.liftInjunction('${a.id}')">Lift Injunction</button>` : ''}
             ${a.legalHold ? `<button class="btn success" onclick="AdminPortal.releaseLegalHold('${a.id}')">Release Legal Hold</button>` : `<button class="btn danger" onclick="AdminPortal.placeLegalHold()">Place Legal Hold</button>`}
           </div>
@@ -3118,6 +3226,39 @@ const AdminPortal = {
       UI.toast(result.message || 'Legal clearance saved.', 'success');
     } catch (error) {
       UI.toast(error.message || 'Legal clearance could not be saved.', 'error');
+    }
+  },
+
+  async revokeLegalClearance(assetId) {
+    const notes = document.getElementById('gate-review-notes')?.value.trim()
+      || document.getElementById('legal-notes')?.value.trim() || '';
+    if (!notes) {
+      UI.toast('Enter a reason before revoking legal clearance.', 'error');
+      return;
+    }
+    if (!window.confirm('Revoke legal clearance for this asset? This will make the gate fail and return an approved or live asset to review.')) return;
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/legal-clearance/revoke`,
+        {
+          method: 'POST',
+          headers: Store.getAuthHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: JSON.stringify({ notes })
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Legal clearance could not be revoked (${response.status}).`);
+      await Store.fetchRemote();
+      UI.toast(result.message || 'Legal clearance revoked.', 'success');
+      if (this.currentView === 'assets' && this.detailTab === 'review') {
+        await this.loadGateReadiness(assetId);
+      } else {
+        this.render();
+      }
+    } catch (error) {
+      UI.toast(error.message || 'Legal clearance could not be revoked.', 'error');
     }
   },
 
