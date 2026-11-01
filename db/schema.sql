@@ -192,10 +192,13 @@ CREATE TABLE IF NOT EXISTS title_records (
   public_id TEXT UNIQUE,
   asset_id TEXT NOT NULL UNIQUE,
   certificate_number TEXT NOT NULL,
+  title_type TEXT,
+  registered_owner TEXT,
   registry TEXT NOT NULL,
   parcel_number TEXT,
+  document_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
   perfection_status TEXT NOT NULL DEFAULT 'Perfected',
-  verification_status TEXT NOT NULL DEFAULT 'Verified',
+  verification_status TEXT NOT NULL DEFAULT 'Pending',
   verified_by TEXT,
   verified_at TEXT,
   notes TEXT,
@@ -229,6 +232,7 @@ CREATE TABLE IF NOT EXISTS valuations (
   validity_period_days INTEGER NOT NULL DEFAULT 180,
   status TEXT NOT NULL DEFAULT 'Valid',
   review_required INTEGER NOT NULL DEFAULT 0,
+  document_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
   notes TEXT,
   FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
 );
