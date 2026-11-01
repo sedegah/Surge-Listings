@@ -416,9 +416,6 @@ export default {
               last_ip = ?, suspicious_activity_count = suspicious_activity_count + ?
           WHERE id = ? AND revoked = 0
         `).bind(`+${ttlDays} days`, currentIp, suspicious ? 1 : 0, session.id).run());
-        if (suspicious) {
-          ctx.waitUntil(auditLog(session.full_name, session.role_code, session.bank_name, 'SESSION_IP_CHANGED', 'Session', session.id, 'Session used from a different network address; session remains active.'));
-        }
         setSessionCookie(cookieSecret || '', session.remembered === 1 ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
       }
       return session;
@@ -2969,7 +2966,7 @@ export default {
         return json({ success: true, count: invoices.results.length, data: invoices.results });
       }
 
-      // Audit Logs
+      // Audit Logs — Track activity related to assets and documents
       if (['/api/v1/audit-logs', '/api/admin/audit-logs'].includes(pathname)) {
         const logs = await env.DB.prepare(`
           SELECT a.id, a.actor_name, a.actor_role, a.organization, a.action_type, a.entity_type,
@@ -2977,6 +2974,7 @@ export default {
                  u.public_id AS actor_public_id
           FROM audit_logs a
           LEFT JOIN users u ON u.id = a.actor_user_id
+          WHERE a.entity_type IN ('Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase')
           ORDER BY a.created_at DESC LIMIT 150
         `).all();
         return json({ success: true, count: logs.results.length, data: logs.results });

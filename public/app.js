@@ -586,12 +586,14 @@ const Store = {
       if (auditRes.status === 'fulfilled' && auditRes.value?.ok) {
         const json = await auditRes.value.json();
         if (json.success && Array.isArray(json.data)) {
-          this.auditLog = json.data.map(a => ({
-            id: a.id, when: a.created_at, who: a.actor_name, actorRole: a.actor_role,
-            actorPublicId: a.actor_public_id || null,
-            action: a.action_type, entity: a.entity_type,
-            entityRef: a.entity_id, detail: a.delta_summary
-          }));
+          this.auditLog = json.data
+            .filter(a => ['Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase'].includes(a.entity_type) && !a.action_type?.startsWith('SESSION_'))
+            .map(a => ({
+              id: a.id, when: a.created_at, who: a.actor_name, actorRole: a.actor_role,
+              actorPublicId: a.actor_public_id || null,
+              action: a.action_type, entity: a.entity_type,
+              entityRef: a.entity_id, detail: a.delta_summary
+            }));
         }
       }
 
