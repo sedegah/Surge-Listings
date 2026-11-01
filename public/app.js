@@ -163,6 +163,8 @@ const Auth = {
       }
       this.updateUIProfile();
       console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
+      const adminPortalLink = document.getElementById('admin-portal-link');
+      if (adminPortalLink) adminPortalLink.hidden = data.user.scope !== 'surge';
       document.body.style.visibility = 'visible';
       return true;
     } catch(e) {

@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /bank
+Disallow: /bank.html
+Disallow: /login
+Disallow: /login.html
+Disallow: /api/
+
+Sitemap: https://surge-listings.vercel.app/sitemap.xml
