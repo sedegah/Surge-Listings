@@ -268,9 +268,28 @@ export default {
       `).bind(asset.id).first();
       const titleVerified = title?.verification_status === 'Verified' && title.has_document === 1;
 
-      const valuation = await env.DB.prepare(`
-        SELECT v.status, v.review_required, v.expiry_date,
-          EXISTS(SELECT 1 FROM documents d WHERE d.id = v.document_id AND d.asset_id = v.asset_id) AS has_document
+        const enforcement = await env.DB.prepare(`
+          SELECT ec.status,
+            COUNT(li.id) AS instrument_count,
+            SUM(CASE WHEN li.verification_status = 'Verified' AND EXISTS (
+              SELECT 1 FROM documents d
+              WHERE d.asset_id = ec.asset_id
+                AND d.category = 'Legal Instrument'
+                AND d.title = li.instrument_type || ' ' || li.instrument_ref
+            ) THEN 1 ELSE 0 END) AS verified_instrument_count
+          FROM enforcement_cases ec
+          LEFT JOIN legal_instruments li ON li.case_id = ec.id
+          WHERE ec.asset_id = ?
+          GROUP BY ec.id
+        `).bind(asset.id).first();
+        const instrumentsVerified = !!enforcement &&
+          enforcement.instrument_count > 0 &&
+          enforcement.instrument_count === enforcement.verified_instrument_count;
+        const legalClearanceIssued = enforcement?.status === 'Cleared' && instrumentsVerified;
+
+        const valuation = await env.DB.prepare(`
+          SELECT v.status, v.review_required, v.expiry_date,
+            EXISTS(SELECT 1 FROM documents d WHERE d.id = v.document_id AND d.asset_id = v.asset_id) AS has_document
         FROM valuations v WHERE asset_id = ?
         ORDER BY valuation_date DESC, rowid DESC LIMIT 1
       `).bind(asset.id).first();
@@ -285,7 +304,15 @@ export default {
       const photoRequirementMet = (imageCount?.c || 0) >= 1;
       const reservePriceSet = !!asset.reserve_price && asset.reserve_price > 0;
       const gates = [
-        { gate: 'LG-2 Injunction & Legal Clear', passed: !activeInjunction, detail: activeInjunction ? `Active Injunction on ${injunctionRow.instrument_ref}` : 'Court enforcement clear' },
+        {
+          gate: 'LG-2 Injunction & Legal Clear',
+          passed: !activeInjunction && legalClearanceIssued,
+          detail: activeInjunction
+            ? `Active Injunction on ${injunctionRow.instrument_ref}`
+            : legalClearanceIssued
+              ? 'All enforcement instruments verified and legal clearance issued'
+              : 'Enforcement instruments and legal clearance are pending'
+        },
         { gate: 'TL-2 Title Perfection', passed: titleVerified, detail: titleVerified ? 'Title and deed verified by Surge' : 'Title details and supporting deed pending verification' },
         { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuation ? `${valuation.status}${valuation.review_required ? ' — review required' : ''}; expires ${valuation.expiry_date}` : 'No valuation submitted' },
         { gate: 'AS-4 Photo Documentation', passed: photoRequirementMet, detail: `${imageCount?.c || 0} media assets verified` },
@@ -1052,6 +1079,110 @@ export default {
       }
 
       // Legal & Title Queue (/api/admin/legal, /api/admin/titles, /api/admin/valuations)
+      const legalInstrumentReviewMatch = pathname.match(/^\/api\/admin\/legal-instruments\/([a-zA-Z0-9_-]+)\/(verify|reject)$/);
+      if (legalInstrumentReviewMatch && method === 'POST') {
+        const session = await requireAdminAuth();
+        const instrument = await env.DB.prepare(`
+          SELECT li.*, ec.id AS enforcement_case_id, ec.asset_id, a.public_ref
+          FROM legal_instruments li
+          JOIN enforcement_cases ec ON ec.id = li.case_id
+          JOIN assets a ON a.id = ec.asset_id
+          WHERE li.id = ?
+        `).bind(legalInstrumentReviewMatch[1]).first();
+        if (!instrument) return err('Legal instrument not found.', 404);
+
+        const action = legalInstrumentReviewMatch[2];
+        const body = await getBody();
+        const notes = String(body.notes || '').trim().slice(0, 2000);
+        if (action === 'reject' && !notes) return err('A reason is required to reject a legal instrument.', 400);
+        if (action === 'verify') {
+          const document = await env.DB.prepare(`
+            SELECT id FROM documents
+            WHERE asset_id = ? AND category = 'Legal Instrument' AND title = ?
+            ORDER BY uploaded_at DESC LIMIT 1
+          `).bind(instrument.asset_id, `${instrument.instrument_type} ${instrument.instrument_ref}`).first();
+          if (!document) return err('A supporting legal instrument document is required before verification.', 400);
+        }
+
+        const status = action === 'verify' ? 'Verified' : 'Rejected';
+        await env.DB.batch([
+          env.DB.prepare(`
+            UPDATE legal_instruments
+            SET verification_status = ?, verified_by = ?, verified_at = ?, notes = ?
+            WHERE id = ?
+          `).bind(
+            status,
+            action === 'verify' ? session.full_name : null,
+            action === 'verify' ? new Date().toISOString() : null,
+            notes || null,
+            instrument.id
+          ),
+          env.DB.prepare(`
+            UPDATE enforcement_cases SET status = 'Pending Verification'
+            WHERE id = ?
+          `).bind(instrument.enforcement_case_id)
+        ]);
+        await auditLog(
+          session.full_name,
+          session.role_code,
+          session.organization_name || 'Surge Solutions',
+          `${action.toUpperCase()}_LEGAL_INSTRUMENT`,
+          'LegalInstrument',
+          instrument.id,
+          `${instrument.instrument_type} ${status.toLowerCase()} for ${instrument.public_ref}${notes ? `: ${notes}` : ''}`
+        );
+        return json({ success: true, status, message: `Legal instrument ${status.toLowerCase()}.` });
+      }
+
+      const legalClearanceMatch = pathname.match(/^\/api\/admin\/assets\/([a-zA-Z0-9_-]+)\/legal-clearance$/);
+      if (legalClearanceMatch && method === 'POST') {
+        const session = await requireAdminAuth();
+        const assetRef = decodeURIComponent(legalClearanceMatch[1]);
+        const asset = await env.DB.prepare(`
+          SELECT id, public_ref, legal_hold_active FROM assets
+          WHERE id = ? OR public_ref = ?
+        `).bind(assetRef, assetRef).first();
+        if (!asset) return err('Asset not found.', 404);
+        if (asset.legal_hold_active) return err('Cannot issue clearance while a legal hold is active.', 409);
+
+        const enforcement = await env.DB.prepare(`
+          SELECT ec.id, ec.case_number, COUNT(li.id) AS instrument_count,
+            SUM(CASE WHEN li.verification_status = 'Verified' AND EXISTS (
+              SELECT 1 FROM documents d
+              WHERE d.asset_id = ec.asset_id
+                AND d.category = 'Legal Instrument'
+                AND d.title = li.instrument_type || ' ' || li.instrument_ref
+            ) THEN 1 ELSE 0 END) AS verified_instrument_count
+          FROM enforcement_cases ec
+          LEFT JOIN legal_instruments li ON li.case_id = ec.id
+          WHERE ec.asset_id = ?
+          GROUP BY ec.id
+        `).bind(asset.id).first();
+        if (!enforcement || !enforcement.instrument_count) {
+          return err('At least one enforcement instrument is required before clearance.', 400);
+        }
+        if (enforcement.instrument_count !== enforcement.verified_instrument_count) {
+          return err('Verify every enforcement instrument before issuing legal clearance.', 400);
+        }
+
+        const body = await getBody();
+        const notes = String(body.notes || '').trim().slice(0, 2000);
+        await env.DB.prepare(`
+          UPDATE enforcement_cases SET status = 'Cleared', notes = ? WHERE id = ?
+        `).bind(notes || null, enforcement.id).run();
+        await env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
+        await auditLog(
+          session.full_name,
+          session.role_code,
+          session.organization_name || 'Surge Solutions',
+          'ISSUE_LEGAL_CLEARANCE',
+          'EnforcementCase',
+          asset.public_ref,
+          `Legal clearance issued for ${asset.public_ref}${notes ? `: ${notes}` : ''}`
+        );
+        return json({ success: true, message: 'Legal clearance issued and saved.' });
+      }
+
       const bankTitleMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/title$/);
       if (bankTitleMatch && method === 'POST') {
         const session = await requireBankAuth();
@@ -1154,16 +1285,34 @@ export default {
 
         const expiryDate = new Date(Date.parse(`${valuationDate}T00:00:00Z`) + validityDays * 86400000)
           .toISOString().slice(0, 10);
-        const valuationId = 'val-' + crypto.randomUUID();
-        await env.DB.prepare(`
-          INSERT INTO valuations (
-            id, asset_id, valuer_name, market_value, forced_sale_value, valuation_date,
-            expiry_date, validity_period_days, status, review_required, document_id, notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', 1, ?, NULL)
-        `).bind(
-          valuationId, asset.id, valuerName, marketValue, forcedSaleValue,
-          valuationDate, expiryDate, validityDays, documentId
-        ).run();
+        const existingValuation = await env.DB.prepare(`
+          SELECT id FROM valuations
+          WHERE asset_id = ? AND document_id = ?
+          ORDER BY rowid DESC LIMIT 1
+        `).bind(asset.id, documentId).first();
+        const valuationId = existingValuation?.id || 'val-' + crypto.randomUUID();
+        if (existingValuation) {
+          await env.DB.prepare(`
+            UPDATE valuations SET
+              valuer_name = ?, market_value = ?, forced_sale_value = ?, valuation_date = ?,
+              expiry_date = ?, validity_period_days = ?, status = 'Pending Review',
+              review_required = 1, notes = NULL
+            WHERE id = ?
+          `).bind(
+            valuerName, marketValue, forcedSaleValue, valuationDate,
+            expiryDate, validityDays, valuationId
+          ).run();
+        } else {
+          await env.DB.prepare(`
+            INSERT INTO valuations (
+              id, asset_id, valuer_name, market_value, forced_sale_value, valuation_date,
+              expiry_date, validity_period_days, status, review_required, document_id, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', 1, ?, NULL)
+          `).bind(
+            valuationId, asset.id, valuerName, marketValue, forcedSaleValue,
+            valuationDate, expiryDate, validityDays, documentId
+          ).run();
+        }
         await auditLog(session.full_name, session.role_code, session.bank_id, 'SUBMIT_VALUATION', 'Valuation', asset.public_ref,
           `Valuation submitted for ${asset.public_ref}`);
         return json({ success: true, id: valuationId, message: 'Valuation and supporting report submitted for review.' }, 201);
@@ -1454,7 +1603,8 @@ export default {
                 VALUES (?, ?, ?, ?, 'Pending Verification')
                 ON CONFLICT(asset_id) DO UPDATE SET
                   case_number = excluded.case_number,
-                  court = excluded.court
+                  court = excluded.court,
+                  status = 'Pending Verification'
               `).bind(caseId, asset.id, caseNumber, court),
               env.DB.prepare(`
                 INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
@@ -1783,6 +1933,8 @@ export default {
             SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
               owner_bank.legal_name as owner_bank_name,
               (SELECT case_number FROM enforcement_cases WHERE asset_id = a.id LIMIT 1) as enforcement_case_number,
+              (SELECT status FROM enforcement_cases WHERE asset_id = a.id LIMIT 1) as enforcement_case_status,
+              (SELECT MAX(li.injunction_active) FROM legal_instruments li JOIN enforcement_cases ec ON ec.id = li.case_id WHERE ec.asset_id = a.id) as active_injunction,
               (SELECT certificate_number FROM title_records WHERE asset_id = a.id LIMIT 1) as title_certificate_number,
               (SELECT title_type FROM title_records WHERE asset_id = a.id LIMIT 1) as title_type,
               (SELECT registered_owner FROM title_records WHERE asset_id = a.id LIMIT 1) as title_registered_owner,
@@ -1823,6 +1975,10 @@ export default {
             let instrumentSql = `
               SELECT ec.asset_id, li.id, li.instrument_type, li.instrument_ref,
                 li.verification_status, li.court, li.injunction_active,
+                (SELECT d.id FROM documents d WHERE d.asset_id = ec.asset_id
+                  AND d.category = 'Legal Instrument'
+                  AND d.title = li.instrument_type || ' ' || li.instrument_ref
+                  ORDER BY d.uploaded_at DESC LIMIT 1) AS document_id,
                 li.uploaded_by, uploader.full_name AS uploaded_by_name,
                 uploader.public_id AS uploaded_by_public_id,
                 MAX(d.uploaded_at) AS uploaded_at

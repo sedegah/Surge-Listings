@@ -406,7 +406,7 @@ const Store = {
             showReserve: !!d.show_reserve_publicly,
             status: d.status,
             publicationStatus: d.status === 'Live' ? 'Published' : (d.status === 'Approved' ? 'Pending Approval' : 'Unpublished'),
-            legalStatus: d.legal_hold_active ? 'On Hold' : (d.status === 'Live' || d.status === 'Approved' ? 'Cleared' : (d.status === 'Draft' ? 'Not Started' : 'Pending')),
+            legalStatus: d.legal_hold_active ? 'On Hold' : (d.enforcement_case_status === 'Cleared' ? 'Cleared' : (d.enforcement_case_number ? 'Pending' : 'Not Started')),
             valuationAmount: d.valuation_market_value || 0,
             forcedSaleValue: d.valuation_forced_sale_value || 0,
             valuationDate: d.valuation_date || null,
@@ -417,7 +417,7 @@ const Store = {
             valuationReviewRequired: !!d.valuation_review_required,
             valuationDocumentId: d.valuation_document_id || d.latest_valuation_document_id || '',
             landSearchValid: !d.legal_hold_active,
-            injunctionActive: !!d.legal_hold_active,
+            injunctionActive: !!d.active_injunction,
             legalHold: !!d.legal_hold_active,
             legalHoldReason: d.legal_hold_reason || '',
             exteriorImage: (d.image_count || 0) > 0,
@@ -430,18 +430,19 @@ const Store = {
             titleDocumentId: d.title_document_id || d.latest_title_document_id || '',
             titleVerified: d.title_verification_status === 'Verified',
             titleDetails: !!d.title_certificate_number,
-            enforcementBasis: d.internal_bank_ref ? 'Court Judgment' : '',
-            caseRef: d.enforcement_case_number || d.internal_bank_ref || '',
+            enforcementBasis: (d.legal_instruments || []).map(instrument => instrument.instrument_type).filter(Boolean).join(', '),
+            caseRef: d.enforcement_case_number || '',
             images: d.image_count || 0,
             documents: d.document_count || 0,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
             createdBy: d.created_by || 'Not recorded',
             legalSubstate: {
-              enforcementRecorded: d.status !== 'Draft',
-              instrumentsVerified: d.status === 'Live' || d.status === 'Approved',
-              injunctionClear: !d.legal_hold_active,
-              clearanceIssued: d.status === 'Live' || d.status === 'Approved'
+              enforcementRecorded: !!d.enforcement_case_number,
+              instrumentsVerified: (d.legal_instruments || []).length > 0 &&
+                d.legal_instruments.every(instrument => instrument.verification_status === 'Verified'),
+              injunctionClear: !d.active_injunction,
+              clearanceIssued: d.enforcement_case_status === 'Cleared'
             },
             legalNotes: [],
             instruments: (d.legal_instruments || []).map(instrument => ({
@@ -2939,9 +2940,10 @@ const AdminPortal = {
               <span class="inst-status">${UI.badge(i.status)}</span>
               <span style="font-size:11px;color:var(--text-2)">${i.uploadedBy} · ${UI.fmtDateShort(i.uploadedAt)}</span>
               ${i.status !== 'Verified' ? `
-                <button class="btn small primary" onclick="AdminPortal.verifyInstrument('${a.id}','${i.id}')">Verify</button>
+                ${i.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(i.document_id)}">Open document</button>` : '<span class="badge alert">No document</span>'}
+                <button class="btn small primary" onclick="AdminPortal.verifyInstrument('${a.id}','${i.id}','${UI.escapeHtml(i.document_id || '')}')">Verify</button>
                 <button class="btn small danger" onclick="AdminPortal.rejectInstrument('${a.id}','${i.id}')">Reject</button>
-              ` : '<span class="badge ok">✓ Verified</span>'}
+              ` : `<span class="badge ok">✓ Verified</span>${i.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(i.document_id)}">Open document</button>` : ''}`}
             </div>
           `).join('') : '<p style="color:var(--text-2);margin:0">No instruments uploaded by bank. Ask bank to upload legal instruments first.</p>'}
         </div>
@@ -2973,47 +2975,76 @@ const AdminPortal = {
     `;
   },
 
-  verifyInstrument(assetId, instrumentId) {
-    const a = Store.getAsset(assetId);
-    if (!a) return;
-    const inst = a.instruments.find(i => i.id === instrumentId);
-    if (inst) inst.status = 'Verified';
-    const allVerified = a.instruments.every(i => i.status === 'Verified');
-    a.legalSubstate = a.legalSubstate || {};
-    a.legalSubstate.instrumentsVerified = allVerified;
-    a.legalNotes = a.legalNotes || [];
-    a.legalNotes.push({ when: new Date().toISOString(), who: Auth.getActorName(), decision: 'verified', note: 'Instrument ' + instrumentId + ' verified' });
-    Store.addAudit(Auth.getActorName(), 'VERIFY_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Verified', 'Instrument ' + instrumentId);
-    UI.toast(allVerified ? 'All instruments verified. You can now issue legal clearance.' : 'Instrument verified. Verify remaining instruments.', 'success');
-    this.render();
+  async verifyInstrument(assetId, instrumentId, documentId) {
+    if (!documentId) return UI.toast('A supporting legal document is required before verification.', 'error');
+    const evidenceKey = `legal-instruments:${instrumentId}:${documentId}`;
+    if (!this.openedReviewDocuments.has(evidenceKey)) {
+      const opened = await this.openReviewDocument(documentId);
+      if (!opened) return;
+      this.openedReviewDocuments.add(evidenceKey);
+      UI.toast('Review the opened document, then select Verify again to save your decision.', 'success');
+      this.render();
+      return;
+    }
+    return this.submitLegalInstrumentDecision(assetId, instrumentId, 'verify');
   },
 
   rejectInstrument(assetId, instrumentId) {
-    const a = Store.getAsset(assetId);
-    if (!a) return;
-    const inst = a.instruments.find(i => i.id === instrumentId);
-    if (inst) inst.status = 'Rejected';
-    a.legalSubstate = a.legalSubstate || {};
-    a.legalSubstate.instrumentsVerified = false;
-    Store.addAudit(Auth.getActorName(), 'REJECT_INSTRUMENT', 'Asset', a.ref, 'Pending', 'Rejected', 'Instrument ' + instrumentId);
-    UI.toast('Instrument rejected. Bank will be notified to re-upload.', 'warn');
-    this.render();
+    return this.submitLegalInstrumentDecision(assetId, instrumentId, 'reject');
   },
 
-  issueClearance(assetId) {
+  async submitLegalInstrumentDecision(assetId, instrumentId, action) {
+    const notes = document.getElementById('legal-notes')?.value.trim() || '';
+    if (action === 'reject' && !notes) {
+      UI.toast('Add a reason in Verification Notes before rejecting this instrument.', 'error');
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/legal-instruments/${encodeURIComponent(instrumentId)}/${action}`,
+        {
+          method: 'POST',
+          headers: Store.getAuthHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: JSON.stringify({ notes })
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Legal instrument ${action} failed (${response.status}).`);
+      await Store.fetchRemote();
+      this.render();
+      UI.toast(result.message || 'Legal instrument decision saved.', 'success');
+    } catch (error) {
+      UI.toast(error.message || 'Legal instrument decision could not be saved.', 'error');
+    }
+  },
+
+  async issueClearance(assetId) {
     const a = Store.getAsset(assetId);
     if (!a) return;
     if (!a.legalSubstate?.instrumentsVerified) return UI.toast('Verify all instruments first', 'error');
     if (a.injunctionActive) return UI.toast('Cannot clear: active injunction', 'error');
     const notes = document.getElementById('legal-notes')?.value || '';
-    Store.updateAsset(assetId, {
-      legalStatus: 'Cleared',
-      legalSubstate: { ...a.legalSubstate, clearanceIssued: true }
-    }, Auth.getActorName(), 'Legal clearance issued' + (notes ? ': ' + notes : ''));
-    a.legalNotes.push({ when: new Date().toISOString(), who: Auth.getActorName(), decision: 'cleared', note: 'Legal clearance issued ' + (notes ? ': ' + notes : '') });
-    Store.addActivity(assetId, Auth.getActorName(), 'Legal clearance issued — gate now PASS');
-    UI.toast('Legal clearance issued. The "Legal and enforcement verified" gate now passes.', 'success');
-    this.closeSubPage();
+    try {
+      const response = await fetch(
+        `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/legal-clearance`,
+        {
+          method: 'POST',
+          headers: Store.getAuthHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: JSON.stringify({ notes })
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Clearance failed (${response.status}).`);
+      await Store.fetchRemote();
+      this.render();
+      UI.toast(result.message || 'Legal clearance saved.', 'success');
+    } catch (error) {
+      UI.toast(error.message || 'Legal clearance could not be saved.', 'error');
+    }
   },
 
   liftInjunction(assetId) {
