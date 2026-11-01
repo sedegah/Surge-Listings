@@ -3464,6 +3464,44 @@ const AdminPortal = {
     return this.submitVerificationDecision('valuations', recordId, 'revoke');
   },
 
+  async performAssetAction(action, successMessage, body = {}, assetId = this.selectedAssetId) {
+    if (!assetId) {
+      UI.toast('Select an asset before continuing.', 'warn');
+      return false;
+    }
+    try {
+      const response = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/${action}`, {
+        method: 'POST',
+        headers: Store.getAuthHeaders(),
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify(body)
+      });
+      let result;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error(`The API returned an invalid response (${response.status}).`);
+      }
+      if (!response.ok || !result.success) {
+        const failedGates = Array.isArray(result.gates)
+          ? result.gates.filter(gate => !gate.passed).map(gate => gate.gate).join(', ')
+          : '';
+        throw new Error([result.error || `Action failed (${response.status}).`, failedGates].filter(Boolean).join(' Missing requirements: '));
+      }
+      await Store.fetchRemote();
+      UI.toast(successMessage || result.message || 'Asset updated.', 'success');
+      this.render();
+      PublicMarket.render();
+      BankPortal.render();
+      return true;
+    } catch (error) {
+      console.error(`Asset ${action} failed:`, error);
+      UI.toast(error.message || `Could not ${action.replace('-', ' ')} the asset. Please retry.`, 'error');
+      return false;
+    }
+  },
+
   startReview() {
     return this.performAssetAction('review', 'Review started.');
   },
