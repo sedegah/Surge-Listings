@@ -2215,7 +2215,7 @@ export default {
               (SELECT id FROM documents WHERE asset_id = a.id AND category = 'Valuation Report' ORDER BY uploaded_at DESC LIMIT 1) as latest_valuation_document_id,
               (SELECT COUNT(*) FROM asset_images WHERE asset_id = a.id) as image_count,
               (SELECT COUNT(*) FROM documents WHERE asset_id = a.id) as document_count,
-              (SELECT COUNT(*) FROM offers WHERE asset_id = a.id) as offer_count
+              (SELECT COUNT(*) FROM offers WHERE asset_id = a.id AND (${canViewAllBanks ? '1=1' : "surge_verified = 1 AND status != 'Rejected by Surge'"})) as offer_count
             FROM assets a
             JOIN banks b ON a.bank_id = b.id
             LEFT JOIN bank_branches br ON a.branch_id = br.id
@@ -2465,26 +2465,86 @@ export default {
         return json({ success: true, data: updated });
       }
 
-      // Delete Draft Asset
+      // Delete Asset
+      // - Surge Admin can delete any asset (draft, published, or requested)
+      // - Bank staff can delete unpublished assets (status !== 'Live')
+      // - For published assets (status === 'Live'), bank staff must submit a deletion request to Surge Admin
       if (pathname.match(/^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+$/) && method === 'DELETE') {
         const session = await requireBankAuth();
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (!(session.scope === 'surge' && pathname.startsWith('/api/admin/')) && asset.bank_id !== session.bank_id) {
+
+        const isSurgeAdmin = session.scope === 'surge';
+        if (!isSurgeAdmin && asset.bank_id !== session.bank_id) {
           return err('Asset not found or access denied.', 404);
         }
-        if (asset.status !== 'Draft') return err('Only draft assets can be deleted', 400);
+
+        if (!isSurgeAdmin && asset.status === 'Live') {
+          return err('Published assets cannot be deleted directly by bank staff. Please submit a deletion request to Surge Admin.', 400);
+        }
 
         await env.DB.prepare(`DELETE FROM asset_images WHERE asset_id = ?`).bind(asset.id).run();
         await env.DB.prepare(`DELETE FROM documents WHERE asset_id = ?`).bind(asset.id).run();
         await env.DB.prepare(`DELETE FROM title_records WHERE asset_id = ?`).bind(asset.id).run();
         await env.DB.prepare(`DELETE FROM valuations WHERE asset_id = ?`).bind(asset.id).run();
         await env.DB.prepare(`DELETE FROM enforcement_cases WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM offers WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM viewings WHERE asset_id = ?`).bind(asset.id).run();
+        await env.DB.prepare(`DELETE FROM leads WHERE asset_id = ?`).bind(asset.id).run();
         await env.DB.prepare(`DELETE FROM assets WHERE id = ?`).bind(asset.id).run();
 
-        await auditLog(actorName, actorRole, 'Bank', 'DELETE', 'Asset', asset.public_ref, `Draft asset ${asset.public_ref} deleted`);
-        return json({ success: true, message: `Draft asset ${asset.public_ref} deleted successfully.` });
+        const actorTitle = isSurgeAdmin ? 'Surge Admin' : 'Bank Staff';
+        await auditLog(actorName, actorRole, isSurgeAdmin ? 'Surge' : 'Bank', 'DELETE', 'Asset', asset.public_ref, `Asset ${asset.public_ref} (${asset.status}) deleted by ${actorTitle}`);
+        return json({ success: true, message: `Asset ${asset.public_ref} deleted successfully.` });
+      }
+
+      // Bank Request Deletion for Published Asset
+      if (pathname.match(/^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+\/request-deletion$/) && method === 'POST') {
+        const session = await requireBankAuth();
+        const id = pathname.split('/')[4];
+        const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
+        if (!asset) return err('Asset not found', 404);
+        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+          return err('Asset not found or access denied.', 404);
+        }
+
+        const body = await getBody();
+        const reason = body?.reason || 'Bank requested deletion of published listing.';
+
+        await env.DB.prepare(`
+          UPDATE assets
+          SET deletion_requested = 1,
+              deletion_request_reason = ?,
+              deletion_requested_by = ?,
+              deletion_requested_at = datetime('now'),
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).bind(reason, actorName, asset.id).run();
+
+        await auditLog(actorName, actorRole, 'Bank', 'DELETION_REQUEST', 'Asset', asset.public_ref, `Bank requested deletion: ${reason}`);
+        return json({ success: true, message: 'Deletion request submitted to Surge Admin for review.' });
+      }
+
+      // Surge Admin Reject / Dismiss Deletion Request
+      if (pathname.match(/^\/api\/(admin|v1)\/assets\/[a-zA-Z0-9_-]+\/reject-deletion-request$/) && method === 'POST') {
+        const session = await requireAdminAuth();
+        const id = pathname.split('/')[4];
+        const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
+        if (!asset) return err('Asset not found', 404);
+
+        await env.DB.prepare(`
+          UPDATE assets
+          SET deletion_requested = 0,
+              deletion_request_reason = NULL,
+              deletion_requested_by = NULL,
+              deletion_requested_at = NULL,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).bind(asset.id).run();
+
+        await auditLog(actorName, actorRole, 'Surge', 'REJECT_DELETION_REQUEST', 'Asset', asset.public_ref, `Surge Admin dismissed bank deletion request`);
+        return json({ success: true, message: 'Deletion request dismissed. Listing remains active.' });
       }
 
       // Asset Workflow Actions: submit, approve, reject, publish, hold, release-hold
@@ -2702,7 +2762,7 @@ export default {
             FROM offers o
             JOIN assets a ON o.asset_id = a.id
             JOIN banks b ON a.bank_id = b.id
-            ${canViewAllBanks ? '' : 'WHERE a.bank_id = ?'}
+            ${canViewAllBanks ? '' : "WHERE a.bank_id = ? AND o.surge_verified = 1 AND o.status != 'Rejected by Surge'"}
             ORDER BY o.created_at DESC
           `;
           const offers = canViewAllBanks
@@ -2725,8 +2785,8 @@ export default {
           const validityDate = new Date(Date.now() + (Number(validityDays) || 30) * 86400000).toISOString();
 
           await env.DB.prepare(`
-            INSERT INTO offers (id, offer_ref, asset_id, buyer_name, amount, validity_date, conditions, status, below_reserve, notes, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Under Bank Review', ?, ?, datetime('now'), datetime('now'))
+            INSERT INTO offers (id, offer_ref, asset_id, buyer_name, amount, validity_date, conditions, status, below_reserve, notes, surge_verified, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending Surge Verification', ?, ?, 0, datetime('now'), datetime('now'))
           `).bind(
             offerId, offerRef, asset.id, name, Number(amount), validityDate,
             paymentMethod || 'Cash / Direct Bank Transfer',
@@ -2734,26 +2794,78 @@ export default {
             `Ghana Card: ${ghanaCard || 'Provided'} · Contact: ${phone} (${email || ''})`
           ).run();
 
-          await auditLog(name, 'Public Buyer', 'Public', 'OFFER_SUBMISSION', 'Offer', offerRef, `Purchase offer of GHS ${Number(amount).toLocaleString()} submitted on ${asset.public_ref}`);
-          return json({ success: true, reference: offerRef, message: 'Formal offer submitted. Recovery Bank notified.' }, 201);
+          await auditLog(name, 'Public Buyer', 'Public', 'OFFER_SUBMISSION', 'Offer', offerRef, `Purchase offer of GHS ${Number(amount).toLocaleString()} submitted on ${asset.public_ref} — awaiting Surge verification`);
+          return json({ success: true, reference: offerRef, message: 'Formal offer submitted. Awaiting Surge Solutions verification before bank review.' }, 201);
         }
       }
 
-      // Offer Decisions
+      // Surge Admin Verify Offer for Bank Review
+      if (pathname.match(/^\/api\/(admin|v1)\/offers\/[a-zA-Z0-9_-]+\/verify$/) && method === 'POST') {
+        const session = await requireAdminAuth();
+        const offerId = pathname.split('/')[4];
+        const offer = await env.DB.prepare(`SELECT o.*, a.public_ref as asset_ref, a.bank_id FROM offers o JOIN assets a ON o.asset_id = a.id WHERE o.id = ? OR o.offer_ref = ?`).bind(offerId, offerId).first();
+        if (!offer) return err('Offer not found', 404);
+
+        await env.DB.prepare(`
+          UPDATE offers
+          SET status = 'Under Bank Review',
+              surge_verified = 1,
+              surge_verified_by = ?,
+              surge_verified_at = datetime('now'),
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).bind(actorName, offer.id).run();
+
+        await auditLog(actorName, actorRole, 'Surge', 'OFFER_VERIFY', 'Offer', offer.offer_ref, `Offer verified by Surge Admin — released to Recovery Bank for review`);
+        return json({ success: true, message: `Offer ${offer.offer_ref} verified and released to the partner bank for review.` });
+      }
+
+      // Surge Admin Reject Offer
+      if (pathname.match(/^\/api\/(admin|v1)\/offers\/[a-zA-Z0-9_-]+\/reject$/) && method === 'POST') {
+        const session = await requireAdminAuth();
+        const offerId = pathname.split('/')[4];
+        const body = await getBody();
+        const reason = body?.reason || 'Offer rejected during Surge qualification.';
+
+        const offer = await env.DB.prepare(`SELECT o.*, a.public_ref as asset_ref FROM offers o JOIN assets a ON o.asset_id = a.id WHERE o.id = ? OR o.offer_ref = ?`).bind(offerId, offerId).first();
+        if (!offer) return err('Offer not found', 404);
+
+        await env.DB.prepare(`
+          UPDATE offers
+          SET status = 'Rejected by Surge',
+              rejection_reason = ?,
+              surge_verified = 0,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).bind(reason, offer.id).run();
+
+        await auditLog(actorName, actorRole, 'Surge', 'OFFER_REJECT', 'Offer', offer.offer_ref, `Offer rejected by Surge Admin: ${reason}`);
+        return json({ success: true, message: `Offer ${offer.offer_ref} rejected.` });
+      }
+
+      // Offer Decisions (Bank accepts or rejects verified offers)
       if (pathname.includes('/decide') && method === 'POST') {
+        const session = await requireBankAuth();
         const offerId = pathname.split('/')[4];
         const body = await getBody();
         const { decision } = body;
 
-        const offer = await env.DB.prepare(`SELECT * FROM offers WHERE id = ? OR offer_ref = ?`).bind(offerId, offerId).first();
+        const offer = await env.DB.prepare(`SELECT o.*, a.public_ref as asset_ref, a.bank_id FROM offers o JOIN assets a ON o.asset_id = a.id WHERE o.id = ? OR o.offer_ref = ?`).bind(offerId, offerId).first();
         if (!offer) return err('Offer not found', 404);
+
+        if (session.scope !== 'surge' && offer.bank_id !== session.bank_id) {
+          return err('Access denied to this offer.', 403);
+        }
+        if (session.scope !== 'surge' && !offer.surge_verified) {
+          return err('This offer has not yet been reviewed and verified by Surge Admin.', 400);
+        }
 
         await env.DB.prepare(`UPDATE offers SET status = ?, updated_at = datetime('now') WHERE id = ?`).bind(decision, offer.id).run();
         if (decision === 'Accepted') {
           await env.DB.prepare(`UPDATE assets SET status = 'Sold', updated_at = datetime('now') WHERE id = ?`).bind(offer.asset_id).run();
         }
 
-        await auditLog(actorName, actorRole, 'Bank', 'OFFER_DECISION', 'Offer', offer.offer_ref, `Decision: ${decision}`);
+        await auditLog(actorName, actorRole, session.scope === 'surge' ? 'Surge' : 'Bank', 'OFFER_DECISION', 'Offer', offer.offer_ref, `Decision: ${decision}`);
         return json({ success: true, message: `Offer ${decision.toLowerCase()}.` });
       }
 
