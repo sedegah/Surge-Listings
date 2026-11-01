@@ -2798,12 +2798,21 @@ export default {
           const session = await requireBankAuth();
           const canViewAllBanks = session.scope === 'surge' && url.searchParams.get('scope') === 'all';
           if (!canViewAllBanks && !session.bank_id) return err('No bank organisation is associated with this account.', 403);
-          const query = `
+          const query = canViewAllBanks ? `
             SELECT o.*, a.public_ref as asset_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name
             FROM offers o
             JOIN assets a ON o.asset_id = a.id
             JOIN banks b ON a.bank_id = b.id
-            ${canViewAllBanks ? '' : "WHERE a.bank_id = ? AND o.surge_verified = 1 AND o.status != 'Rejected by Surge'"}
+            ORDER BY o.created_at DESC
+          ` : `
+            SELECT o.id, o.offer_ref, o.asset_id, o.buyer_name, o.amount, o.validity_date, o.conditions,
+                   o.status, o.below_reserve, '' as notes, o.surge_verified, o.surge_verified_at,
+                   o.created_at, o.updated_at,
+                   a.public_ref as asset_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name
+            FROM offers o
+            JOIN assets a ON o.asset_id = a.id
+            JOIN banks b ON a.bank_id = b.id
+            WHERE a.bank_id = ? AND o.surge_verified = 1 AND o.status != 'Rejected by Surge'
             ORDER BY o.created_at DESC
           `;
           const offers = canViewAllBanks

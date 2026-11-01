@@ -2583,18 +2583,9 @@ const BankPortal = {
           <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
           <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
           <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
+          <div class="kv-row"><span class="kv-k">Verified Purchaser</span><span class="kv-v"><b>${UI.escapeHtml(o.buyer)}</b> <span class="badge ok" style="margin-left:6px">KYC Verified by Surge</span></span></div>
           <div class="kv-row"><span class="kv-k">Surge Screening</span><span class="kv-v"><span class="badge ok">✓ Verified by Surge</span></span></div>
           <div class="kv-row"><span class="kv-k">Current Status</span><span class="kv-v">${UI.badge(o.status)}</span></div>
-        </div>
-      </div>
-
-      <div class="group">
-        <div class="caption">Buyer Contact &amp; Identification</div>
-        <div class="body">
-          <div class="kv-row"><span class="kv-k">Full Legal Name</span><span class="kv-v"><b>${UI.escapeHtml(o.buyer)}</b></span></div>
-          <div class="kv-row"><span class="kv-k">Ghana Card Number</span><span class="kv-v"><code>${UI.escapeHtml(o.ghanaCard || 'GHA-1341354436-6')}</code></span></div>
-          <div class="kv-row"><span class="kv-k">Telephone Number</span><span class="kv-v">${o.phone ? `<a href="tel:${UI.escapeHtml(o.phone)}">${UI.escapeHtml(o.phone)}</a>` : 'Not recorded'}</span></div>
-          <div class="kv-row"><span class="kv-k">Email Address</span><span class="kv-v">${o.email ? `<a href="mailto:${UI.escapeHtml(o.email)}">${UI.escapeHtml(o.email)}</a>` : 'Not recorded'}</span></div>
         </div>
       </div>
 
