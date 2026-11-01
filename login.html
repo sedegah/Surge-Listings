@@ -187,7 +187,9 @@ input[aria-invalid=true] { border-color: var(--danger) }
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d && d.authenticated && d.user) {
-          var dest = safeNext || (d.user.scope === 'surge' ? ADMIN_PAGE : NEXT_PAGE);
+          var defaultPage = d.user.scope === 'surge' ? ADMIN_PAGE : NEXT_PAGE;
+          var dest = safeNext || defaultPage;
+          if (dest === ADMIN_PAGE && d.user.scope !== 'surge') dest = NEXT_PAGE;
           console.info('[Login Page] Active session detected. Redirecting to:', dest);
           location.href = dest;
         } else {

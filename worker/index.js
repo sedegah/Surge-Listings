@@ -141,6 +141,7 @@ export default {
     // Require bank-level authentication — scope must be 'bank' or 'surge'
     async function requireBankAuth() {
       const session = await requireAuth();
+      if (session.scope === 'surge') return session;
       if (session.scope !== 'bank' && session.scope !== 'surge') {
         throw new Response(JSON.stringify({ success: false, error: 'Bank Portal access denied. This account does not have bank portal permissions.', code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
       }
@@ -386,6 +387,29 @@ export default {
         await auditLog(session.full_name, session.role_code, session.bank_id, 'INVITATION_SENT', 'Invitation', inviteId, `Invitation sent to ${email}`);
         const acceptUrl = `https://surge-listings.vercel.app/accept-invitation?token=${inviteToken}`;
         return json({ success: true, inviteId, token: inviteToken, acceptUrl, expiresAt, message: `Invitation created for ${email}. Share the accept URL with them.` }, 201);
+      }
+
+      const isAdminAlias =
+        pathname === '/api/v1/banks' ||
+        /^\/api\/v1\/banks\/[a-zA-Z0-9_-]+$/.test(pathname) ||
+        pathname === '/api/v1/users' ||
+        /^\/api\/v1\/users\/[a-zA-Z0-9_-]+(?:\/reset-password)?$/.test(pathname) ||
+        pathname === '/api/v1/audit-logs' ||
+        pathname === '/api/v1/kyc' ||
+        /^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+\/(approve|reject|publish|unpublish|hold|release-hold|readiness)$/.test(pathname);
+      const isAssetApi = /^\/api\/(v1|bank|admin)\/assets(?:\/[a-zA-Z0-9_-]+)?$/.test(pathname);
+      const isBankDataAlias = [
+        '/api/v1/branches',
+        '/api/v1/leads',
+        '/api/v1/enquiries',
+        '/api/v1/viewings',
+        '/api/v1/offers',
+        '/api/v1/invoices'
+      ].includes(pathname);
+      if (pathname === '/api/admin' || pathname.startsWith('/api/admin/') || isAdminAlias) {
+        await requireAdminAuth();
+      } else if (pathname.startsWith('/api/bank/') || isAssetApi || (isBankDataAlias && method === 'GET')) {
+        await requireBankAuth();
       }
 
       // =========================================================================
@@ -656,6 +680,22 @@ export default {
       // GET /api/bank/dashboard
       if (pathname === '/api/bank/dashboard' && method === 'GET') {
         const session = await requireBankAuth();
+        if (session.scope === 'surge') {
+          const stats = await env.DB.prepare(`
+            SELECT
+              (SELECT COUNT(*) FROM assets) as totalAssets,
+              (SELECT COALESCE(SUM(reserve_price), 0) FROM assets) as totalPortfolioValue,
+              (SELECT COUNT(*) FROM assets WHERE status = 'Live') as liveListings,
+              (SELECT COUNT(*) FROM assets WHERE status IN ('Submitted by Bank', 'Submitted', 'Under Review')) as pendingSurgeReview,
+              (SELECT COUNT(*) FROM assets WHERE legal_hold_active = 1) as legalHolds,
+              (SELECT COUNT(*) FROM assets WHERE status = 'Sold') as completedSales,
+              (SELECT COUNT(*) FROM offers WHERE status = 'Under Bank Review') as activeOffers
+          `).first();
+          const recentActivity = await env.DB.prepare(`
+            SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 8
+          `).all();
+          return json({ success: true, data: { ...stats, recentActivity: recentActivity.results } });
+        }
         const sid = session.bank_id;
         const stats = await env.DB.prepare(`
           SELECT 
@@ -689,12 +729,15 @@ export default {
       // GET /api/bank/branches
       if ((pathname === '/api/bank/branches' || pathname === '/api/v1/branches') && method === 'GET') {
         const session = await requireBankAuth();
-        const branches = await env.DB.prepare(`
+        const query = `
           SELECT b.*, (SELECT COUNT(*) FROM assets WHERE branch_id = b.id) as asset_count
           FROM bank_branches b
-          WHERE b.bank_id = ?
+          ${session.scope === 'surge' ? '' : 'WHERE b.bank_id = ?'}
           ORDER BY b.region ASC, b.district ASC, b.name ASC
-        `).bind(session.bank_id).all();
+        `;
+        const branches = session.scope === 'surge'
+          ? await env.DB.prepare(query).all()
+          : await env.DB.prepare(query).bind(session.bank_id).all();
         return json({ success: true, count: branches.results.length, data: branches.results });
       }
 
@@ -868,14 +911,12 @@ export default {
       // Full Lifecycle: Create Draft, Update, Submit, Approve, Publish, Hold
       // =========================================================================
       if (['/api/v1/assets', '/api/bank/assets', '/api/admin/assets'].includes(pathname)) {
-        const session = await resolveSession();
-        const callerBankId = session?.bank_id || request.headers.get('x-bank-id') || url.searchParams.get('bank_id');
-        const callerBranchId = session?.branch_id || request.headers.get('x-branch-id') || url.searchParams.get('branch_id');
+        const session = await requireBankAuth();
+        const callerBankId = session.bank_id;
+        const callerBranchId = session.branch_id;
 
         if (method === 'GET') {
-          const isSurgeAdmin = request.headers.get('x-actor-role') === 'Surge Admin' ||
-            url.searchParams.get('scope') === 'all' ||
-            pathname.startsWith('/api/admin');
+          const isSurgeAdmin = session.scope === 'surge';
           let sql = `
             SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
               (SELECT COUNT(*) FROM asset_images WHERE asset_id = a.id) as image_count,
@@ -905,6 +946,10 @@ export default {
 
         if (method === 'POST') {
           const body = await getBody();
+          const assetBankId = session.scope === 'surge'
+            ? body.bankId || callerBankId
+            : callerBankId;
+          if (!assetBankId) return err('A bank must be selected before creating an asset.', 400);
           const id = 'a-' + Date.now();
           const year = new Date().getFullYear();
           const cat = body.categoryCode || 'House';
@@ -923,7 +968,7 @@ export default {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 0, 0, ?, datetime('now'), datetime('now'))
           `).bind(
             id,
-            body.bankId || callerBankId || 'bank-mtb',
+            assetBankId,
             body.branchId || callerBranchId || null,
             publicRef,
             body.internalBankRef || ('BNK-REF-' + Math.floor(10000 + Math.random() * 90000)),
@@ -952,6 +997,7 @@ export default {
 
       // Single Asset Detail
       if (pathname.match(/^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+$/) && method === 'GET') {
+        const session = await requireBankAuth();
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`
           SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name
@@ -962,6 +1008,9 @@ export default {
         `).bind(id, id).first();
 
         if (!asset) return err('Asset not found', 404);
+        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+          return err('Asset not found or access denied.', 404);
+        }
 
         const images = await env.DB.prepare(`SELECT * FROM asset_images WHERE asset_id = ? ORDER BY sort_order ASC`).bind(asset.id).all();
         const docs = await env.DB.prepare(`SELECT * FROM documents WHERE asset_id = ? ORDER BY uploaded_at DESC`).bind(asset.id).all();
@@ -986,9 +1035,13 @@ export default {
 
       // Update Asset (PUT)
       if (pathname.match(/^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+$/) && method === 'PUT') {
+        const session = await requireBankAuth();
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+          return err('Asset not found or access denied.', 404);
+        }
 
         const body = await getBody();
         const updates = [];
@@ -1046,9 +1099,13 @@ export default {
 
       // Delete Draft Asset
       if (pathname.match(/^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+$/) && method === 'DELETE') {
+        const session = await requireBankAuth();
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
+        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+          return err('Asset not found or access denied.', 404);
+        }
         if (asset.status !== 'Draft') return err('Only draft assets can be deleted', 400);
 
         await env.DB.prepare(`DELETE FROM asset_images WHERE asset_id = ?`).bind(asset.id).run();
@@ -1144,12 +1201,17 @@ export default {
       // Enquiries & Leads
       if (['/api/v1/leads', '/api/v1/enquiries', '/api/bank/enquiries', '/api/marketplace/enquiries', '/api/public/enquiries'].includes(pathname)) {
         if (method === 'GET') {
-          const leads = await env.DB.prepare(`
+          const session = await requireBankAuth();
+          const query = `
             SELECT l.*, a.public_ref as asset_ref, a.title as asset_title
             FROM leads l
             JOIN assets a ON l.asset_id = a.id
+            ${session.scope === 'surge' ? '' : 'WHERE a.bank_id = ?'}
             ORDER BY l.created_at DESC
-          `).all();
+          `;
+          const leads = session.scope === 'surge'
+            ? await env.DB.prepare(query).all()
+            : await env.DB.prepare(query).bind(session.bank_id).all();
           return json({ success: true, count: leads.results.length, data: leads.results });
         }
         if (method === 'POST') {
@@ -1181,12 +1243,17 @@ export default {
       // Viewings
       if (['/api/v1/viewings', '/api/bank/viewings', '/api/marketplace/viewings'].includes(pathname)) {
         if (method === 'GET') {
-          const viewings = await env.DB.prepare(`
+          const session = await requireBankAuth();
+          const query = `
             SELECT v.*, a.public_ref as asset_ref, a.public_location, a.asset_type
             FROM viewings v
             JOIN assets a ON v.asset_id = a.id
+            ${session.scope === 'surge' ? '' : 'WHERE a.bank_id = ?'}
             ORDER BY v.created_at DESC
-          `).all();
+          `;
+          const viewings = session.scope === 'surge'
+            ? await env.DB.prepare(query).all()
+            : await env.DB.prepare(query).bind(session.bank_id).all();
           return json({ success: true, count: viewings.results.length, data: viewings.results });
         }
         if (method === 'POST') {
@@ -1211,13 +1278,18 @@ export default {
       // Offers
       if (['/api/v1/offers', '/api/admin/offers', '/api/bank/offers', '/api/marketplace/offers'].includes(pathname)) {
         if (method === 'GET') {
-          const offers = await env.DB.prepare(`
+          const session = await requireBankAuth();
+          const query = `
             SELECT o.*, a.public_ref as asset_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name
             FROM offers o
             JOIN assets a ON o.asset_id = a.id
             JOIN banks b ON a.bank_id = b.id
+            ${session.scope === 'surge' ? '' : 'WHERE a.bank_id = ?'}
             ORDER BY o.created_at DESC
-          `).all();
+          `;
+          const offers = session.scope === 'surge'
+            ? await env.DB.prepare(query).all()
+            : await env.DB.prepare(query).bind(session.bank_id).all();
           return json({ success: true, count: offers.results.length, data: offers.results });
         }
         if (method === 'POST') {
@@ -1269,12 +1341,17 @@ export default {
 
       // Invoices
       if (['/api/v1/invoices', '/api/admin/invoices', '/api/bank/invoices'].includes(pathname)) {
-        const invoices = await env.DB.prepare(`
+        const session = await requireBankAuth();
+        const query = `
           SELECT i.*, b.legal_name as bank_name, b.short_code as bank_code
           FROM invoices i
           JOIN banks b ON i.bank_id = b.id
+          ${session.scope === 'surge' ? '' : 'WHERE i.bank_id = ?'}
           ORDER BY i.created_at DESC
-        `).all();
+        `;
+        const invoices = session.scope === 'surge'
+          ? await env.DB.prepare(query).all()
+          : await env.DB.prepare(query).bind(session.bank_id).all();
         return json({ success: true, count: invoices.results.length, data: invoices.results });
       }
 

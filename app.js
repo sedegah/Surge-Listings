@@ -148,8 +148,8 @@ const Auth = {
 
       // Authorization check
       if (requiredScope === 'bank') {
-        if (data.user.scope === 'public') {
-          console.warn('[Auth Guard] Public buyer attempted to open bank portal.');
+        if (data.user.scope !== 'bank' && data.user.scope !== 'surge') {
+          console.warn('[Auth Guard] Account is not authorized to open the bank portal.');
           window.location.href = 'login.html?next=bank.html';
           return false;
         }
