@@ -1243,10 +1243,15 @@ export default {
       if (bankTitleMatch && method === 'POST') {
         const session = await requireBankAuth();
         const assetRef = decodeURIComponent(bankTitleMatch[1]);
-        const asset = await env.DB.prepare(`
-          SELECT id, public_ref FROM assets
-          WHERE (id = ? OR public_ref = ?) AND bank_id = ?
-        `).bind(assetRef, assetRef, session.bank_id).first();
+        const asset = session.scope === 'surge'
+          ? await env.DB.prepare(`
+              SELECT id, public_ref, bank_id FROM assets
+              WHERE id = ? OR public_ref = ?
+            `).bind(assetRef, assetRef).first()
+          : await env.DB.prepare(`
+              SELECT id, public_ref, bank_id FROM assets
+              WHERE (id = ? OR public_ref = ?) AND bank_id = ?
+            `).bind(assetRef, assetRef, session.bank_id).first();
         if (!asset) return err('Asset not found or access denied.', 404);
 
         const body = await getBody();
@@ -1280,27 +1285,30 @@ export default {
         if (!documentId) return err('Upload a title deed before requesting verification.', 400);
 
         const titleRecordId = 'tr-' + crypto.randomUUID();
-        await env.DB.prepare(`
-          INSERT INTO title_records (
-            id, asset_id, certificate_number, title_type, registered_owner, registry,
-            document_id, perfection_status, verification_status, verified_by, verified_at, notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NULL, NULL, NULL)
-          ON CONFLICT(asset_id) DO UPDATE SET
-            certificate_number = excluded.certificate_number,
-            title_type = excluded.title_type,
-            registered_owner = excluded.registered_owner,
-            registry = excluded.registry,
-            document_id = excluded.document_id,
-            perfection_status = excluded.perfection_status,
-            verification_status = 'Pending',
-            verified_by = NULL,
-            verified_at = NULL,
-            notes = NULL
-        `).bind(
-          titleRecordId, asset.id, certificateNumber, titleType, registeredOwner,
-          registry, documentId, perfectionStatus
-        ).run();
-        await auditLog(session.full_name, session.role_code, session.bank_id, 'SUBMIT_TITLE', 'TitleRecord', asset.public_ref,
+        await env.DB.batch([
+          env.DB.prepare(`
+            INSERT INTO title_records (
+              id, asset_id, certificate_number, title_type, registered_owner, registry,
+              document_id, perfection_status, verification_status, verified_by, verified_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NULL, NULL, NULL)
+            ON CONFLICT(asset_id) DO UPDATE SET
+              certificate_number = excluded.certificate_number,
+              title_type = excluded.title_type,
+              registered_owner = excluded.registered_owner,
+              registry = excluded.registry,
+              document_id = excluded.document_id,
+              perfection_status = excluded.perfection_status,
+              verification_status = 'Pending',
+              verified_by = NULL,
+              verified_at = NULL,
+              notes = NULL
+          `).bind(
+            titleRecordId, asset.id, certificateNumber, titleType, registeredOwner,
+            registry, documentId, perfectionStatus
+          ),
+          env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id)
+        ]);
+        await auditLog(session.full_name, session.role_code, session.bank_id || asset.bank_id, 'SUBMIT_TITLE', 'TitleRecord', asset.public_ref,
           `Title details submitted for ${asset.public_ref}`);
         return json({ success: true, message: 'Title details and deed submitted for verification.' }, 201);
       }
@@ -1309,10 +1317,15 @@ export default {
       if (bankValuationMatch && method === 'POST') {
         const session = await requireBankAuth();
         const assetRef = decodeURIComponent(bankValuationMatch[1]);
-        const asset = await env.DB.prepare(`
-          SELECT id, public_ref FROM assets
-          WHERE (id = ? OR public_ref = ?) AND bank_id = ?
-        `).bind(assetRef, assetRef, session.bank_id).first();
+        const asset = session.scope === 'surge'
+          ? await env.DB.prepare(`
+              SELECT id, public_ref, bank_id FROM assets
+              WHERE id = ? OR public_ref = ?
+            `).bind(assetRef, assetRef).first()
+          : await env.DB.prepare(`
+              SELECT id, public_ref, bank_id FROM assets
+              WHERE (id = ? OR public_ref = ?) AND bank_id = ?
+            `).bind(assetRef, assetRef, session.bank_id).first();
         if (!asset) return err('Asset not found or access denied.', 404);
 
         const body = await getBody();
@@ -1321,7 +1334,7 @@ export default {
         const valuationDate = String(body.valuationDate || '').trim();
         const validityDays = Number(body.validityDays);
         const valuerName = String(body.valuerName || '').trim().slice(0, 160);
-        const documentId = String(body.documentId || '').trim();
+        let documentId = String(body.documentId || '').trim();
         if (!Number.isFinite(marketValue) || marketValue <= 0 ||
           !Number.isFinite(forcedSaleValue) || forcedSaleValue <= 0) {
           return err('Enter valid market and forced-sale values greater than zero.', 400);
@@ -1333,9 +1346,17 @@ export default {
           return err('Valuation validity must be between 1 and 3650 days.', 400);
         }
         if (!valuerName) return err('Valuer name is required.', 400);
+        if (!documentId) {
+          const latestDoc = await env.DB.prepare(`
+            SELECT id FROM documents
+            WHERE asset_id = ? AND (category = 'Valuation Report' OR category LIKE '%Valuation%')
+            ORDER BY uploaded_at DESC LIMIT 1
+          `).bind(asset.id).first();
+          documentId = latestDoc?.id || '';
+        }
         const document = documentId ? await env.DB.prepare(`
           SELECT id FROM documents
-          WHERE id = ? AND asset_id = ? AND category = 'Valuation Report'
+          WHERE id = ? AND asset_id = ? AND (category = 'Valuation Report' OR category LIKE '%Valuation%')
         `).bind(documentId, asset.id).first() : null;
         if (!document) return err('Upload a valuation report before submitting the valuation.', 400);
 
@@ -1343,35 +1364,41 @@ export default {
           .toISOString().slice(0, 10);
         const existingValuation = await env.DB.prepare(`
           SELECT id FROM valuations
-          WHERE asset_id = ? AND document_id = ?
-          ORDER BY rowid DESC LIMIT 1
-        `).bind(asset.id, documentId).first();
+          WHERE asset_id = ?
+          ORDER BY valuation_date DESC, rowid DESC LIMIT 1
+        `).bind(asset.id).first();
         const valuationId = existingValuation?.id || 'val-' + crypto.randomUUID();
         if (existingValuation) {
-          await env.DB.prepare(`
-            UPDATE valuations SET
-              valuer_name = ?, market_value = ?, forced_sale_value = ?, valuation_date = ?,
-              expiry_date = ?, validity_period_days = ?, status = 'Pending Review',
-              review_required = 1, notes = NULL
-            WHERE id = ?
-          `).bind(
-            valuerName, marketValue, forcedSaleValue, valuationDate,
-            expiryDate, validityDays, valuationId
-          ).run();
+          await env.DB.batch([
+            env.DB.prepare(`
+              UPDATE valuations SET
+                valuer_name = ?, market_value = ?, forced_sale_value = ?, valuation_date = ?,
+                expiry_date = ?, validity_period_days = ?, status = 'Pending Review',
+                review_required = 1, document_id = ?, notes = NULL
+              WHERE id = ?
+            `).bind(
+              valuerName, marketValue, forcedSaleValue, valuationDate,
+              expiryDate, validityDays, documentId, valuationId
+            ),
+            env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id)
+          ]);
         } else {
-          await env.DB.prepare(`
-            INSERT INTO valuations (
-              id, asset_id, valuer_name, market_value, forced_sale_value, valuation_date,
-              expiry_date, validity_period_days, status, review_required, document_id, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', 1, ?, NULL)
-          `).bind(
-            valuationId, asset.id, valuerName, marketValue, forcedSaleValue,
-            valuationDate, expiryDate, validityDays, documentId
-          ).run();
+          await env.DB.batch([
+            env.DB.prepare(`
+              INSERT INTO valuations (
+                id, asset_id, valuer_name, market_value, forced_sale_value, valuation_date,
+                expiry_date, validity_period_days, status, review_required, document_id, notes
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending Review', 1, ?, NULL)
+            `).bind(
+              valuationId, asset.id, valuerName, marketValue, forcedSaleValue,
+              valuationDate, expiryDate, validityDays, documentId
+            ),
+            env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id)
+          ]);
         }
-        await auditLog(session.full_name, session.role_code, session.bank_id, 'SUBMIT_VALUATION', 'Valuation', asset.public_ref,
+        await auditLog(session.full_name, session.role_code, session.bank_id || asset.bank_id, 'SUBMIT_VALUATION', 'Valuation', asset.public_ref,
           `Valuation submitted for ${asset.public_ref}`);
-        return json({ success: true, id: valuationId, message: 'Valuation and supporting report submitted for review.' }, 201);
+        return json({ success: true, id: valuationId, document_id: documentId, message: 'Valuation and supporting report submitted for review.' }, 201);
       }
 
       if (pathname === '/api/admin/legal' && method === 'GET') {
@@ -1405,6 +1432,7 @@ export default {
           FROM valuations v
           JOIN assets a ON v.asset_id = a.id
           JOIN banks b ON a.bank_id = b.id
+          LEFT JOIN documents d ON d.id = v.document_id
           ORDER BY v.valuation_date DESC, v.rowid DESC
         `).all();
         return json({ success: true, count: vals.results.length, data: vals.results });
@@ -1462,10 +1490,21 @@ export default {
         if (['reject', 'revoke'].includes(action) && !notes) return err('A reason is required to reject or revoke valuation verification.', 400);
         const expired = Date.parse(`${valuation.expiry_date}T23:59:59Z`) < Date.now();
         if (action === 'verify' && expired) return err('This valuation has expired. Ask the bank to submit a current valuation.', 400);
+        let resolvedDocumentId = valuation.document_id;
         if (action === 'verify') {
-          const report = await env.DB.prepare(`
-            SELECT id FROM documents WHERE id = ? AND asset_id = ? AND category = 'Valuation Report'
-          `).bind(valuation.document_id, valuation.asset_id).first();
+          if (!resolvedDocumentId) {
+            const fallbackDoc = await env.DB.prepare(`
+              SELECT id FROM documents WHERE asset_id = ? AND (category = 'Valuation Report' OR category LIKE '%Valuation%')
+              ORDER BY uploaded_at DESC LIMIT 1
+            `).bind(valuation.asset_id).first();
+            resolvedDocumentId = fallbackDoc?.id || null;
+            if (resolvedDocumentId) {
+              await env.DB.prepare(`UPDATE valuations SET document_id = ? WHERE id = ?`).bind(resolvedDocumentId, valuation.id).run();
+            }
+          }
+          const report = resolvedDocumentId ? await env.DB.prepare(`
+            SELECT id FROM documents WHERE id = ? AND asset_id = ? AND (category = 'Valuation Report' OR category LIKE '%Valuation%')
+          `).bind(resolvedDocumentId, valuation.asset_id).first() : null;
           if (!report) return err('A linked valuation report is required before verification.', 400);
         }
         const status = action === 'verify' ? 'Valid' : action === 'reject' ? 'Rejected' : 'Revoked';
@@ -1477,7 +1516,8 @@ export default {
             UPDATE assets SET status = 'Under Review', review_required = 1,
               review_required_reason = ?, updated_at = datetime('now')
             WHERE id = ? AND status IN ('Approved', 'Live')
-          `).bind(`Valuation ${status.toLowerCase()}: ${notes}`, valuation.asset_id)] : [])
+          `).bind(`Valuation ${status.toLowerCase()}: ${notes}`, valuation.asset_id)] : []),
+          env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(valuation.asset_id)
         ]);
         await auditLog(actorName, actorRole, 'Surge Solutions', `${action.toUpperCase()}_VALUATION`, 'Valuation',
           valuation.public_ref, `Valuation ${status.toLowerCase()}${notes ? `: ${notes}` : ''}`);
