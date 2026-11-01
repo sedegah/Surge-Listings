@@ -295,7 +295,8 @@ const Store = {
     this.users = [];
     this.branches = [];
     this.startDeploymentVersionMonitor();
-    if (!document.body?.dataset.portal) this.fetchRemote();
+    const portal = document.body?.dataset.portal;
+    if (!portal || portal === 'public') this.fetchRemote();
   },
 
   startDeploymentVersionMonitor() {
@@ -364,7 +365,7 @@ const Store = {
       const headers = this.getAuthHeaders();
       const portal = document.body?.dataset.portal;
       const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
-      const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : '/api/v1/assets' + scopeParam;
+      const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : portal === 'public' ? '/api/marketplace/assets' : '/api/v1/assets' + scopeParam;
       const documentsEndpoint = portal === 'admin' ? '/api/admin/documents' : portal === 'bank' ? '/api/bank/documents' : null;
       const skipAdminData = portal !== 'admin';
       const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes, documentsRes, titlesRes, valuationsRes] = await Promise.allSettled([
@@ -385,6 +386,39 @@ const Store = {
       if (assetsRes.status === 'fulfilled' && assetsRes.value.ok) {
         const json = await assetsRes.value.json();
         if (json.success && Array.isArray(json.data)) {
+          // Public marketplace API returns a simpler shape — map it into the same Store.assets format
+          if (portal === 'public') {
+            this.assets = json.data.map(d => ({
+              id: d.id,
+              ref: d.public_ref,
+              bankId: '',
+              bankName: '',
+              category: d.category_code,
+              assetType: d.asset_type,
+              title: d.title,
+              region: d.region,
+              district: d.district || '',
+              town: d.town || '',
+              publicLocation: d.public_location,
+              description: d.description,
+              reserve: d.reserve_price,
+              showReserve: !!d.show_reserve_publicly,
+              status: d.status,
+              publicationStatus: d.status === 'Live' ? 'Published' : 'Unpublished',
+              legalHold: false,
+              exteriorImage: (d.image_count || 0) > 0,
+              primaryImage: d.primary_image || '',
+              images: d.image_count || 0,
+              beds: d.beds || null,
+              baths: d.baths || null,
+              occupancyStatus: d.occupancy_status || '',
+              landGuardRisk: d.land_guard_risk || '',
+              priceDisplay: d.price_display || 'Price on Application',
+              legalStatus: 'Cleared',
+              titleVerified: true,
+              legalSubstate: { clearanceIssued: true, instrumentsVerified: true },
+            }));
+          } else {
           this.assets = json.data.map(d => ({
             id: d.id,
             ref: d.public_ref,
@@ -458,6 +492,7 @@ const Store = {
             })),
             activity: [{ when: d.created_at, who: d.created_by || 'Not recorded', what: 'Asset created' }]
           }));
+          } // end else (non-public portal)
         }
       }
 
@@ -4158,8 +4193,11 @@ const PublicMarket = {
   setView(v) { this.viewMode = v; this.render(); },
 
   renderCard(a) {
+    const imgHtml = a.primaryImage
+      ? `<img src="${UI.escapeHtml(a.primaryImage)}" alt="${UI.escapeHtml(a.assetType)}" style="width:100%;height:100%;object-fit:cover">`
+      : `<svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
     return `<div class="acard" onclick="PublicMarket.openDetail('${a.id}')">
-      <div class="thumb"><svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span class="badge live">Live</span><span class="ref">${a.ref}</span></div>
+      <div class="thumb">${imgHtml}<span class="badge live">Live</span><span class="ref">${a.ref}</span></div>
       <div class="cbody"><span class="cat">${a.category}</span><span class="ttl">${a.assetType}</span><div class="loc">${a.publicLocation}</div>
       <div class="price">${a.showReserve ? `<span class="amt">${UI.fmtMoney(a.reserve).split('.')[0]}<small>.00</small></span>` : '<span class="poa">Price on Application</span>'}</div>
       <div class="listedby"><span class="sq"></span>Listed by Surge Solutions</div></div>
