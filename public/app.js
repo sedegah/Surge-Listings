@@ -2693,7 +2693,10 @@ const AdminPortal = {
   openLatestValuation(assetId) {
     const valuation = Store.valuations
       .filter(record => record.asset_id === assetId)
-      .sort((left, right) => String(right.valuation_date).localeCompare(String(left.valuation_date)))[0];
+      .sort((left, right) =>
+        String(right.valuation_date).localeCompare(String(left.valuation_date)) ||
+        Number(right.record_order || 0) - Number(left.record_order || 0)
+      )[0];
     if (!valuation) {
       UI.toast('The bank has not submitted a valuation record for this asset yet.', 'warn');
       return;
@@ -3125,7 +3128,12 @@ const AdminPortal = {
       <div class="group"><div class="caption">Review Decision</div><div class="body">
         <textarea id="valuation-notes" placeholder="Review notes (required when rejecting or revoking)" style="width:100%;height:72px;padding:8px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;margin-bottom:10px">${UI.escapeHtml(valuation.notes || '')}</textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${valuation.status !== 'Valid' ? `<button class="btn success" onclick="AdminPortal.verifyValuation('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}')" ${!documentId ? 'disabled' : ''}>${this.openedReviewDocuments.has(`valuations:${valuation.id}:${documentId}`) ? 'Confirm Valuation Verification' : 'Open Report & Verify Valuation'}</button>` : ''}
+          <label class="field" style="display:flex;align-items:center;gap:8px;margin:12px 0">
+            <input type="checkbox" ${valuation.status === 'Valid' && !valuation.review_required ? 'checked disabled' : ''}
+              onchange="AdminPortal.toggleValuationVerification('${UI.escapeHtml(valuation.id)}','${UI.escapeHtml(documentId || '')}',this.checked)"
+              ${!documentId || valuation.status === 'Rejected' || valuation.status === 'Revoked' ? 'disabled' : ''}>
+            <span>Verified by Surge Solutions</span>
+          </label>
           ${!['Valid', 'Rejected', 'Revoked'].includes(valuation.status) ? `<button class="btn danger" onclick="AdminPortal.rejectValuation('${UI.escapeHtml(valuation.id)}')">Reject Valuation</button>` : ''}
           ${valuation.status === 'Valid' ? `<button class="btn danger" onclick="AdminPortal.revokeValuation('${UI.escapeHtml(valuation.id)}')">Revoke Verification</button>` : ''}
         </div>
@@ -3154,7 +3162,8 @@ const AdminPortal = {
       if (!response.ok || !result.success) throw new Error(result.error || `Review action failed (${response.status}).`);
       await Store.fetchRemote();
       UI.toast(result.message || 'Review decision saved.', 'success');
-      this.closeSubPage();
+      if (action === 'verify') this.render();
+      else this.closeSubPage();
     } catch (error) {
       UI.toast(error.message || 'Review decision could not be saved.', 'error');
     }
@@ -3174,6 +3183,11 @@ const AdminPortal = {
 
   verifyValuation(recordId, documentId) {
     return this.verifyWithEvidence('valuations', recordId, documentId);
+  },
+
+  toggleValuationVerification(recordId, documentId, checked) {
+    if (!checked) return;
+    return this.verifyValuation(recordId, documentId);
   },
 
   rejectValuation(recordId) {
