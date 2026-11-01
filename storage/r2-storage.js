@@ -31,20 +31,62 @@ if (fs.existsSync(envPath)) {
 export const ASSETS_BUCKET = process.env.R2_ASSETS_BUCKET || 'surge-assets';
 export const DOCUMENTS_BUCKET = process.env.R2_DOCUMENTS_BUCKET || 'surge-documents';
 
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: process.env.R2_ENDPOINT || 'https://065fc200f5c2cb1f51dd59426f19012c.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID || '102542168513d6f4cb3b2f365df898dd',
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '03896f7463225de7048bc10cef01374f3729cbfb030e4a668b3478fe32679941'
+export const TITLE_DOCUMENTS_BUCKET = process.env.R2_TITLE_DOCUMENTS_BUCKET || 'surge-title-documents';
+export const LAND_SEARCHES_BUCKET = process.env.R2_LAND_SEARCHES_BUCKET || 'surge-land-searches';
+export const VALUATION_REPORTS_BUCKET = process.env.R2_VALUATION_REPORTS_BUCKET || 'surge-valuation-reports';
+export const LEGAL_INSTRUMENTS_BUCKET = process.env.R2_LEGAL_INSTRUMENTS_BUCKET || 'surge-legal-instruments';
+export const KYC_DOCUMENTS_BUCKET = process.env.R2_KYC_DOCUMENTS_BUCKET || 'surge-kyc-documents';
+
+const configuredBuckets = new Set([
+  ASSETS_BUCKET,
+  DOCUMENTS_BUCKET,
+  TITLE_DOCUMENTS_BUCKET,
+  LAND_SEARCHES_BUCKET,
+  VALUATION_REPORTS_BUCKET,
+  LEGAL_INSTRUMENTS_BUCKET,
+  KYC_DOCUMENTS_BUCKET
+]);
+
+export function getDocumentBucket(category) {
+  const normalized = String(category || '').trim().toLowerCase();
+  if (/\bkyc\b|\bidentity\b|\bghana card\b|\bproof of funds\b/.test(normalized)) return KYC_DOCUMENTS_BUCKET;
+  if (/land search|search report/.test(normalized)) return LAND_SEARCHES_BUCKET;
+  if (/valuation|valuer/.test(normalized)) return VALUATION_REPORTS_BUCKET;
+  if (/legal|instrument|court|enforcement|judgment/.test(normalized)) return LEGAL_INSTRUMENTS_BUCKET;
+  if (/title|deed|certificate|site plan/.test(normalized)) return TITLE_DOCUMENTS_BUCKET;
+  return DOCUMENTS_BUCKET;
+}
+
+let r2Client;
+
+function getR2Client(bucket) {
+  if (!configuredBuckets.has(bucket)) {
+    throw new Error('The requested R2 bucket is not configured for this application.');
   }
-});
+  if (r2Client) return r2Client;
+
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
+    throw new Error('R2_ENDPOINT (or CLOUDFLARE_ACCOUNT_ID), R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY must be configured.');
+  }
+
+  r2Client = new S3Client({
+    region: 'auto',
+    endpoint,
+    credentials: { accessKeyId, secretAccessKey }
+  });
+  return r2Client;
+}
 
 /**
  * Upload a file/buffer to Cloudflare R2
  */
 export async function uploadToObjectStorage({ bucket = DOCUMENTS_BUCKET, key, body, contentType = 'application/octet-stream' }) {
   try {
+    const client = getR2Client(bucket);
     const command = new PutObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -52,16 +94,14 @@ export async function uploadToObjectStorage({ bucket = DOCUMENTS_BUCKET, key, bo
       ContentType: contentType
     });
 
-    await r2Client.send(command);
+    await client.send(command);
 
     return {
       success: true,
       bucket,
-      key,
-      url: `${process.env.R2_ENDPOINT || 'https://065fc200f5c2cb1f51dd59426f19012c.r2.cloudflarestorage.com'}/${bucket}/${key}`
+      key
     };
   } catch (err) {
-    console.error(`[R2 Upload Failed] Bucket: ${bucket}, Key: ${key}:`, err.message);
     throw err;
   }
 }
@@ -71,15 +111,15 @@ export async function uploadToObjectStorage({ bucket = DOCUMENTS_BUCKET, key, bo
  */
 export async function getSignedDownloadUrl({ bucket = DOCUMENTS_BUCKET, key, expiresIn = 300 }) {
   try {
+    const client = getR2Client(bucket);
     const command = new GetObjectCommand({
       Bucket: bucket,
       Key: key
     });
 
-    const signedUrl = await getSignedUrl(r2Client, command, { expiresIn });
+    const signedUrl = await getSignedUrl(client, command, { expiresIn });
     return signedUrl;
   } catch (err) {
-    console.error(`[R2 Presign Failed] Bucket: ${bucket}, Key: ${key}:`, err.message);
     throw err;
   }
 }
@@ -89,14 +129,14 @@ export async function getSignedDownloadUrl({ bucket = DOCUMENTS_BUCKET, key, exp
  */
 export async function deleteFromObjectStorage({ bucket = DOCUMENTS_BUCKET, key }) {
   try {
+    const client = getR2Client(bucket);
     const command = new DeleteObjectCommand({
       Bucket: bucket,
       Key: key
     });
-    await r2Client.send(command);
+    await client.send(command);
     return { success: true };
   } catch (err) {
-    console.error(`[R2 Delete Failed] Bucket: ${bucket}, Key: ${key}:`, err.message);
     throw err;
   }
 }
@@ -104,6 +144,11 @@ export async function deleteFromObjectStorage({ bucket = DOCUMENTS_BUCKET, key }
 export default {
   ASSETS_BUCKET,
   DOCUMENTS_BUCKET,
+  TITLE_DOCUMENTS_BUCKET,
+  LAND_SEARCHES_BUCKET,
+  VALUATION_REPORTS_BUCKET,
+  LEGAL_INSTRUMENTS_BUCKET,
+  KYC_DOCUMENTS_BUCKET,
   uploadToObjectStorage,
   getSignedDownloadUrl,
   deleteFromObjectStorage

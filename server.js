@@ -13,6 +13,10 @@ const PORT = process.env.PORT || 5080;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store, max-age=0');
+  next();
+});
 
 import publicRouter from './routes/public.js';
 import bankRouter from './routes/bank.js';
@@ -26,6 +30,13 @@ app.use(express.static(__dirname));
 app.use('/api/public', publicRouter); // Public Marketplace (sanitized, unauthenticated)
 app.use('/api/bank', bankRouter);     // Bank Partner Portal (tenant-isolated by bank_id)
 app.use('/api/admin', adminRouter);   // Surge Super Administrator & Reviewer Portal
+
+app.get('/api/version', (req, res) => {
+  res.json({
+    version: process.env.VERCEL_GIT_COMMIT_SHA || process.env.DEPLOYMENT_VERSION || 'local',
+    deployedAt: process.env.VERCEL_DEPLOYMENT_CREATED_AT || null
+  });
+});
 
 // Helper: Log audit action
 function logAudit(actorName, actorRole, organization, actionType, entityType, entityId, deltaSummary, oldValues = null, newValues = null) {
@@ -1391,4 +1402,3 @@ if (!process.env.VERCEL) {
 }
 
 export default app;
-

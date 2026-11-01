@@ -11,21 +11,40 @@
 import express from 'express';
 import multer from 'multer';
 import { d1 } from '../db/d1-client.js';
-import { ASSETS_BUCKET, DOCUMENTS_BUCKET, uploadToObjectStorage, getSignedDownloadUrl } from '../storage/r2-storage.js';
+import { DOCUMENTS_BUCKET, getSignedDownloadUrl } from '../storage/r2-storage.js';
 
 const router = express.Router();
 const upload = multer({ limits: { fileSize: 25 * 1024 * 1024 } });
 
-// Admin Security / Role Gate Middleware
-router.use((req, res, next) => {
-  // In a full production JWT deployment, decode token and verify scope === 'surge'
-  const actorRole = req.headers['x-actor-role'] || 'SA';
-  req.adminActor = {
-    name: req.headers['x-actor-name'] || 'Platform Admin',
-    role: actorRole,
-    org: 'Surge Solutions'
-  };
-  next();
+// Admin privileges are derived from a valid Surge-scoped server-side session.
+router.use(async (req, res, next) => {
+  try {
+    const authorization = req.get('authorization') || '';
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const session = await d1.get(`
+      SELECT s.user_id, s.scope, s.role_code, u.full_name, u.status as user_status
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ? AND s.revoked = 0 AND datetime(s.expires_at) > datetime('now')
+    `, token);
+    if (!session || session.user_status !== 'Active') {
+      return res.status(401).json({ success: false, error: 'Session is invalid or expired.' });
+    }
+    if (session.scope !== 'surge') {
+      return res.status(403).json({ success: false, error: 'Surge Admin access denied.' });
+    }
+
+    req.adminActor = {
+      name: session.full_name || 'Platform Admin',
+      role: session.role_code || 'SA',
+      org: 'Surge Solutions'
+    };
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Helper: Log Admin Audit Action
@@ -798,7 +817,7 @@ router.get('/documents/:docId/download-url', async (req, res) => {
     if (!doc) return res.status(404).json({ success: false, error: 'Document not found' });
 
     const signedUrl = await getSignedDownloadUrl({
-      bucket: DOCUMENTS_BUCKET,
+      bucket: doc.storage_bucket || DOCUMENTS_BUCKET,
       key: doc.file_path,
       expiresIn: 300 // 5 minutes TTL
     });
@@ -841,4 +860,3 @@ router.put('/settings', async (req, res) => {
 });
 
 export default router;
-

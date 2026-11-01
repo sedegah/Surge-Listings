@@ -17,8 +17,9 @@
  *
  * Direct Bindings:
  * - env.DB: Cloudflare D1 Database (surge-solutions-db)
- * - env.ASSETS_BUCKET: Cloudflare R2 Bucket (surge-assets)
- * - env.DOCUMENTS_BUCKET: Cloudflare R2 Bucket (surge-documents)
+ * - env.ASSETS_BUCKET: public asset photos (surge-assets)
+ * - env.DOCUMENTS_BUCKET: legacy/general documents (surge-documents)
+ * - Dedicated bindings for title, land-search, valuation, legal, and KYC files
  */
 
 export default {
@@ -47,7 +48,9 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type, X-Bank-ID, X-Actor-Name, X-Actor-Role, Authorization, Accept, Origin, X-Requested-With',
       'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, no-store, max-age=0',
+      'Vary': 'Origin'
     };
 
     if (method === 'OPTIONS') {
@@ -56,6 +59,57 @@ export default {
 
     const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: corsHeaders });
     const err = (message, status = 400) => new Response(JSON.stringify({ success: false, error: message }), { status, headers: corsHeaders });
+
+    function bucketNameForDocumentCategory(category) {
+      const normalized = String(category || '').trim().toLowerCase();
+      if (/\bkyc\b|\bidentity\b|\bghana card\b|\bproof of funds\b/.test(normalized)) return 'surge-kyc-documents';
+      if (/land search|search report/.test(normalized)) return 'surge-land-searches';
+      if (/valuation|valuer/.test(normalized)) return 'surge-valuation-reports';
+      if (/legal|instrument|court|enforcement|judgment/.test(normalized)) return 'surge-legal-instruments';
+      if (/title|deed|certificate|site plan/.test(normalized)) return 'surge-title-documents';
+      return 'surge-documents';
+    }
+
+    function bucketForStoredDocument(name) {
+      const bindings = {
+        'surge-documents': env.DOCUMENTS_BUCKET,
+        'surge-title-documents': env.TITLE_DOCUMENTS_BUCKET,
+        'surge-land-searches': env.LAND_SEARCHES_BUCKET,
+        'surge-valuation-reports': env.VALUATION_REPORTS_BUCKET,
+        'surge-legal-instruments': env.LEGAL_INSTRUMENTS_BUCKET,
+        'surge-kyc-documents': env.KYC_DOCUMENTS_BUCKET
+      };
+      return bindings[name] || null;
+    }
+
+    function extensionForMime(mimeType) {
+      return ({
+        'application/pdf': 'pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp'
+      })[mimeType] || null;
+    }
+
+    async function isValidFile(file, imageOnly = false) {
+      const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+      const extension = extensionForMime(mimeType);
+      if (!extension || (imageOnly && !mimeType.startsWith('image/'))) return false;
+      const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+      const startsWith = (...values) => values.every((value, index) => bytes[index] === value);
+      if (mimeType === 'application/pdf') return startsWith(0x25, 0x50, 0x44, 0x46, 0x2d);
+      if (mimeType === 'image/jpeg') return startsWith(0xff, 0xd8, 0xff);
+      if (mimeType === 'image/png') return startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+      if (mimeType === 'image/webp') {
+        return String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
+          String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
+      }
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        return startsWith(0x50, 0x4b, 0x03, 0x04);
+      }
+      return false;
+    }
 
     // Helper: Parse JSON safely
     async function getBody() {
@@ -209,6 +263,13 @@ export default {
           platform: 'Surge Solutions Enterprise Monolith',
           database: { connected: true, organization_count: dbCheck?.c || 0 },
           cors: { origin_detected: origin || 'direct', allowed: allowOrigin }
+        });
+      }
+
+      if (pathname === '/api/version' && method === 'GET') {
+        return json({
+          version: env.CF_VERSION_METADATA?.id || env.DEPLOYMENT_VERSION || 'unknown',
+          deployedAt: env.CF_VERSION_METADATA?.timestamp || null
         });
       }
 
@@ -736,6 +797,132 @@ export default {
         return json({ success: true, count: branches.results.length, data: branches.results });
       }
 
+      const photoUploadMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/photos\/upload$/);
+      const documentUploadMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/documents\/upload$/);
+      if ((photoUploadMatch || documentUploadMatch) && method === 'POST') {
+        const session = await requireBankAuth();
+        const assetRef = decodeURIComponent((photoUploadMatch || documentUploadMatch)[1]);
+        const asset = await env.DB.prepare(`
+          SELECT id, public_ref FROM assets
+          WHERE (id = ? OR public_ref = ?) AND bank_id = ?
+        `).bind(assetRef, assetRef, session.bank_id).first();
+        if (!asset) return err('Asset not found or access denied.', 404);
+
+        const form = await request.formData();
+        const file = form.get('file');
+        if (!file || typeof file.arrayBuffer !== 'function') return err('A file is required.', 400);
+
+        const isPhoto = Boolean(photoUploadMatch);
+        const maxSize = isPhoto ? 10 * 1024 * 1024 : 25 * 1024 * 1024;
+        if (file.size < 1 || file.size > maxSize) {
+          return err(`File size must be between 1 byte and ${isPhoto ? '10MB' : '25MB'}.`, 413);
+        }
+        if (!(await isValidFile(file, isPhoto))) {
+          return err(isPhoto
+            ? 'Use a valid JPEG, PNG, or WebP image.'
+            : 'Use a valid PDF, DOCX, JPEG, PNG, or WebP document.', 415);
+        }
+
+        const category = String(form.get('category') || (isPhoto ? 'Asset Photo' : 'Other')).trim().slice(0, 80);
+        const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+        const bucketName = isPhoto ? 'surge-assets' : bucketNameForDocumentCategory(category);
+        const bucket = isPhoto ? env.ASSETS_BUCKET : bucketForStoredDocument(bucketName);
+        if (!bucket) return err(`R2 storage binding is missing for ${bucketName}.`, 503);
+
+        if (isPhoto) {
+          const count = await env.DB.prepare(`SELECT COUNT(*) as count FROM asset_images WHERE asset_id = ?`)
+            .bind(asset.id).first();
+          const imageLimit = Number(env.MAX_IMAGES_PER_ASSET || 20);
+          if ((count?.count || 0) >= imageLimit) return err(`This asset already has the maximum of ${imageLimit} photos.`, 409);
+        }
+
+        const objectKey = `${isPhoto ? 'assets' : 'documents'}/${asset.id}/${crypto.randomUUID()}.${extensionForMime(mimeType)}`;
+        const sizeLabel = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+        await bucket.put(objectKey, await file.arrayBuffer(), {
+          httpMetadata: { contentType: mimeType },
+          customMetadata: {
+            assetId: asset.id,
+            uploadedBy: session.user_id,
+            category: category.slice(0, 80)
+          }
+        });
+
+        try {
+          if (isPhoto) {
+            const imageId = 'img-' + crypto.randomUUID();
+            const existing = await env.DB.prepare(`SELECT COUNT(*) as count FROM asset_images WHERE asset_id = ?`)
+              .bind(asset.id).first();
+            const sortOrder = (existing?.count || 0) + 1;
+            const primary = form.get('is_primary') === '1' || sortOrder === 1 ? 1 : 0;
+            const isExterior = form.get('is_exterior') === '1' ? 1 : 0;
+            const imageUrl = new URL(
+              `/api/marketplace/assets/${encodeURIComponent(asset.public_ref)}/images/${imageId}`,
+              url.origin
+            ).href;
+            await env.DB.batch([
+              ...(primary ? [env.DB.prepare(`UPDATE asset_images SET is_primary = 0 WHERE asset_id = ?`).bind(asset.id)] : []),
+              env.DB.prepare(`
+                INSERT INTO asset_images (id, asset_id, url, object_key, storage_bucket, caption, is_primary, is_exterior, sort_order, watermark_applied)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+              `).bind(imageId, asset.id, imageUrl, objectKey, bucketName, String(form.get('caption') || category).slice(0, 160), primary, isExterior, sortOrder)
+            ]);
+            await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_PHOTO', 'AssetImage', imageId, `Uploaded photo for ${asset.public_ref}`);
+            return json({ success: true, image_id: imageId, url: imageUrl, message: 'Photo uploaded successfully.' }, 201);
+          }
+
+          const documentId = 'doc-' + crypto.randomUUID();
+          const title = String(form.get('title') || file.name || category).trim().slice(0, 160);
+          await env.DB.prepare(`
+            INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
+          `).bind(documentId, asset.id, title, category, objectKey, sizeLabel, mimeType, bucketName).run();
+          await auditLog(session.full_name, session.role_code, session.bank_id, 'UPLOAD_DOCUMENT', 'Document', documentId, `Uploaded ${category} for ${asset.public_ref}`);
+          return json({ success: true, document_id: documentId, category, message: 'Document uploaded and queued for review.' }, 201);
+        } catch (storageCommitError) {
+          await bucket.delete(objectKey);
+          throw storageCommitError;
+        }
+      }
+
+      const documentDownloadMatch = pathname.match(/^\/api\/(bank|admin)\/documents\/([a-zA-Z0-9_-]+)\/download$/);
+      if (documentDownloadMatch && method === 'GET') {
+        const isAdmin = documentDownloadMatch[1] === 'admin';
+        const session = isAdmin ? await requireAdminAuth() : await requireBankAuth();
+        const documentId = decodeURIComponent(documentDownloadMatch[2]);
+        const doc = await env.DB.prepare(`
+          SELECT d.*, a.bank_id, a.public_ref
+          FROM documents d JOIN assets a ON a.id = d.asset_id
+          WHERE d.id = ?
+        `).bind(documentId).first();
+        if (!doc || (!isAdmin && doc.bank_id !== session.bank_id)) {
+          return err('Document not found or access denied.', 404);
+        }
+        const bucketName = doc.storage_bucket || 'surge-documents';
+        const bucket = bucketForStoredDocument(bucketName);
+        if (!bucket) return err(`R2 storage binding is missing for ${bucketName}.`, 503);
+        const storedObject = await bucket.get(doc.file_path);
+        if (!storedObject) return err('Stored document not found.', 404);
+
+        await env.DB.prepare(`
+          INSERT INTO document_access_logs (id, document_id, user_name, user_role, ip_address, access_type, created_at)
+          VALUES (?, ?, ?, ?, ?, 'DOWNLOAD', datetime('now'))
+        `).bind(
+          'dal-' + crypto.randomUUID(),
+          doc.id,
+          session.full_name || session.username,
+          session.role_code,
+          request.headers.get('CF-Connecting-IP') || ''
+        ).run();
+
+        const filename = String(doc.title || 'document').replace(/["\\r\\n]/g, '_').slice(0, 120);
+        const headers = new Headers(corsHeaders);
+        headers.set('Content-Type', 'application/octet-stream');
+        headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+        headers.set('Cache-Control', 'private, no-store, max-age=0');
+        headers.set('X-Content-Type-Options', 'nosniff');
+        return new Response(storedObject.body, { headers });
+      }
+
       // GET /api/bank/documents
       if ((pathname === '/api/bank/documents' || pathname === '/api/v1/documents') && method === 'GET') {
         const session = await requireBankAuth();
@@ -798,6 +985,29 @@ export default {
       // 4. PUBLIC MARKETPLACE API (/api/marketplace/* & /api/public/*)
       // Sanitized Listings, Buyer KYC, Search, Inquiries, Viewings & Formal Offers
       // =========================================================================
+
+      const publicImageMatch = pathname.match(/^\/api\/marketplace\/assets\/([^/]+)\/images\/([a-zA-Z0-9_-]+)$/);
+      if (publicImageMatch && method === 'GET') {
+        const publicRef = decodeURIComponent(publicImageMatch[1]);
+        const imageId = decodeURIComponent(publicImageMatch[2]);
+        const image = await env.DB.prepare(`
+          SELECT i.object_key
+          FROM asset_images i
+          JOIN assets a ON a.id = i.asset_id
+          WHERE a.public_ref = ? AND i.id = ? AND a.status = 'Live' AND a.legal_hold_active = 0
+        `).bind(publicRef, imageId).first();
+        if (!image?.object_key) return err('Image not found or currently unavailable.', 404);
+        const object = await env.ASSETS_BUCKET.get(image.object_key);
+        if (!object) return err('Stored image not found.', 404);
+
+        const headers = new Headers(corsHeaders);
+        headers.set('Content-Type', object.httpMetadata?.contentType || 'application/octet-stream');
+        headers.set('Content-Disposition', 'inline');
+        headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        headers.set('X-Content-Type-Options', 'nosniff');
+        if (object.httpEtag) headers.set('ETag', object.httpEtag);
+        return new Response(object.body, { headers });
+      }
 
       // GET /api/marketplace/assets, /api/public/listings, /api/v1/marketplace
       if (['/api/marketplace/assets', '/api/public/listings', '/api/v1/marketplace'].includes(pathname) && method === 'GET') {

@@ -1,7 +1,7 @@
 /**
  * Standard Cloudflare D1 Database Client for Surge Solutions
  * Queries Cloudflare D1 directly via Cloudflare's Global Edge REST API
- * Features high-performance query caching and instant write invalidation
+ * Reads stay uncached so session revocation and newly-written records take effect immediately.
  */
 
 import fs from 'node:fs';
@@ -28,9 +28,13 @@ if (fs.existsSync(envPath)) {
 }
 
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '065fc200f5c2cb1f51dd59426f19012c';
-const API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || 'cfat_zNFQXeeqYlA8FvBG7WCtYHyt6kMEOfBiatoarFEt72686eb1';
+const API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const DATABASE_ID = process.env.CLOUDFLARE_D1_DATABASE_ID || '62b0bf0f-803b-4a09-8cbb-78f948bb6d02';
 const D1_ENDPOINT = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database/${DATABASE_ID}/query`;
+
+if (!API_TOKEN) {
+  throw new Error('CLOUDFLARE_API_TOKEN must be configured for the Vercel D1 API client.');
+}
 
 class CloudflareD1Client {
   constructor() {
@@ -41,34 +45,12 @@ class CloudflareD1Client {
       'Authorization': `Bearer ${API_TOKEN}`,
       'Content-Type': 'application/json'
     };
-    // High performance in-memory query cache (TTL: 30 seconds, invalidated on writes)
-    this.cache = new Map();
-    this.CACHE_TTL_MS = 30000;
-  }
-
-  _getCacheKey(sql, params) {
-    return `${sql.trim()}::${JSON.stringify(params)}`;
-  }
-
-  invalidateCache() {
-    this.cache.clear();
   }
 
   /**
    * Execute raw SQL with parameter bindings on Cloudflare D1
    */
-  async query(sql, params = [], useCache = false) {
-    const isRead = /^\s*(SELECT|PRAGMA)/i.test(sql);
-    const cacheKey = this._getCacheKey(sql, params);
-
-    if (useCache && isRead && this.cache.has(cacheKey)) {
-      const entry = this.cache.get(cacheKey);
-      if (Date.now() - entry.timestamp < this.CACHE_TTL_MS) {
-        return entry.data;
-      }
-      this.cache.delete(cacheKey);
-    }
-
+  async query(sql, params = []) {
     try {
       const response = await fetch(this.endpoint, {
         method: 'POST',
@@ -94,13 +76,6 @@ class CloudflareD1Client {
         meta: firstResult.meta || {}
       };
 
-      if (isRead) {
-        this.cache.set(cacheKey, { timestamp: Date.now(), data });
-      } else {
-        // Any mutation immediately clears stale read caches
-        this.invalidateCache();
-      }
-
       return data;
     } catch (err) {
       console.error(`[Cloudflare D1 Error] SQL: "${sql}"`, err.message);
@@ -109,11 +84,11 @@ class CloudflareD1Client {
   }
 
   /**
-   * Return all matching rows (cached reads enabled)
+   * Return current rows from D1 without an instance-local stale cache.
    */
   async all(sql, ...params) {
     const flatParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
-    const res = await this.query(sql, flatParams, true);
+    const res = await this.query(sql, flatParams);
     return res.results || [];
   }
 
@@ -126,7 +101,7 @@ class CloudflareD1Client {
   }
 
   /**
-   * Execute INSERT, UPDATE, DELETE mutation (instant cache invalidation)
+   * Execute an INSERT, UPDATE, or DELETE mutation.
    */
   async run(sql, ...params) {
     const flatParams = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
@@ -149,7 +124,6 @@ class CloudflareD1Client {
         body: JSON.stringify(statements)
       });
       const json = await response.json();
-      this.invalidateCache();
       return json.result || [];
     } catch (err) {
       console.error('[Cloudflare D1 Batch Error]:', err.message);

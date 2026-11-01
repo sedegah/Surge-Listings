@@ -11,29 +11,78 @@
 import express from 'express';
 import multer from 'multer';
 import { d1 } from '../db/d1-client.js';
-import { DOCUMENTS_BUCKET, uploadToObjectStorage, getSignedDownloadUrl } from '../storage/r2-storage.js';
+import {
+  ASSETS_BUCKET,
+  DOCUMENTS_BUCKET,
+  getDocumentBucket,
+  uploadToObjectStorage,
+  getSignedDownloadUrl
+} from '../storage/r2-storage.js';
 
 const router = express.Router();
 const upload = multer({ limits: { fileSize: 25 * 1024 * 1024 } }); // 25MB max
+const documentMimeTypes = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
+  'image/webp'
+]);
 
-// Bank Tenant Identification & Isolation Middleware
-router.use((req, res, next) => {
-  const bankId = req.headers['x-bank-id'] || req.query.bank_id || req.body?.bank_id;
-  if (!bankId) {
-    // Default to the active primary bank (Meridian Trust Bank) if header omitted in frontend
-    req.bankId = 'bank-mtb';
-  } else {
-    req.bankId = bankId;
+function hasValidUploadSignature(file, imageOnly = false) {
+  const mimeType = String(file.mimetype || '').split(';')[0].trim().toLowerCase();
+  const bytes = file.buffer;
+  if (!documentMimeTypes.has(mimeType) || (imageOnly && !mimeType.startsWith('image/'))) return false;
+  if (mimeType === 'application/pdf') return bytes.subarray(0, 5).toString('ascii') === '%PDF-';
+  if (mimeType === 'image/jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (mimeType === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (mimeType === 'image/webp') return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+  return mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' &&
+    bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+}
+
+// Tenant identity must come from the server-side session, never request headers.
+router.use(async (req, res, next) => {
+  try {
+    const authorization = req.get('authorization') || '';
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (!token) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const session = await d1.get(`
+      SELECT s.user_id, s.bank_id, s.scope, s.role_code, u.full_name, u.status as user_status,
+             b.status as bank_status
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN banks b ON b.id = s.bank_id
+      WHERE s.id = ? AND s.revoked = 0 AND datetime(s.expires_at) > datetime('now')
+    `, token);
+    if (!session || session.user_status !== 'Active') {
+      return res.status(401).json({ success: false, error: 'Session is invalid or expired.' });
+    }
+    if (!['bank', 'surge'].includes(session.scope)) {
+      return res.status(403).json({ success: false, error: 'Bank Portal access denied.' });
+    }
+    if (!session.bank_id) {
+      return res.status(403).json({ success: false, error: 'No bank is associated with this account.' });
+    }
+    if (session.bank_status && session.bank_status !== 'Active') {
+      return res.status(403).json({ success: false, error: 'The associated bank is not active.' });
+    }
+
+    req.session = session;
+    req.bankId = session.bank_id;
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 // Helper: Bank Audit Logger
 async function logBankAudit(req, actionType, entityType, entityId, summary, oldVal = null, newVal = null) {
   try {
     const id = 'log-bnk-' + Math.random().toString(36).substring(2, 11);
-    const actor = req.headers['x-actor-name'] || 'Bank User';
-    const role = req.headers['x-actor-role'] || 'Bank Asset Officer';
+    const actor = req.session?.full_name || 'Bank User';
+    const role = req.session?.role_code || 'Bank Asset Officer';
     const bank = await d1.get(`SELECT legal_name FROM banks WHERE id = ?`, req.bankId);
     await d1.run(
       `INSERT INTO audit_logs (id, actor_name, actor_role, organization, action_type, entity_type, entity_id, delta_summary, old_values, new_values, created_at)
@@ -326,7 +375,13 @@ router.post('/assets/:id/photos/upload', upload.single('file'), async (req, res)
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found or unauthorized' });
     if (!file) return res.status(400).json({ success: false, error: 'Photo file is required' });
 
-    const key = `photos/${asset.public_ref}/${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    if (file.size > 10 * 1024 * 1024) {
+      return res.status(413).json({ success: false, error: 'Photo file must be 10MB or smaller.' });
+    }
+    if (!hasValidUploadSignature(file, true)) {
+      return res.status(415).json({ success: false, error: 'Use a valid JPEG, PNG, or WebP photo no larger than 10MB.' });
+    }
+    const key = `photos/${asset.id}/${crypto.randomUUID()}`;
 
     // Upload to Cloudflare R2 surge-assets bucket
     const r2Result = await uploadToObjectStorage({
@@ -345,12 +400,12 @@ router.post('/assets/:id/photos/upload', upload.single('file'), async (req, res)
       await d1.run(`UPDATE asset_images SET is_primary = 0 WHERE asset_id = ?`, asset.id);
     }
 
-    const publicUrl = r2Result.url;
+    const publicUrl = `${process.env.PUBLIC_API_URL || 'https://surge-solutions-api.sedegahkimathi.workers.dev'}/api/marketplace/assets/${encodeURIComponent(asset.public_ref)}/images/${imgId}`;
 
     await d1.run(`
-      INSERT INTO asset_images (id, asset_id, url, caption, is_primary, is_exterior, sort_order, watermark_applied)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-    `, imgId, asset.id, publicUrl, caption || 'Listing photo', primaryFlag, is_exterior ? 1 : 0, sortOrder);
+      INSERT INTO asset_images (id, asset_id, url, object_key, storage_bucket, caption, is_primary, is_exterior, sort_order, watermark_applied)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `, imgId, asset.id, publicUrl, key, ASSETS_BUCKET, caption || 'Listing photo', primaryFlag, is_exterior ? 1 : 0, sortOrder);
 
     await logBankAudit(req, 'Upload Photo', 'AssetImage', imgId, `Uploaded photo for ${asset.public_ref} to Cloudflare R2 (${key})`);
 
@@ -379,12 +434,16 @@ router.post('/assets/:id/documents/upload', upload.single('file'), async (req, r
     const asset = await d1.get(`SELECT id, public_ref FROM assets WHERE id = ? AND bank_id = ?`, id, req.bankId);
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found or unauthorized' });
     if (!file) return res.status(400).json({ success: false, error: 'File is required' });
+    if (!hasValidUploadSignature(file)) {
+      return res.status(415).json({ success: false, error: 'Use a valid PDF, DOCX, JPEG, PNG, or WebP document.' });
+    }
 
-    const key = `documents/${asset.public_ref}/${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const storageBucket = getDocumentBucket(category);
+    const key = `documents/${asset.id}/${crypto.randomUUID()}`;
 
     // Upload to Cloudflare R2 surge-documents bucket
     const r2Result = await uploadToObjectStorage({
-      bucket: DOCUMENTS_BUCKET,
+      bucket: storageBucket,
       key,
       body: file.buffer,
       contentType: file.mimetype
@@ -394,9 +453,9 @@ router.post('/assets/:id/documents/upload', upload.single('file'), async (req, r
     const sizeStr = `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
     await d1.run(`
-      INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, verification_status, uploaded_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
-    `, docId, asset.id, title || file.originalname, category || 'Legal', key, sizeStr, file.mimetype);
+      INSERT INTO documents (id, asset_id, title, category, file_path, file_size, content_type, storage_bucket, verification_status, uploaded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', datetime('now'))
+    `, docId, asset.id, title || file.originalname, category || 'Legal', key, sizeStr, file.mimetype, storageBucket);
 
     await logBankAudit(req, 'Upload Document', 'Document', docId, `Uploaded ${title || file.originalname} to Cloudflare R2 (${key})`);
 
@@ -427,7 +486,7 @@ router.get('/documents/:docId/download-url', async (req, res) => {
     if (!doc) return res.status(404).json({ success: false, error: 'Document not found or unauthorized' });
 
     const signedUrl = await getSignedDownloadUrl({
-      bucket: DOCUMENTS_BUCKET,
+      bucket: doc.storage_bucket || DOCUMENTS_BUCKET,
       key: doc.file_path,
       expiresIn: 300 // 5 minutes TTL
     });
@@ -667,4 +726,3 @@ router.get('/notifications', async (req, res) => {
 });
 
 export default router;
-

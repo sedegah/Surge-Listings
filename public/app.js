@@ -162,6 +162,7 @@ const Auth = {
       try {
         res = await fetch(Store.API_BASE + '/api/auth/me', {
           headers: { 'Authorization': 'Bearer ' + token },
+          cache: 'no-store',
           signal: controller.signal
         });
         if (res.ok) data = await res.json();
@@ -243,6 +244,8 @@ const Auth = {
 const Store = {
   assets: [], auditLog: [], leads: [], offers: [], viewings: [], invoices: [], banks: [], users: [], branches: [],
   STORAGE_KEY: 'surge_disposition_clean_v1',
+  deploymentVersion: null,
+  deploymentVersionTimer: null,
   API_BASE: (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.protocol === 'file:'))
     ? 'https://surge-solutions-api.sedegahkimathi.workers.dev'
     : '',
@@ -274,7 +277,61 @@ const Store = {
     this.banks = [];
     this.users = [];
     this.branches = [];
+    this.startDeploymentVersionMonitor();
     if (!document.body?.dataset.portal) this.fetchRemote();
+  },
+
+  startDeploymentVersionMonitor() {
+    if (this.deploymentVersionTimer) return;
+    const check = () => this.checkDeploymentVersion();
+    void check();
+    this.deploymentVersionTimer = setInterval(check, 180000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void check();
+    });
+  },
+
+  async checkDeploymentVersion() {
+    try {
+      const response = await fetch(this.API_BASE + '/api/version', { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Version check failed (${response.status}).`);
+      const data = await response.json();
+      const version = String(data.version || '');
+      if (!version || version === 'unknown' || version === 'local') return;
+      if (!this.deploymentVersion) {
+        this.deploymentVersion = version;
+      } else if (version !== this.deploymentVersion) {
+        this.showDeploymentUpdateNotice();
+      }
+    } catch (error) {
+      console.warn('[Deployment Version] Could not check for a newer deployment:', error);
+    }
+  },
+
+  showDeploymentUpdateNotice() {
+    if (document.getElementById('deployment-update-notice')) return;
+    const notice = document.createElement('div');
+    notice.id = 'deployment-update-notice';
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-live', 'polite');
+    Object.assign(notice.style, {
+      position: 'fixed', right: '16px', bottom: '16px', zIndex: '10000',
+      display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px',
+      borderRadius: '6px', background: '#172b4d', color: '#fff',
+      boxShadow: '0 4px 18px rgba(0,0,0,.24)', font: '13px system-ui, sans-serif'
+    });
+    const message = document.createElement('span');
+    message.textContent = 'A newer version is ready.';
+    const refresh = document.createElement('button');
+    refresh.type = 'button';
+    refresh.textContent = 'Refresh safely';
+    Object.assign(refresh.style, {
+      border: '0', borderRadius: '4px', padding: '7px 10px',
+      background: '#fff', color: '#172b4d', fontWeight: '600', cursor: 'pointer'
+    });
+    refresh.addEventListener('click', () => window.location.reload());
+    notice.append(message, refresh);
+    document.body.appendChild(notice);
   },
 
   persist() {
@@ -293,14 +350,14 @@ const Store = {
       const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : '/api/v1/assets' + scopeParam;
       const skipAdminData = portal !== 'admin';
       const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes] = await Promise.allSettled([
-        fetch(this.API_BASE + assetsEndpoint, { headers }),
-        fetch(this.API_BASE + '/api/v1/leads' + scopeParam, { headers }),
-        fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers }),
-        fetch(this.API_BASE + '/api/v1/viewings' + scopeParam, { headers }),
-        fetch(this.API_BASE + '/api/v1/invoices' + scopeParam, { headers }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs', { headers }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers }),
+        fetch(this.API_BASE + assetsEndpoint, { headers, cache: 'no-store' }),
+        fetch(this.API_BASE + '/api/v1/leads' + scopeParam, { headers, cache: 'no-store' }),
+        fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' }),
+        fetch(this.API_BASE + '/api/v1/viewings' + scopeParam, { headers, cache: 'no-store' }),
+        fetch(this.API_BASE + '/api/v1/invoices' + scopeParam, { headers, cache: 'no-store' }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs', { headers, cache: 'no-store' }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers, cache: 'no-store' }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers, cache: 'no-store' }),
       ]);
 
       // Assets
@@ -1533,7 +1590,7 @@ const BankPortal = {
           </div></div>
           <div class="field"><span class="lbl">Reference Number <span class="req">*</span></span><div class="ctl"><input id="new-inst-ref" placeholder="e.g. JUD-2025-0201"></div></div>
           <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-inst-input').click()">
-            <input type="file" id="file-inst-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'inst')">
+            <input type="file" id="file-inst-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'inst')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
             <div id="inst-status-text">Upload legal instrument</div>
             <div style="font-size:11px;margin-top:4px;color:var(--text-2)">Supported formats: PDF, DOCX (up to 25MB)</div>
@@ -1552,36 +1609,72 @@ const BankPortal = {
     const file = e.target.files[0];
     if (!file) return;
     this._stagedFile = {
+      file,
       name: file.name,
       size: file.size,
       type: file.type,
       category,
       uploadedAt: new Date().toISOString()
     };
-    const targetId = category === 'inst' ? 'inst-status-text' : category === 'doc' ? 'doc-status-text' : 'photo-status-text';
+    const targetId = {
+      inst: 'inst-status-text', doc: 'doc-status-text', photo: 'photo-status-text',
+      title: 'title-status-text', val: 'val-status-text'
+    }[category];
     const el = document.getElementById(targetId);
-    if (el) el.innerHTML = `<b>Selected:</b> ${file.name} (${Math.round(file.size / 1024)} KB)`;
+    if (el) el.textContent = `Selected: ${file.name} (${Math.round(file.size / 1024)} KB)`;
     UI.toast(`File selected: ${file.name}`, 'success');
   },
 
-  addInstrument() {
+  async uploadSelectedFile(endpoint, category, extraFields = {}) {
+    const file = this._stagedFile?.file;
+    if (!file) throw new Error('Choose a file before uploading.');
+
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('category', category);
+    for (const [key, value] of Object.entries(extraFields)) {
+      form.append(key, String(value));
+    }
+
+    const headers = {};
+    const token = Auth.getToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const response = await fetch(Store.API_BASE + endpoint, {
+      method: 'POST',
+      headers,
+      body: form,
+      cache: 'no-store'
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `Upload failed (${response.status}).`);
+    }
+
+    this._stagedFile = null;
+    await Store.fetchRemote();
+    return result;
+  },
+
+  async addInstrument() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const type = document.getElementById('new-inst-type').value;
     const ref = document.getElementById('new-inst-ref').value.trim();
     if (!ref) return UI.toast('Instrument reference number is required', 'error');
-    const fileName = this._stagedFile?.name || `${ref}.pdf`;
-    a.instruments = a.instruments || [];
-    a.instruments.push({
-      id: 'i' + Date.now(), type, ref, fileName, status: 'Pending',
-      uploadedBy: 'J. Mensah', uploadedAt: new Date().toISOString()
-    });
-    a.documents = (a.documents || 0) + 1;
-    this._stagedFile = null;
-    Store.addAudit('J. Mensah', 'UPLOAD_INSTRUMENT', 'Asset', a.ref, null, null, 'Uploaded ' + type + ' ' + ref + ' (' + fileName + ')');
-    Store.persist();
-    UI.toast('Instrument attached to record. Click "Submit for Legal Review" to notify Surge.', 'success');
-    this.render();
+    try {
+      await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Legal Instrument', {
+        title: `${type} ${ref}`
+      });
+      a.instruments = a.instruments || [];
+      a.instruments.push({
+        id: 'i' + Date.now(), type, ref, fileName: ref,
+        status: 'Pending', uploadedBy: Auth.getUser()?.fullName || 'Bank User', uploadedAt: new Date().toISOString()
+      });
+      UI.toast('Instrument uploaded and attached to the asset.', 'success');
+      this.render();
+    } catch (error) {
+      UI.toast(error.message || 'Instrument upload failed.', 'error');
+    }
   },
 
   saveLegal() {
@@ -1621,7 +1714,7 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="upload-zone" onclick="document.getElementById('file-doc-input').click()">
-            <input type="file" id="file-doc-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'doc')">
+            <input type="file" id="file-doc-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'doc')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
             <div id="doc-status-text">Click to choose document file (PDF, DOCX, JPG · max 20MB)</div>
           </div>
@@ -1634,20 +1727,19 @@ const BankPortal = {
     `;
   },
 
-  addDocument() {
+  async addDocument() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const type = document.getElementById('doc-type').value;
-    const fileName = this._stagedFile?.name || `${type}.pdf`;
-    a.documents = (a.documents || 0) + 1;
-    a.documentFiles = a.documentFiles || [];
-    a.documentFiles.push({ id: 'doc' + Date.now(), type, fileName, uploadedAt: new Date().toISOString() });
-    this._stagedFile = null;
-    Store.addAudit('J. Mensah', 'UPLOAD_DOCUMENT', 'Asset', a.ref, null, null, `Uploaded document: ${type} (${fileName})`);
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', `Uploaded document: ${type} (${fileName})`);
-    Store.persist();
-    UI.toast(`Document ${fileName} uploaded successfully.`, 'success');
-    this.render();
+    try {
+      const result = await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, type, { title: type });
+      a.documentFiles = a.documentFiles || [];
+      a.documentFiles.push({ id: result.document_id, type, uploadedAt: new Date().toISOString() });
+      UI.toast(`${type} uploaded and queued for review.`, 'success');
+      this.render();
+    } catch (error) {
+      UI.toast(error.message || 'Document upload failed.', 'error');
+    }
   },
 
   renderEditMedia(a) {
@@ -1670,10 +1762,10 @@ const BankPortal = {
             </select>
           </div></div>
           <div class="upload-zone" onclick="document.getElementById('file-photo-input').click()">
-            <input type="file" id="file-photo-input" accept="image/*" style="display:none" onchange="BankPortal.handleFileSelect(event, 'photo')">
+            <input type="file" id="file-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'photo')">
             <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
             <div id="photo-status-text">Click to choose photo (JPG, PNG · max 10MB)</div>
-            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">A watermarked derivative is generated automatically (AS-5)</div>
+            <div style="font-size:11px;margin-top:4px;color:var(--text-2)">JPEG, PNG, or WebP · 10MB maximum</div>
           </div>
           <button class="btn primary" style="margin-top:12px" onclick="BankPortal.uploadPhoto()">+ Upload Photo</button>
         </div>
@@ -1684,21 +1776,23 @@ const BankPortal = {
     `;
   },
 
-  uploadPhoto() {
+  async uploadPhoto() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const type = document.getElementById('media-type').value;
-    const fileName = this._stagedFile?.name || `${type}_photo.jpg`;
-    a.images = (a.images || 0) + 1;
-    if (type === 'exterior') a.exteriorImage = true;
-    a.photoFiles = a.photoFiles || [];
-    a.photoFiles.push({ id: 'ph' + Date.now(), type, fileName, watermarked: true, uploadedAt: new Date().toISOString() });
-    this._stagedFile = null;
-    Store.addAudit('J. Mensah', 'UPLOAD_PHOTO', 'Asset', a.ref, null, null, `Uploaded ${type} photo (${fileName})`);
-    Store.addActivity(this.selectedAssetId, 'J. Mensah', `Uploaded ${type} photo (${fileName})`);
-    Store.persist();
-    UI.toast(`Photo ${fileName} uploaded successfully.`, 'success');
-    this.render();
+    try {
+      await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/photos/upload`, type, {
+        caption: type,
+        is_exterior: type === 'exterior' ? '1' : '0',
+        is_primary: (a.images || 0) === 0 ? '1' : '0'
+      });
+      a.images = (a.images || 0) + 1;
+      if (type === 'exterior') a.exteriorImage = true;
+      UI.toast(`${type} photo uploaded successfully.`, 'success');
+      this.render();
+    } catch (error) {
+      UI.toast(error.message || 'Photo upload failed.', 'error');
+    }
   },
 
   renderEditTitle(a) {
@@ -1730,8 +1824,8 @@ const BankPortal = {
           </div></div>
           <div class="field"><span class="lbl">Title Document</span><div class="ctl">
             <div class="upload-zone" onclick="document.getElementById('file-title-input').click()">
-            <input type="file" id="file-title-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'title')">
-            <div>Upload title deed</div>
+            <input type="file" id="file-title-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'title')">
+            <div id="title-status-text">Upload title deed</div>
             </div>
           </div></div>
         </div>
@@ -1743,11 +1837,20 @@ const BankPortal = {
     `;
   },
 
-  saveTitle() {
+  async saveTitle() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const titleNumber = document.getElementById('title-number').value.trim();
     if (!titleNumber) return UI.toast('Title number is required', 'error');
+    if (this._stagedFile?.category === 'title') {
+      try {
+        await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Title Deed', {
+          title: `Title Deed ${titleNumber}`
+        });
+      } catch (error) {
+        return UI.toast(error.message || 'Title document upload failed.', 'error');
+      }
+    }
     Store.updateAsset(this.selectedAssetId, {
       titleNumber,
       titleType: document.getElementById('title-type').value,
@@ -1775,9 +1878,9 @@ const BankPortal = {
           <div class="field"><span class="lbl">Validity (days)</span><div class="ctl"><input id="val-validity" type="number" value="365" min="1"><span class="help">Valuation validity period configured per institutional policy.</span></div></div>
           <div class="field"><span class="lbl">Valuer Name</span><div class="ctl"><input id="val-valuer" value="${a.valuerName || ''}" placeholder="Licensed valuer firm"></div></div>
           <div class="upload-zone" style="margin-top:12px" onclick="document.getElementById('file-val-input').click()">
-            <input type="file" id="file-val-input" style="display:none" onchange="BankPortal.handleFileSelect(event, 'val')">
+            <input type="file" id="file-val-input" accept=".pdf,.docx,image/jpeg,image/png,image/webp" style="display:none" onchange="BankPortal.handleFileSelect(event, 'val')">
             <svg class="ico" viewBox="0 0 24 24"><path d="M12 4v12M8 8l4-4 4 4"/><path d="M4 20h16"/></svg>
-            <div>Upload valuation report (PDF)</div>
+            <div id="val-status-text">Upload valuation report (PDF)</div>
           </div>
         </div>
       </div>
@@ -1788,7 +1891,7 @@ const BankPortal = {
     `;
   },
 
-  saveValuation() {
+  async saveValuation() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const amount = Number(document.getElementById('val-amount').value);
@@ -1797,6 +1900,15 @@ const BankPortal = {
     const valuerName = document.getElementById('val-valuer').value.trim();
     if (!amount || amount <= 0) return UI.toast('Valuation amount is required', 'error');
     if (!dateStr) return UI.toast('Valuation date is required', 'error');
+    if (this._stagedFile?.category === 'val') {
+      try {
+        await this.uploadSelectedFile(`/api/bank/assets/${encodeURIComponent(a.id)}/documents/upload`, 'Valuation Report', {
+          title: `Valuation Report ${dateStr}`
+        });
+      } catch (error) {
+        return UI.toast(error.message || 'Valuation report upload failed.', 'error');
+      }
+    }
     const valDate = new Date(dateStr);
     const expiry = new Date(valDate);
     expiry.setDate(expiry.getDate() + validityDays);

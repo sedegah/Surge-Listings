@@ -182,7 +182,8 @@ input[aria-invalid=true] { border-color: var(--danger) }
   var existingToken = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
   if (existingToken) {
     fetch(API_BASE + '/api/auth/me', {
-      headers: { 'Authorization': 'Bearer ' + existingToken }
+      headers: { 'Authorization': 'Bearer ' + existingToken },
+      cache: 'no-store'
     })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -245,7 +246,7 @@ input[aria-invalid=true] { border-color: var(--danger) }
     if (!p) return showError('Enter your password.', ['p']);
 
     btn.disabled = true; btn.textContent = 'Signing in…';
-    fetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })
+    fetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }), cache: 'no-store' })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, json: j }; }); })
       .then(function (res) {
         if (res.ok && res.json.success !== false) {
