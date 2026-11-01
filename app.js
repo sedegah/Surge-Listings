@@ -417,7 +417,7 @@ const Store = {
             documents: d.document_count || 0,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
-            createdBy: d.created_by || 'Officer',
+            createdBy: d.created_by || 'Not recorded',
             legalSubstate: {
               enforcementRecorded: d.status !== 'Draft',
               instrumentsVerified: d.status === 'Live' || d.status === 'Approved',
@@ -426,7 +426,7 @@ const Store = {
             },
             legalNotes: [],
             instruments: [],
-            activity: [{ when: d.created_at, who: d.created_by || 'Officer', what: 'Asset created' }]
+            activity: [{ when: d.created_at, who: d.created_by || 'Not recorded', what: 'Asset created' }]
           }));
         }
       }
@@ -562,7 +562,8 @@ const Store = {
     try {
       const res = await fetch(this.API_BASE + '/api/v1/banks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bankData)
       });
       const json = await res.json();
@@ -581,7 +582,8 @@ const Store = {
     try {
       const res = await fetch(this.API_BASE + '/api/v1/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
       const json = await res.json();
@@ -600,7 +602,8 @@ const Store = {
     try {
       const res = await fetch(this.API_BASE + `/api/v1/users/${userId}/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: newPassword })
       });
       const json = await res.json();
@@ -622,7 +625,8 @@ const Store = {
     try {
       const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
       const json = await res.json();
@@ -659,7 +663,7 @@ const Store = {
     try {
       const res = await fetch(this.API_BASE + `/api/v1/banks/${bankId}`, {
         method: 'DELETE',
-        headers: { 'x-actor-name': 'Platform Admin', 'x-actor-role': 'SA' }
+        credentials: 'same-origin'
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to delete bank');
@@ -2191,8 +2195,6 @@ const BankPortal = {
     try {
       const user = Auth.getUser();
       const branchId = Auth.selectedBranchId || user?.branchId || user?.branch_id || null;
-      const actorName = user?.fullName || user?.full_name || user?.username || 'Officer';
-
       const res = await fetch(Store.API_BASE + '/api/v1/assets', {
         method: 'POST',
         headers: Store.getAuthHeaders(),
@@ -2204,6 +2206,7 @@ const BankPortal = {
         return;
       }
       const d = json.data;
+      const actorName = d.created_by || 'Not recorded';
       const asset = {
         id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || (user?.bankName || 'Surge Partner Bank'),
         ownershipType: d.ownership_type || ownershipType, ownerBankId: d.owner_bank_id || ownerBankId,

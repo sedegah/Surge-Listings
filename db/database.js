@@ -549,19 +549,7 @@ function seedData() {
     db.prepare('INSERT INTO roles (id, name, code, scope, description) VALUES (?, ?, ?, ?, ?)').run(r.id, r.name, r.code, r.scope, r.description);
   }
 
-  // 3. Users
-  const users = [
-    { id: 'u-sedegah', org_id: 'org-surge', bank_id: null, username: 'k.sedegah', full_name: 'Kimathi Sedegah', email: 'k.sedegah@surgesolutions.com.gh', role_code: 'SA' },
-    { id: 'u-mensah', org_id: 'org-mtb', bank_id: 'bank-mtb', username: 'j.mensah', full_name: 'Joseph Mensah', email: 'j.mensah@meridiantrust.com.gh', role_code: 'LRO' },
-    { id: 'u-asare', org_id: 'org-mtb', bank_id: 'bank-mtb', username: 'k.asare', full_name: 'Kofi Asare', email: 'k.asare@meridiantrust.com.gh', role_code: 'AO' },
-    { id: 'u-owusu', org_id: 'org-mtb', bank_id: 'bank-mtb', username: 'a.owusu', full_name: 'Abena Owusu', email: 'a.owusu@meridiantrust.com.gh', role_code: 'AP' },
-    { id: 'u-coastal-ao', org_id: 'org-csb', bank_id: 'bank-csb', username: 'e.quaye', full_name: 'Emmanuel Quaye', email: 'e.quaye@coastalsavings.com.gh', role_code: 'AO' }
-  ];
-  for (const u of users) {
-    db.prepare('INSERT INTO users (id, organization_id, bank_id, username, full_name, email, role_code) VALUES (?, ?, ?, ?, ?, ?, ?)').run(u.id, u.org_id, u.bank_id, u.username, u.full_name, u.email, u.role_code);
-  }
-
-  // 4. Asset Categories
+  // 3. Asset Categories
   const categories = [
     { code: 'House', name: 'Residential House', icon: 'home' },
     { code: 'Vehicle', name: 'Motor Vehicle', icon: 'truck' },
@@ -604,7 +592,7 @@ function seedData() {
       year: 2019,
       mileage: null,
       fuel: null,
-      created_by: 'k.asare'
+      created_by: null
     },
     {
       id: 'ast-002',
@@ -635,7 +623,7 @@ function seedData() {
       year: 2021,
       mileage: '48,200 km',
       fuel: 'Diesel',
-      created_by: 'k.asare'
+      created_by: null
     },
     {
       id: 'ast-003',
@@ -786,9 +774,9 @@ function seedData() {
   `).run();
 
   const instruments = [
-    { id: 'inst-01', case_id: 'ec-001', type: 'Default Notice', ref: 'DN-2026-0182', filing: '2026-08-14', judg: null, court: 'High Court Accra', injunction: 0, status: 'Verified', by: 'j.mensah', at: '2026-10-02' },
-    { id: 'inst-02', case_id: 'ec-001', type: 'Affidavit of Service', ref: 'AS-2026-0311', filing: '2026-08-28', judg: null, court: 'High Court Accra', injunction: 0, status: 'Verified', by: 'j.mensah', at: '2026-10-02' },
-    { id: 'inst-03', case_id: 'ec-001', type: 'Judgment', ref: 'J-2026-0418', filing: '2026-09-15', judg: '2026-10-04', court: 'High Court Accra Commercial Div', injunction: 1, status: 'Verified', by: 'j.mensah', at: '2026-10-04' },
+    { id: 'inst-01', case_id: 'ec-001', type: 'Default Notice', ref: 'DN-2026-0182', filing: '2026-08-14', judg: null, court: 'High Court Accra', injunction: 0, status: 'Verified', by: null, at: null },
+    { id: 'inst-02', case_id: 'ec-001', type: 'Affidavit of Service', ref: 'AS-2026-0311', filing: '2026-08-28', judg: null, court: 'High Court Accra', injunction: 0, status: 'Verified', by: null, at: null },
+    { id: 'inst-03', case_id: 'ec-001', type: 'Judgment', ref: 'J-2026-0418', filing: '2026-09-15', judg: '2026-10-04', court: 'High Court Accra Commercial Div', injunction: 1, status: 'Verified', by: null, at: null },
     { id: 'inst-04', case_id: 'ec-001', type: 'Statutory Notice', ref: 'SN-2026-0094', filing: '2026-10-05', judg: null, court: 'High Court Accra', injunction: 0, status: 'Pending', by: null, at: null }
   ];
   for (const inst of instruments) {
@@ -817,10 +805,10 @@ function seedData() {
 
   // 9. Documents
   const docs = [
-    { id: 'doc-001', asset_id: 'ast-001', title: 'Default Notice & Proof of Service', cat: 'Legal', path: '/docs/default_notice_ast001.pdf', size: '2.4 MB', type: 'application/pdf', status: 'Verified', by: 'j.mensah' },
-    { id: 'doc-002', asset_id: 'ast-001', title: 'High Court Judgment CM/0418/2026', cat: 'Legal', path: '/docs/judgment_cm0418.pdf', size: '4.1 MB', type: 'application/pdf', status: 'Verified', by: 'j.mensah' },
+    { id: 'doc-001', asset_id: 'ast-001', title: 'Default Notice & Proof of Service', cat: 'Legal', path: '/docs/default_notice_ast001.pdf', size: '2.4 MB', type: 'application/pdf', status: 'Verified', by: null },
+    { id: 'doc-002', asset_id: 'ast-001', title: 'High Court Judgment CM/0418/2026', cat: 'Legal', path: '/docs/judgment_cm0418.pdf', size: '4.1 MB', type: 'application/pdf', status: 'Verified', by: null },
     { id: 'doc-003', asset_id: 'ast-001', title: 'Land Title Certificate GA/TM/2019/8821', cat: 'Title', path: '/docs/land_title_8821.pdf', size: '1.8 MB', type: 'application/pdf', status: 'Pending', by: null },
-    { id: 'doc-004', asset_id: 'ast-001', title: 'Valuation Report — Tema Comm 25 House', cat: 'Valuation', path: '/docs/valuation_report_comm25.pdf', size: '6.7 MB', type: 'application/pdf', status: 'Verified', by: 'j.mensah' }
+    { id: 'doc-004', asset_id: 'ast-001', title: 'Valuation Report — Tema Comm 25 House', cat: 'Valuation', path: '/docs/valuation_report_comm25.pdf', size: '6.7 MB', type: 'application/pdf', status: 'Verified', by: null }
   ];
   for (const d of docs) {
     db.prepare(`
@@ -845,7 +833,7 @@ function seedData() {
   // KYC Applications
   db.prepare(`
     INSERT INTO kyc_applications (id, buyer_id, full_name, email, phone, ghana_card_number, source_of_funds, related_asset_ref, status, reviewer_note, internal_note, reviewed_by, reviewed_at)
-    VALUES ('kyc-001', 'byr-001', 'Dr. Kwabena Frimpong', 'k.frimpong@apexmed.com.gh', '+233 24 419 8832', 'GHA-718291044-8', 'Medical Practice & Commercial Real Estate', 'SS-RE-2026-00241', 'Verified', 'Ghana Card verified. Source of funds verified with bank reference letter.', 'Cleared for high-value asset bidding.', 'a.boateng', '2026-10-10')
+    VALUES ('kyc-001', 'byr-001', 'Dr. Kwabena Frimpong', 'k.frimpong@apexmed.com.gh', '+233 24 419 8832', 'GHA-718291044-8', 'Medical Practice & Commercial Real Estate', 'SS-RE-2026-00241', 'Verified', 'Ghana Card verified. Source of funds verified with bank reference letter.', 'Cleared for high-value asset bidding.', NULL, NULL)
   `).run();
 
   db.prepare(`
@@ -976,20 +964,7 @@ function seedData() {
     VALUES ('inv-002', 'INV-2026-000011', null, 'bank-mtb', 12400.00, 'Quarterly document verification & valuation management fees', '2026-10-01', '2026-10-31', 'Issued')
   `).run();
 
-  // 15. Audit Logs
-  const auditLogs = [
-    { actor: 'j.mensah', role: 'Legal / Recovery Officer', org: 'Meridian Trust Bank', action: 'Update Occupancy', entity: 'Asset', id: 'SS-RE-2026-00241', delta: 'Occupancy Status: Vacant -> Occupied — Hostile', old: 'Vacant', new: 'Occupied — Hostile', time: '2026-10-17 14:22:00' },
-    { actor: 'k.asare', role: 'Asset Officer', org: 'Meridian Trust Bank', action: 'Submit for Review', entity: 'Asset', id: 'SS-RE-2026-00241', delta: 'Lifecycle: Draft -> Submitted by Bank', old: 'Draft', new: 'Submitted by Bank', time: '2026-10-15 16:47:00' },
-    { actor: 'k.asare', role: 'Asset Officer', org: 'Meridian Trust Bank', action: 'Change Reserve Price', entity: 'Asset', id: 'SS-RE-2026-00241', delta: 'Reserve: GHS 980,000.00 -> GHS 950,000.00', old: '980,000.00', new: '950,000.00', time: '2026-10-15 16:41:00' },
-  ];
-  for (const log of auditLogs) {
-    db.prepare(`
-      INSERT INTO audit_logs (id, actor_name, actor_role, organization, action_type, entity_type, entity_id, delta_summary, old_values, new_values, created_at)
-      VALUES (hex(randomblob(16)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(log.actor, log.role, log.org, log.action, log.entity, log.id, log.delta, log.old, log.new, log.time);
-  }
-
-  // 16. System Settings
+  // 14. System Settings
   const settings = [
     { key: 'land_search_validity_days', value: '180', description: 'Land search report validity period in days' },
     { key: 'valuation_validity_days', value: '180', description: 'Valuation report validity period in days' },

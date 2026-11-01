@@ -885,7 +885,7 @@ export default {
       }
 
       const deleteUserMatch = pathname.match(/^\/api\/(admin|v1)\/users\/([a-zA-Z0-9_-]+)$/);
-      if (deleteUserMatch && method === 'DELETE') {
+      if (deleteUserMatch && ['PUT', 'DELETE'].includes(method)) {
         const session = await requireAdminAuth();
         const userId = deleteUserMatch[2];
         const target = await env.DB.prepare(`
@@ -895,6 +895,48 @@ export default {
           WHERE u.id = ?
         `).bind(userId).first();
         if (!target) return err('User not found.', 404);
+
+        if (method === 'PUT') {
+          const body = await getBody();
+          const status = String(body.status || '');
+          if (!['Active', 'Suspended'].includes(status)) {
+            return err('User status must be Active or Suspended.', 400);
+          }
+          if (target.status === status) return json({ success: true, message: 'User status is unchanged.' });
+
+          const auditId = randomId();
+          const auditSummary = `Changed staff account @${target.username} status from ${target.status} to ${status}.`;
+          const results = await env.DB.batch([
+            env.DB.prepare(`UPDATE users SET status = ? WHERE id = ?`).bind(status, userId),
+            ...(status !== 'Active' ? [env.DB.prepare(`
+              UPDATE sessions SET revoked = 1, revoke_reason = 'USER_SUSPENDED'
+              WHERE user_id = ? AND revoked = 0
+            `).bind(userId)] : []),
+            env.DB.prepare(`
+              INSERT INTO audit_logs (
+                id, actor_user_id, actor_name, actor_role, organization, action_type,
+                entity_type, entity_id, delta_summary, old_values, new_values, created_at
+              ) VALUES (?, ?, ?, ?, ?, 'UPDATE_USER_STATUS', 'User', ?, ?, ?, ?, datetime('now'))
+            `).bind(
+              auditId,
+              session.user_id,
+              session.full_name,
+              session.role_code,
+              session.organization_name || session.bank_name || 'Surge Solutions',
+              target.public_id || target.id,
+              auditSummary,
+              JSON.stringify({ status: target.status }),
+              JSON.stringify({ status })
+            )
+          ]);
+          if (!results[0]?.meta?.changes) return err('User status was not updated. Refresh and try again.', 409);
+          return json({ success: true, message: `User @${target.username} is now ${status}.` });
+        }
+
+        const protectedAccount = await env.DB.prepare(`
+          SELECT 1 AS protected FROM protected_user_accounts WHERE user_id = ?
+        `).bind(userId).first();
+        if (protectedAccount) return err('This owner account is protected and cannot be deleted.', 403);
         if (target.id === session.user_id) return err('You cannot delete your own account.', 409);
 
         if (target.role_code === 'SA' && target.status === 'Active') {
