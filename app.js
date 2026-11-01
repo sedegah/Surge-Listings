@@ -1291,12 +1291,63 @@ const BankPortal = {
     });
   },
 
-  openAsset(id) { this._stagedFile = null; this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },
-  closeAsset() { this._stagedFile = null; this.selectedAssetId = null; this.subPage = null; this.render(); },
-  setTab(t) { this.detailTab = t; this.render(); },
+  openAsset(id) {
+    this._stagedFile = null;
+    this._stagedPhotos = {};
+    this.selectedAssetId = id;
+    this.currentView = 'assets';
+    this.detailTab = 'overview';
+    this.subPage = null;
+    this.render();
+    void this.loadPhotos(id);
+  },
+  closeAsset() {
+    this._stagedFile = null;
+    this._stagedPhotos = {};
+    this.selectedAssetId = null;
+    this.subPage = null;
+    this.render();
+  },
+  setTab(t) {
+    this.detailTab = t;
+    this.render();
+    if (t === 'media' && this.selectedAssetId) {
+      void this.loadPhotos(this.selectedAssetId);
+    }
+  },
 
-  openSubPage(name) { this._stagedFile = null; this.subPage = name; this.render(); },
-  closeSubPage() { this._stagedFile = null; this.subPage = null; this.render(); },
+  openSubPage(name) {
+    this._stagedFile = null;
+    this.subPage = name;
+    this.render();
+    if (name === 'edit-media' && this.selectedAssetId) {
+      void this.loadPhotos(this.selectedAssetId);
+    }
+  },
+  closeSubPage() {
+    this._stagedFile = null;
+    this._stagedPhotos = {};
+    this.subPage = null;
+    this.render();
+  },
+
+  async loadPhotos(assetId) {
+    if (!assetId) return;
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos`, {
+        headers: Store.getAuthHeaders()
+      });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        this._currentPhotos = json.data;
+        if (this.subPage === 'edit-media' || (this.currentView === 'assets' && this.detailTab === 'media')) {
+          this.render();
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load photos:', e);
+    }
+  },
 
   async performAssetAction(action, successMessage, body = {}, assetId = this.selectedAssetId) {
     if (!assetId) {

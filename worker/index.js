@@ -1815,6 +1815,50 @@ export default {
         }
       }
 
+      // List Asset Photos
+      const photoListMatch = pathname.match(/^\/api\/(bank|admin)\/assets\/([a-zA-Z0-9_-]+)\/photos$/);
+      if (photoListMatch && method === 'GET') {
+        const session = await requireBankAuth();
+        const assetRef = decodeURIComponent(photoListMatch[2]);
+        const asset = session.scope === 'surge'
+          ? await env.DB.prepare(`SELECT id, public_ref, bank_id FROM assets WHERE id = ? OR public_ref = ?`).bind(assetRef, assetRef).first()
+          : await env.DB.prepare(`SELECT id, public_ref, bank_id FROM assets WHERE (id = ? OR public_ref = ?) AND bank_id = ?`).bind(assetRef, assetRef, session.bank_id).first();
+        if (!asset) return err('Asset not found or access denied.', 404);
+
+        const images = await env.DB.prepare(`SELECT * FROM asset_images WHERE asset_id = ? ORDER BY sort_order ASC, id ASC`).bind(asset.id).all();
+        return json({ success: true, count: images.results.length, data: images.results });
+      }
+
+      // Delete Asset Photo
+      const photoDeleteMatch = pathname.match(/^\/api\/(bank|admin)\/assets\/([a-zA-Z0-9_-]+)\/photos\/([a-zA-Z0-9_-]+)$/);
+      if (photoDeleteMatch && method === 'DELETE') {
+        const session = await requireBankAuth();
+        const assetRef = decodeURIComponent(photoDeleteMatch[2]);
+        const photoId = decodeURIComponent(photoDeleteMatch[3]);
+        const asset = session.scope === 'surge'
+          ? await env.DB.prepare(`SELECT id, public_ref, bank_id FROM assets WHERE id = ? OR public_ref = ?`).bind(assetRef, assetRef).first()
+          : await env.DB.prepare(`SELECT id, public_ref, bank_id FROM assets WHERE (id = ? OR public_ref = ?) AND bank_id = ?`).bind(assetRef, assetRef, session.bank_id).first();
+        if (!asset) return err('Asset not found or access denied.', 404);
+
+        const img = await env.DB.prepare(`SELECT * FROM asset_images WHERE id = ? AND asset_id = ?`).bind(photoId, asset.id).first();
+        if (!img) return err('Photo not found.', 404);
+
+        if (img.object_key && env.ASSETS_BUCKET) {
+          try { await env.ASSETS_BUCKET.delete(img.object_key); } catch (e) {}
+        }
+
+        await env.DB.prepare(`DELETE FROM asset_images WHERE id = ?`).bind(photoId).run();
+        if (img.is_primary) {
+          const nextImg = await env.DB.prepare(`SELECT id FROM asset_images WHERE asset_id = ? LIMIT 1`).bind(asset.id).first();
+          if (nextImg) {
+            await env.DB.prepare(`UPDATE asset_images SET is_primary = 1 WHERE id = ?`).bind(nextImg.id).run();
+          }
+        }
+        await env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`).bind(asset.id).run();
+        await auditLog(actorName, actorRole, session.bank_id || asset.bank_id, 'DELETE_PHOTO', 'AssetImage', photoId, `Deleted photo on ${asset.public_ref}`);
+        return json({ success: true, message: 'Photo deleted successfully.' });
+      }
+
       const documentDownloadMatch = pathname.match(/^\/api\/(bank|admin)\/documents\/([a-zA-Z0-9_-]+)\/download$/);
       if (documentDownloadMatch && method === 'GET') {
         const isAdmin = documentDownloadMatch[1] === 'admin';
