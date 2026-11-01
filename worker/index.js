@@ -1344,12 +1344,12 @@ export default {
 
       if (pathname === '/api/admin/valuations' && method === 'GET') {
         const vals = await env.DB.prepare(`
-          SELECT v.*, a.public_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name,
+          SELECT v.*, v.rowid AS record_order, a.public_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name,
             d.title AS document_title, d.category AS document_category, d.file_size AS document_size
           FROM valuations v
           JOIN assets a ON v.asset_id = a.id
           JOIN banks b ON a.bank_id = b.id
-          ORDER BY v.valuation_date DESC
+          ORDER BY v.valuation_date DESC, v.rowid DESC
         `).all();
         return json({ success: true, count: vals.results.length, data: vals.results });
       }

@@ -2634,7 +2634,10 @@ const AdminPortal = {
     const evidenceKey = `${kind}:${recordId}:${documentId}`;
     if (!this.openedReviewDocuments.has(evidenceKey)) {
       const opened = await this.openReviewDocument(documentId);
-      if (!opened) return;
+      if (!opened) {
+        this.render();
+        return;
+      }
       this.openedReviewDocuments.add(evidenceKey);
       UI.toast('Review the opened document, then select Verify again to save your decision.', 'success');
       this.render();
