@@ -116,7 +116,9 @@ const Auth = {
     retry.addEventListener('click', async () => {
       retry.disabled = true;
       status.replaceChildren(document.createTextNode('Verifying your session…'));
-      await this.checkAuth(requiredScope);
+      if (await this.checkAuth(requiredScope)) {
+        await (requiredScope === 'surge' ? AdminPortal : BankPortal).init(true);
+      }
     });
     status.appendChild(retry);
 
@@ -841,8 +843,8 @@ const BankPortal = {
   branches: [],
   branchStats: null,
 
-  async init() {
-    const authed = await Auth.checkAuth('bank');
+  async init(alreadyAuthenticated = false) {
+    const authed = alreadyAuthenticated || await Auth.checkAuth('bank');
     if (!authed) return;
 
     document.querySelectorAll('#bank-nav .navitem').forEach(el => {
@@ -2143,8 +2145,8 @@ const AdminPortal = {
   currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
   activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '',
 
-  async init() {
-    const authed = await Auth.checkAuth('surge');
+  async init(alreadyAuthenticated = false) {
+    const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
     if (!authed) return;
 
     document.querySelectorAll('#admin-nav .navitem').forEach(el => {
