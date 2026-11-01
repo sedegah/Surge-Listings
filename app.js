@@ -127,7 +127,7 @@ const Auth = {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       let res;
       let data;
       try {
@@ -151,9 +151,7 @@ const Auth = {
       }
       this.user = data.user;
       sessionStorage.setItem('surge_user', JSON.stringify(data.user));
-      if (!this.selectedBranchId) {
-        this.selectedBranchId = data.user.branchId || data.user.branch_id || null;
-      }
+      this.selectedBranchId = data.user.branchId || data.user.branch_id || null;
 
       // Authorization check
       if (requiredScope === 'bank') {
@@ -239,7 +237,7 @@ const Store = {
     this.banks = [];
     this.users = [];
     this.branches = [];
-    this.fetchRemote();
+    if (!document.body?.dataset.portal) this.fetchRemote();
   },
 
   persist() {
@@ -253,16 +251,19 @@ const Store = {
   async fetchRemote() {
     try {
       const headers = this.getAuthHeaders();
-      const scopeParam = (Auth.getUser()?.scope === 'surge') ? '?scope=all' : '';
+      const portal = document.body?.dataset.portal;
+      const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
+      const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : '/api/v1/assets' + scopeParam;
+      const skipAdminData = portal !== 'admin';
       const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes] = await Promise.allSettled([
-        fetch(this.API_BASE + '/api/v1/assets' + scopeParam, { headers }),
-        fetch(this.API_BASE + '/api/v1/leads', { headers }),
-        fetch(this.API_BASE + '/api/v1/offers', { headers }),
-        fetch(this.API_BASE + '/api/v1/viewings', { headers }),
-        fetch(this.API_BASE + '/api/v1/invoices', { headers }),
-        fetch(this.API_BASE + '/api/v1/audit-logs', { headers }),
-        fetch(this.API_BASE + '/api/v1/banks', { headers }),
-        fetch(this.API_BASE + '/api/v1/users', { headers }),
+        fetch(this.API_BASE + assetsEndpoint, { headers }),
+        fetch(this.API_BASE + '/api/v1/leads' + scopeParam, { headers }),
+        fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers }),
+        fetch(this.API_BASE + '/api/v1/viewings' + scopeParam, { headers }),
+        fetch(this.API_BASE + '/api/v1/invoices' + scopeParam, { headers }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs', { headers }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers }),
+        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers }),
       ]);
 
       // Assets
@@ -371,7 +372,7 @@ const Store = {
       }
 
       // Audit Log
-      if (auditRes.status === 'fulfilled' && auditRes.value.ok) {
+      if (auditRes.status === 'fulfilled' && auditRes.value?.ok) {
         const json = await auditRes.value.json();
         if (json.success && Array.isArray(json.data)) {
           this.auditLog = json.data.map(a => ({
@@ -383,7 +384,7 @@ const Store = {
       }
 
       // Banks
-      if (banksRes.status === 'fulfilled' && banksRes.value.ok) {
+      if (banksRes.status === 'fulfilled' && banksRes.value?.ok) {
         const json = await banksRes.value.json();
         if (json.success && Array.isArray(json.data)) {
           this.banks = json.data.map(b => ({
@@ -405,7 +406,7 @@ const Store = {
       }
 
       // Users & Staff
-      if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
+      if (usersRes.status === 'fulfilled' && usersRes.value?.ok) {
         const json = await usersRes.value.json();
         if (json.success && Array.isArray(json.data)) {
           this.users = json.data.map(u => ({
@@ -795,7 +796,7 @@ const BankPortal = {
     const authed = await Auth.checkAuth('bank');
     if (!authed) return;
 
-    await this.loadBranches();
+    await Promise.all([Store.fetchRemote(), this.loadBranches()]);
 
     document.querySelectorAll('#bank-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
@@ -1825,7 +1826,7 @@ const BankPortal = {
     UI.toast('Creating new asset...', 'info');
     try {
       const user = Auth.getUser();
-      const bankId = user?.bankId || user?.bank_id || 'bank-mtb';
+      const bankId = user?.bankId || user?.bank_id || (user?.scope === 'surge' ? 'bank-surge' : null);
       const branchId = Auth.selectedBranchId || user?.branchId || user?.branch_id || null;
       const actorName = user?.fullName || user?.full_name || user?.username || 'Officer';
 
@@ -1880,9 +1881,9 @@ const BankPortal = {
     Store.addAudit('J. Mensah', 'DELETE', 'Asset', a.ref, 'Draft', 'Deleted', `Draft asset ${a.ref} deleted`);
     Store.persist();
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch(`/api/v1/assets/${id}`, {
+      fetch(`/api/v1/assets/${id}?scope=bank`, {
         method: 'DELETE',
-        headers: { 'x-bank-id': 'bank-mtb', 'x-actor-name': 'J. Mensah', 'x-actor-role': 'Recovery Officer' }
+        headers: Store.getAuthHeaders()
       }).catch(() => {});
     }
     this.closeAsset();
@@ -1929,9 +1930,9 @@ const BankPortal = {
     Store.persist();
 
     if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id), {
+      fetch(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id) + '?scope=bank', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-bank-id': a.bankId || 'bank-mtb', 'x-actor-name': 'J. Mensah' },
+        headers: Store.getAuthHeaders(),
         body: JSON.stringify({
           internalBankRef: a.caseRef,
           categoryCode: a.category,
@@ -2017,6 +2018,7 @@ const AdminPortal = {
     const authed = await Auth.checkAuth('surge');
     if (!authed) return;
 
+    await Store.fetchRemote();
     document.querySelectorAll('#admin-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });

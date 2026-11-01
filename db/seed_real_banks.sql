@@ -1,8 +1,10 @@
 
 -- 1. Clear out fake bank branches and organizations
-DELETE FROM bank_branches;
-DELETE FROM users WHERE bank_id IS NOT NULL;
-DELETE FROM banks;
+DELETE FROM bank_branches WHERE bank_id != 'bank-surge';
+DELETE FROM users
+WHERE bank_id IS NOT NULL
+  AND role_code IN (SELECT code FROM roles WHERE scope = 'bank');
+DELETE FROM banks WHERE id != 'bank-surge';
 DELETE FROM organizations WHERE type = 'bank';
 
 -- 2. Insert Real Ghanaian Organizations (Bank of Ghana Licensed Commercial Banks)
@@ -27,7 +29,12 @@ INSERT INTO banks (id, organization_id, legal_name, short_code, contact_email, c
 ('bank-scb', 'org-scb', 'Standard Chartered Bank Ghana PLC', 'SCB', 'assetmanagement@sc.com', '+233 30 261 0750', 4.0, 'Active', datetime('now')),
 ('bank-cal', 'org-cal', 'CalBank PLC', 'CAL', 'recoveries@calbank.net', '+233 30 268 0068', 4.5, 'Active', datetime('now')),
 -- Also keep alias bank-mtb pointing to Stanbic Bank Ghana for backward compatibility with existing hardcoded references
-('bank-mtb', 'org-sbg', 'Stanbic Bank Ghana Limited (MTB Migration)', 'SBG-ALT', 'specialassets@stanbic.com.gh', '+233 30 823 8900', 4.0, 'Active', datetime('now'));
+('bank-mtb', 'org-sbg', 'Stanbic Bank Ghana Limited (MTB Migration)', 'SBG-ALT', 'specialassets@stanbic.com.gh', '+233 30 823 8900', 4.0, 'Active', datetime('now')),
+('bank-surge', 'org-surge', 'Surge Partner Bank', 'SURGE', '', '', 0.0, 'Active', datetime('now'));
+
+UPDATE users
+SET bank_id = 'bank-surge', branch_id = NULL
+WHERE role_code IN (SELECT code FROM roles WHERE scope = 'surge');
 
 -- 4. Insert Real Head Office & Regional Recovery Branches
 INSERT INTO bank_branches (id, bank_id, name, branch_code, region, town, address, phone, email, manager_name, status, created_at) VALUES

@@ -537,12 +537,17 @@ export default {
           return err('Username, full name, email, and role are required.', 400);
         }
 
+        const role = await env.DB.prepare(`SELECT scope FROM roles WHERE code = ?`).bind(role_code).first();
+        if (!role) return err('The selected role does not exist.', 400);
+
         const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ? OR email = ?`).bind(username.trim().toLowerCase(), email.trim().toLowerCase()).first();
         if (existing) return err('A user with this username or email already exists.', 400);
 
         let orgId = 'org-surge';
-        if (bank_id) {
-          const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(bank_id).first();
+        const assignedBankId = role.scope === 'surge' ? 'bank-surge' : bank_id || null;
+        const assignedBranchId = role.scope === 'surge' ? null : branch_id || null;
+        if (assignedBankId) {
+          const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(assignedBankId).first();
           if (bank) orgId = bank.organization_id;
         }
 
@@ -552,7 +557,7 @@ export default {
         await env.DB.prepare(`
           INSERT INTO users (id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
-        `).bind(userId, orgId, bank_id || null, branch_id || null, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), role_code, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1).run();
+        `).bind(userId, orgId, assignedBankId, assignedBranchId, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), role_code, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1).run();
 
         await auditLog(actorName, actorRole, 'Surge Solutions', 'CREATE_USER', 'User', userId, `Created staff member ${full_name} (@${username})`);
         const createdUser = await env.DB.prepare(`SELECT u.*, b.legal_name as bank_name FROM users u LEFT JOIN banks b ON u.bank_id = b.id WHERE u.id = ?`).bind(userId).first();
@@ -681,23 +686,8 @@ export default {
       // GET /api/bank/dashboard
       if (pathname === '/api/bank/dashboard' && method === 'GET') {
         const session = await requireBankAuth();
-        if (session.scope === 'surge') {
-          const stats = await env.DB.prepare(`
-            SELECT
-              (SELECT COUNT(*) FROM assets) as totalAssets,
-              (SELECT COALESCE(SUM(reserve_price), 0) FROM assets) as totalPortfolioValue,
-              (SELECT COUNT(*) FROM assets WHERE status = 'Live') as liveListings,
-              (SELECT COUNT(*) FROM assets WHERE status IN ('Submitted by Bank', 'Submitted', 'Under Review')) as pendingSurgeReview,
-              (SELECT COUNT(*) FROM assets WHERE legal_hold_active = 1) as legalHolds,
-              (SELECT COUNT(*) FROM assets WHERE status = 'Sold') as completedSales,
-              (SELECT COUNT(*) FROM offers WHERE status = 'Under Bank Review') as activeOffers
-          `).first();
-          const recentActivity = await env.DB.prepare(`
-            SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 8
-          `).all();
-          return json({ success: true, data: { ...stats, recentActivity: recentActivity.results } });
-        }
         const sid = session.bank_id;
+        if (!sid) return err('No bank organisation is associated with this account.', 403);
         const stats = await env.DB.prepare(`
           SELECT 
             (SELECT COUNT(*) FROM assets WHERE bank_id = ?) as totalAssets,
@@ -710,10 +700,11 @@ export default {
         `).bind(sid, sid, sid, sid, sid, sid, sid).first();
 
         const recentActivity = await env.DB.prepare(`
-          SELECT * FROM audit_logs 
-          WHERE organization = ? OR delta_summary LIKE ?
+          SELECT * FROM audit_logs
+          WHERE entity_type = 'Asset'
+            AND entity_id IN (SELECT public_ref FROM assets WHERE bank_id = ?)
           ORDER BY created_at DESC LIMIT 8
-        `).bind(sid, `%${sid}%`).all();
+        `).bind(sid).all();
 
         return json({ success: true, data: { ...stats, recentActivity: recentActivity.results } });
       }
@@ -730,15 +721,14 @@ export default {
       // GET /api/bank/branches
       if ((pathname === '/api/bank/branches' || pathname === '/api/v1/branches') && method === 'GET') {
         const session = await requireBankAuth();
+        if (!session.bank_id) return err('No bank organisation is associated with this account.', 403);
         const query = `
           SELECT b.*, (SELECT COUNT(*) FROM assets WHERE branch_id = b.id) as asset_count
           FROM bank_branches b
-          ${session.scope === 'surge' ? '' : 'WHERE b.bank_id = ?'}
+          WHERE b.bank_id = ?
           ORDER BY b.region ASC, b.district ASC, b.name ASC
         `;
-        const branches = session.scope === 'surge'
-          ? await env.DB.prepare(query).all()
-          : await env.DB.prepare(query).bind(session.bank_id).all();
+        const branches = await env.DB.prepare(query).bind(session.bank_id).all();
         return json({ success: true, count: branches.results.length, data: branches.results });
       }
 
@@ -917,7 +907,10 @@ export default {
         const callerBranchId = session.branch_id;
 
         if (method === 'GET') {
-          const isSurgeAdmin = session.scope === 'surge';
+          const canViewAllBanks = session.scope === 'surge' && pathname === '/api/admin/assets';
+          if (!canViewAllBanks && !callerBankId) {
+            return err('No bank organisation is associated with this account.', 403);
+          }
           let sql = `
             SELECT a.*, b.legal_name as bank_name, b.short_code as bank_code, br.name as branch_name,
               (SELECT COUNT(*) FROM asset_images WHERE asset_id = a.id) as image_count,
@@ -928,7 +921,7 @@ export default {
             LEFT JOIN bank_branches br ON a.branch_id = br.id
           `;
           let stmt;
-          if (!isSurgeAdmin && callerBankId) {
+          if (!canViewAllBanks) {
             let whereClause = ` WHERE a.bank_id = ?`;
             const params = [callerBankId];
             if (callerBranchId) {
@@ -948,7 +941,7 @@ export default {
         if (method === 'POST') {
           const body = await getBody();
           const assetBankId = session.scope === 'surge'
-            ? body.bankId || callerBankId
+            ? 'bank-surge'
             : callerBankId;
           if (!assetBankId) return err('A bank must be selected before creating an asset.', 400);
           const id = 'a-' + Date.now();
@@ -1009,7 +1002,7 @@ export default {
         `).bind(id, id).first();
 
         if (!asset) return err('Asset not found', 404);
-        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+        if (!(session.scope === 'surge' && pathname.startsWith('/api/admin/')) && asset.bank_id !== session.bank_id) {
           return err('Asset not found or access denied.', 404);
         }
 
@@ -1040,7 +1033,7 @@ export default {
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+        if (!(session.scope === 'surge' && pathname.startsWith('/api/admin/')) && asset.bank_id !== session.bank_id) {
           return err('Asset not found or access denied.', 404);
         }
 
@@ -1107,7 +1100,7 @@ export default {
         const id = pathname.split('/').pop();
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (session.scope !== 'surge' && asset.bank_id !== session.bank_id) {
+        if (!(session.scope === 'surge' && pathname.startsWith('/api/admin/')) && asset.bank_id !== session.bank_id) {
           return err('Asset not found or access denied.', 404);
         }
         if (asset.status !== 'Draft') return err('Only draft assets can be deleted', 400);
@@ -1210,14 +1203,16 @@ export default {
       if (['/api/v1/leads', '/api/v1/enquiries', '/api/bank/enquiries', '/api/marketplace/enquiries', '/api/public/enquiries'].includes(pathname)) {
         if (method === 'GET') {
           const session = await requireBankAuth();
+          const canViewAllBanks = session.scope === 'surge' && url.searchParams.get('scope') === 'all';
+          if (!canViewAllBanks && !session.bank_id) return err('No bank organisation is associated with this account.', 403);
           const query = `
             SELECT l.*, a.public_ref as asset_ref, a.title as asset_title
             FROM leads l
             JOIN assets a ON l.asset_id = a.id
-            ${session.scope === 'surge' ? '' : 'WHERE a.bank_id = ?'}
+            ${canViewAllBanks ? '' : 'WHERE a.bank_id = ?'}
             ORDER BY l.created_at DESC
           `;
-          const leads = session.scope === 'surge'
+          const leads = canViewAllBanks
             ? await env.DB.prepare(query).all()
             : await env.DB.prepare(query).bind(session.bank_id).all();
           return json({ success: true, count: leads.results.length, data: leads.results });
@@ -1252,14 +1247,16 @@ export default {
       if (['/api/v1/viewings', '/api/bank/viewings', '/api/marketplace/viewings'].includes(pathname)) {
         if (method === 'GET') {
           const session = await requireBankAuth();
+          const canViewAllBanks = session.scope === 'surge' && url.searchParams.get('scope') === 'all';
+          if (!canViewAllBanks && !session.bank_id) return err('No bank organisation is associated with this account.', 403);
           const query = `
             SELECT v.*, a.public_ref as asset_ref, a.public_location, a.asset_type
             FROM viewings v
             JOIN assets a ON v.asset_id = a.id
-            ${session.scope === 'surge' ? '' : 'WHERE a.bank_id = ?'}
+            ${canViewAllBanks ? '' : 'WHERE a.bank_id = ?'}
             ORDER BY v.created_at DESC
           `;
-          const viewings = session.scope === 'surge'
+          const viewings = canViewAllBanks
             ? await env.DB.prepare(query).all()
             : await env.DB.prepare(query).bind(session.bank_id).all();
           return json({ success: true, count: viewings.results.length, data: viewings.results });
@@ -1287,15 +1284,17 @@ export default {
       if (['/api/v1/offers', '/api/admin/offers', '/api/bank/offers', '/api/marketplace/offers'].includes(pathname)) {
         if (method === 'GET') {
           const session = await requireBankAuth();
+          const canViewAllBanks = session.scope === 'surge' && url.searchParams.get('scope') === 'all';
+          if (!canViewAllBanks && !session.bank_id) return err('No bank organisation is associated with this account.', 403);
           const query = `
             SELECT o.*, a.public_ref as asset_ref, a.title as asset_title, a.reserve_price, b.legal_name as bank_name
             FROM offers o
             JOIN assets a ON o.asset_id = a.id
             JOIN banks b ON a.bank_id = b.id
-            ${session.scope === 'surge' ? '' : 'WHERE a.bank_id = ?'}
+            ${canViewAllBanks ? '' : 'WHERE a.bank_id = ?'}
             ORDER BY o.created_at DESC
           `;
-          const offers = session.scope === 'surge'
+          const offers = canViewAllBanks
             ? await env.DB.prepare(query).all()
             : await env.DB.prepare(query).bind(session.bank_id).all();
           return json({ success: true, count: offers.results.length, data: offers.results });
@@ -1350,14 +1349,16 @@ export default {
       // Invoices
       if (['/api/v1/invoices', '/api/admin/invoices', '/api/bank/invoices'].includes(pathname)) {
         const session = await requireBankAuth();
+        const canViewAllBanks = session.scope === 'surge' && url.searchParams.get('scope') === 'all';
+        if (!canViewAllBanks && !session.bank_id) return err('No bank organisation is associated with this account.', 403);
         const query = `
           SELECT i.*, b.legal_name as bank_name, b.short_code as bank_code
           FROM invoices i
           JOIN banks b ON i.bank_id = b.id
-          ${session.scope === 'surge' ? '' : 'WHERE i.bank_id = ?'}
+          ${canViewAllBanks ? '' : 'WHERE i.bank_id = ?'}
           ORDER BY i.created_at DESC
         `;
-        const invoices = session.scope === 'surge'
+        const invoices = canViewAllBanks
           ? await env.DB.prepare(query).all()
           : await env.DB.prepare(query).bind(session.bank_id).all();
         return json({ success: true, count: invoices.results.length, data: invoices.results });
@@ -1660,12 +1661,7 @@ export default {
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/dashboard$/) && method === 'GET') {
         const session = await requireBankAuth();
         const branchId = pathname.split('/')[4];
-        let branch;
-        if (session.scope === 'surge') {
-          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(branchId).first();
-        } else {
-          branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, session.bank_id).first();
-        }
+        const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(branchId, session.bank_id).first();
         if (!branch) return err('Branch not found or access denied.', 404);
 
         const stats = await env.DB.prepare(`

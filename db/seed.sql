@@ -14,7 +14,8 @@ INSERT OR IGNORE INTO banks (id, organization_id, legal_name, short_code, contac
 ('bank-mtb', 'org-mtb', 'Meridian Trust Bank Limited', 'MTB', 'recoveries@meridiantrust.com.gh', '+233 30 223 8810', 4.0),
 ('bank-csb', 'org-csb', 'Coastal Savings Bank Ghana', 'CSB', 'specialassets@coastalsavings.com.gh', '+233 31 202 4491', 4.5),
 ('bank-scb', 'org-scb', 'Southern Commercial Bank PLC', 'SCB', 'repossessed@southerncomm.com.gh', '+233 33 213 1900', 4.0),
-('bank-amb', 'org-amb', 'Apex Merchant Bank Ltd', 'AMB', 'distressed@apexmerchant.gh', '+233 30 266 5100', 5.0);
+('bank-amb', 'org-amb', 'Apex Merchant Bank Ltd', 'AMB', 'distressed@apexmerchant.gh', '+233 30 266 5100', 5.0),
+('bank-surge', 'org-surge', 'Surge Partner Bank', 'SURGE', '', '', 0.0);
 
 -- 3. Bank Branches
 INSERT OR IGNORE INTO bank_branches (id, bank_id, name, branch_code, region, town, address, phone, email, manager_name, status) VALUES
@@ -53,6 +54,10 @@ INSERT OR IGNORE INTO users (id, organization_id, bank_id, branch_id, username, 
 ('u-asare', 'org-mtb', 'bank-mtb', 'br-mtb-02', 'k.asare', 'Kofi Asare', 'k.asare@meridiantrust.com.gh', 'AO'),
 ('u-owusu', 'org-mtb', 'bank-mtb', 'br-mtb-01', 'a.owusu', 'Abena Owusu', 'a.owusu@meridiantrust.com.gh', 'AP'),
 ('u-coastal-ao', 'org-csb', 'bank-csb', 'br-csb-01', 'e.quaye', 'Emmanuel Quaye', 'e.quaye@coastalsavings.com.gh', 'AO');
+
+UPDATE users
+SET bank_id = 'bank-surge', branch_id = NULL
+WHERE role_code IN (SELECT code FROM roles WHERE scope = 'surge');
 
 -- 6. Asset Categories
 INSERT OR IGNORE INTO asset_categories (code, name, icon) VALUES
