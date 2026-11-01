@@ -26,6 +26,7 @@ const GhanaGeo = {
     'Western': ['Ahanta West','Amenfi Central','Amenfi West','Amenfi East','Effia','Kwesimintsim','Ellembelle','Jomoro','Mpohor','Evalue Gwira','Prestea-Huni Valley','Essikado-Ketan','Sekondi','Takoradi','Shama','Tarkwa-Nsuaem','Wassa East'],
     'Western North': ['Aowin','Bia East','Bia West','Bibiani-Anhwiaso-Bekwai','Bodi','Juaboso','Sefwi-Akontombra','Sefwi-Wiawso','Suaman']
   },
+
   getRegionList() { return Object.keys(this.REGIONS); },
   getDistricts(region) { return this.REGIONS[region] || []; },
   renderRegionOptions(selectedRegion) {
@@ -1071,6 +1072,9 @@ const BankPortal = {
     el.querySelectorAll('[data-document-download]').forEach(button => {
       button.addEventListener('click', () => this.downloadDocument(button.dataset.documentDownload));
     });
+    el.querySelectorAll('[data-document-delete]').forEach(button => {
+      button.addEventListener('click', () => this.deleteDocument(button.dataset.documentDelete));
+    });
   },
 
   async downloadDocument(documentId) {
@@ -1099,6 +1103,33 @@ const BankPortal = {
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
       UI.toast(error.message || 'Document download failed.', 'error');
+    }
+  },
+
+  async deleteDocument(documentId) {
+    const doc = Store.documents.find(item => item.id === documentId);
+    if (!doc) return UI.toast('Document not found. Refresh the page and try again.', 'error');
+    const linkedToVerifiedRecord = doc.title_verified || doc.valuation_verified || doc.instrument_verified;
+    if (linkedToVerifiedRecord) {
+      return UI.toast('This document supports a completed verification. Ask Surge to revoke it before deleting.', 'error');
+    }
+    if (!confirm(`Delete "${doc.title}" (${doc.category})? This removes the stored file and returns any pending linked review to pending.`)) return;
+    try {
+      const response = await fetch(
+        Store.API_BASE + `/api/bank/documents/${encodeURIComponent(documentId)}`,
+        {
+          method: 'DELETE',
+          headers: Store.getAuthHeaders(),
+          credentials: 'same-origin',
+          cache: 'no-store'
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || `Document deletion failed (${response.status}).`);
+      await Store.fetchRemote();
+      UI.toast(result.message || 'Document deleted.', 'success');
+    } catch (error) {
+      UI.toast(error.message || 'Document could not be deleted.', 'error');
     }
   },
 
@@ -1561,7 +1592,7 @@ const BankPortal = {
           <div class="kv-row"><span class="kv-k">Total Documents</span><span class="kv-v">${a.documents} files</span></div>
           <div class="kv-row"><span class="kv-k">Title Verified</span><span class="kv-v">${a.titleVerified ? UI.badge('Verified') : UI.badge('Pending')}</span></div>
           <div class="kv-row"><span class="kv-k">Land Search</span><span class="kv-v">${a.landSearchValid ? UI.badge('Valid') : UI.badge('Pending')}</span></div>
-          ${docs.map(doc => `<div class="kv-row"><span class="kv-k">${UI.escapeHtml(doc.title)} · ${UI.escapeHtml(doc.category)}</span><button class="btn small" data-document-download="${UI.escapeHtml(doc.id)}">Download</button></div>`).join('')}
+          ${docs.map(doc => `<div class="kv-row"><span class="kv-k">${UI.escapeHtml(doc.title)} · ${UI.escapeHtml(doc.category)}</span><button class="btn small" data-document-download="${UI.escapeHtml(doc.id)}">Download</button><button class="btn small danger" data-document-delete="${UI.escapeHtml(doc.id)}" ${doc.title_verified || doc.valuation_verified || doc.instrument_verified ? 'disabled title="Revoke the completed verification before deleting this document."' : ''}>Delete</button></div>`).join('')}
         </div>
       </div>
     `;
@@ -2552,6 +2583,7 @@ const AdminPortal = {
       case 'review': el.innerHTML = this.renderReviewQueue(); break;
       case 'legal': el.innerHTML = this.renderLegalQueue(); break;
       case 'title': el.innerHTML = this.renderTitleQueue(); break;
+      case 'valuations': el.innerHTML = this.renderValuationQueue(); break;
       case 'offers': el.innerHTML = this.renderOffersView(); break;
       case 'audit': el.innerHTML = this.renderAuditView(); break;
       case 'banks': el.innerHTML = this.renderBanksAndStaffView(); break;
@@ -2656,7 +2688,7 @@ const AdminPortal = {
     } else {
       const titleMap = {
         'dashboard': 'Dashboard', 'assets': 'Assets', 'review': 'Review Queue',
-        'legal': 'Legal Verification', 'title': 'Title & Valuation', 'offers': 'Offers',
+        'legal': 'Legal Verification', 'title': 'Title & Valuation', 'valuations': 'Valuation Review', 'offers': 'Offers',
         'audit': 'Audit Log', 'banks': 'Banks & Staff'
       };
       el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
@@ -2689,7 +2721,7 @@ const AdminPortal = {
   openValuation(assetId, valuationId) {
     this.selectedAssetId = assetId;
     this.selectedValuationId = valuationId;
-    this.currentView = 'title';
+    this.currentView = 'valuations';
     this.detailTab = 'overview';
     this.subPage = 'valuation-verify';
     this.render();
@@ -2896,6 +2928,41 @@ const AdminPortal = {
         <thead><tr><th>Asset</th><th>Bank</th><th>Market Value</th><th>Forced Sale Value</th><th>Valuation Date</th><th>Expiry</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
         <tbody>${valuationRows || '<tr><td colspan="9" style="text-align:center;color:var(--text-2);padding:20px">No valuation submissions yet.</td></tr>'}</tbody>
       </table></div></div>`;
+  },
+
+  renderValuationQueue() {
+    const records = Store.valuations.slice().sort((left, right) =>
+      String(right.valuation_date).localeCompare(String(left.valuation_date)) ||
+      Number(right.record_order || 0) - Number(left.record_order || 0)
+    );
+    const pendingCount = records.filter(record =>
+      record.status !== 'Valid' || record.review_required
+    ).length;
+    const rows = records.map(valuation => `
+      <tr>
+        <td class="ref">${UI.escapeHtml(valuation.public_ref || '')}</td>
+        <td>${UI.escapeHtml(valuation.bank_name || '')}</td>
+        <td>${UI.fmtMoney(valuation.market_value)}</td>
+        <td>${UI.fmtMoney(valuation.forced_sale_value)}</td>
+        <td>${UI.escapeHtml(valuation.valuation_date || '')}</td>
+        <td>${UI.escapeHtml(valuation.expiry_date || '')}</td>
+        <td>${UI.badge(valuation.status || 'Pending Review')}</td>
+        <td>${valuation.document_id
+          ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(valuation.document_id)}">Open report</button>`
+          : UI.badge('No report')}</td>
+        <td><button class="btn small primary" onclick="AdminPortal.openValuation('${UI.escapeHtml(valuation.asset_id)}','${UI.escapeHtml(valuation.id)}')">Review &amp; Validate</button></td>
+      </tr>
+    `).join('');
+    return `
+      <div class="page-head">
+        <h1>Valuation Review</h1>
+        <span class="crumb">${pendingCount} pending · ${records.length} total</span>
+      </div>
+      <div class="banner info"><div>Open a valuation record to review the submitted values and supporting report. Verification is saved to Cloudflare and remains visible after refresh.</div></div>
+      <div class="gridwrap"><table class="grid">
+        <thead><tr><th>Asset</th><th>Bank</th><th>Market Value</th><th>Forced Sale Value</th><th>Valuation Date</th><th>Expiry</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:var(--text-2);padding:20px">No valuation records submitted yet.</td></tr>'}</tbody>
+      </table></div>`;
   },
 
   renderOffersView() {

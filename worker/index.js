@@ -1719,13 +1719,106 @@ export default {
       if ((pathname === '/api/bank/documents' || pathname === '/api/v1/documents') && method === 'GET') {
         const session = await requireBankAuth();
         const docs = await env.DB.prepare(`
-          SELECT d.*, a.public_ref as asset_ref, a.title as asset_title
+          SELECT d.*, a.public_ref as asset_ref, a.title as asset_title,
+            EXISTS(
+              SELECT 1 FROM title_records tr
+              WHERE tr.document_id = d.id AND tr.verification_status = 'Verified'
+            ) AS title_verified,
+            EXISTS(
+              SELECT 1 FROM valuations v
+              WHERE v.document_id = d.id AND v.status = 'Valid' AND v.review_required = 0
+            ) AS valuation_verified,
+            EXISTS(
+              SELECT 1 FROM legal_instruments li
+              WHERE li.notes = 'Document ' || d.id AND li.verification_status = 'Verified'
+            ) AS instrument_verified
           FROM documents d
           JOIN assets a ON d.asset_id = a.id
           WHERE a.bank_id = ?
           ORDER BY d.uploaded_at DESC
         `).bind(session.bank_id).all();
         return json({ success: true, count: docs.results.length, data: docs.results });
+      }
+
+      const bankDocumentDeleteMatch = pathname.match(/^\/api\/bank\/documents\/([a-zA-Z0-9_-]+)$/);
+      if (bankDocumentDeleteMatch && method === 'DELETE') {
+        const session = await requireBankAuth();
+        const documentId = decodeURIComponent(bankDocumentDeleteMatch[1]);
+        const document = await env.DB.prepare(`
+          SELECT d.*, a.public_ref, a.bank_id
+          FROM documents d
+          JOIN assets a ON a.id = d.asset_id
+          WHERE d.id = ? AND a.bank_id = ?
+        `).bind(documentId, session.bank_id).first();
+        if (!document) return err('Document not found or access denied.', 404);
+
+        const references = await env.DB.prepare(`
+          SELECT
+            EXISTS(
+              SELECT 1 FROM title_records
+              WHERE document_id = ? AND verification_status = 'Verified'
+            ) AS title_verified,
+            EXISTS(
+              SELECT 1 FROM valuations
+              WHERE document_id = ? AND status = 'Valid' AND review_required = 0
+            ) AS valuation_verified,
+            EXISTS(
+              SELECT 1 FROM legal_instruments
+              WHERE notes = ? AND verification_status = 'Verified'
+            ) AS instrument_verified
+        `).bind(document.id, document.id, `Document ${document.id}`).first();
+        if (references?.title_verified || references?.valuation_verified || references?.instrument_verified) {
+          return err('This document supports a completed verification. Revoke that verification before deleting the document.', 409);
+        }
+
+        const bucket = bucketForStoredDocument(document.storage_bucket || 'surge-documents');
+        if (!bucket) return err(`R2 storage binding is missing for ${document.storage_bucket || 'surge-documents'}.`, 503);
+        try {
+          await bucket.delete(document.file_path);
+        } catch (error) {
+          console.error('Document object deletion failed:', error);
+          return err('The stored document could not be deleted. No document records were changed.', 502);
+        }
+
+        const instrument = await env.DB.prepare(`
+          SELECT case_id FROM legal_instruments WHERE notes = ? AND verification_status != 'Verified'
+        `).bind(`Document ${document.id}`).first();
+        await env.DB.batch([
+          env.DB.prepare(`
+            UPDATE title_records
+            SET document_id = NULL, verification_status = 'Pending', verified_by = NULL,
+              verified_at = NULL, notes = 'Supporting document removed by bank.'
+            WHERE document_id = ?
+          `).bind(document.id),
+          env.DB.prepare(`
+            UPDATE valuations
+            SET document_id = NULL, status = 'Pending Review', review_required = 1,
+              notes = 'Supporting report removed by bank.'
+            WHERE document_id = ?
+          `).bind(document.id),
+          ...(instrument ? [
+            env.DB.prepare(`
+              UPDATE enforcement_cases SET status = 'Pending Verification' WHERE id = ?
+            `).bind(instrument.case_id),
+            env.DB.prepare(`
+              DELETE FROM legal_instruments WHERE notes = ? AND verification_status != 'Verified'
+            `).bind(`Document ${document.id}`)
+          ] : []),
+          env.DB.prepare(`DELETE FROM documents WHERE id = ? AND asset_id = ?`)
+            .bind(document.id, document.asset_id),
+          env.DB.prepare(`UPDATE assets SET updated_at = datetime('now') WHERE id = ?`)
+            .bind(document.asset_id)
+        ]);
+        await auditLog(
+          session.full_name,
+          session.role_code,
+          session.bank_name || session.bank_id,
+          'DELETE_DOCUMENT',
+          'Document',
+          document.id,
+          `Deleted ${document.category} "${document.title}" from ${document.public_ref}`
+        );
+        return json({ success: true, message: 'Document deleted successfully.' });
       }
 
       if (pathname === '/api/admin/documents' && method === 'GET') {
