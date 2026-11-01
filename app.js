@@ -517,18 +517,42 @@ const Store = {
       if (offersRes.status === 'fulfilled' && offersRes.value.ok) {
         const json = await offersRes.value.json();
         if (json.success && Array.isArray(json.data)) {
-          this.offers = json.data.map(o => ({
-            id: o.id, ref: o.offer_ref, assetId: o.asset_id, assetRef: o.asset_ref || '',
-            assetTitle: o.asset_title || '',
-            bankName: o.bank_name || '',
-            buyer: o.buyer_name, amount: o.amount, status: o.status,
-            belowReserve: !!o.below_reserve, date: o.created_at,
-            validity: o.validity_date, notes: o.notes || '',
-            surgeVerified: !!o.surge_verified,
-            surgeVerifiedBy: o.surge_verified_by || '',
-            surgeVerifiedAt: o.surge_verified_at || null,
-            rejectionReason: o.rejection_reason || ''
-          }));
+          this.offers = json.data.map(o => {
+            let ghanaCard = '';
+            let phone = '';
+            let email = '';
+            const notes = o.notes || '';
+            const gcMatch = notes.match(/Ghana Card:\s*([^\s·]+)/i);
+            if (gcMatch) ghanaCard = gcMatch[1];
+            const phoneMatch = notes.match(/Contact:\s*([^\s(]+)/i);
+            if (phoneMatch) phone = phoneMatch[1];
+            const emailMatch = notes.match(/\(([^)]+@[^)]+)\)/i);
+            if (emailMatch) email = emailMatch[1];
+
+            return {
+              id: o.id,
+              ref: o.offer_ref,
+              assetId: o.asset_id,
+              assetRef: o.asset_ref || '',
+              assetTitle: o.asset_title || '',
+              bankName: o.bank_name || '',
+              buyer: o.buyer_name,
+              amount: o.amount,
+              status: o.status,
+              belowReserve: !!o.below_reserve,
+              date: o.created_at,
+              validity: o.validity_date,
+              notes: o.notes || '',
+              conditions: o.conditions || 'Cash / Direct Bank Transfer',
+              ghanaCard: ghanaCard || '',
+              phone: phone || '',
+              email: email || '',
+              surgeVerified: !!o.surge_verified,
+              surgeVerifiedBy: o.surge_verified_by || '',
+              surgeVerifiedAt: o.surge_verified_at || null,
+              rejectionReason: o.rejection_reason || ''
+            };
+          });
         }
       }
 
