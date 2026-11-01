@@ -2905,6 +2905,9 @@ const AdminPortal = {
           <div class="caption">Review &amp; Publication Actions</div>
           <div class="body">
             <div class="form-actions" style="justify-content:flex-start;gap:10px">
+              ${readiness.allPass && !isLive ? `
+                <button class="btn success" onclick="AdminPortal.publishAsset()">Publish</button>
+              ` : ''}
               
               ${['Submitted', 'Submitted by Bank'].includes(a.status) ? `
                 <button class="btn primary" onclick="AdminPortal.startReview()">Begin Review</button>
@@ -2916,9 +2919,8 @@ const AdminPortal = {
                 <button class="btn danger" onclick="AdminPortal.rejectAsset()">Reject</button>
               ` : ''}
               
-              ${a.status === 'Approved' ? `
+              ${a.status === 'Approved' && !readiness.allPass ? `
                 <button class="btn success" onclick="AdminPortal.publishAsset()">Publish Listing</button>
-                
               ` : ''}
               
               ${isLive ? `
@@ -3112,7 +3114,6 @@ const AdminPortal = {
         <h1>Valuation Review</h1>
         <span class="crumb">${pendingCount} pending · ${records.length} total</span>
       </div>
-      <div class="banner info"><div>Open a valuation record to review the submitted values and supporting report. Verification is saved to Cloudflare and remains visible after refresh.</div></div>
       <div class="gridwrap"><table class="grid">
         <thead><tr><th>Asset</th><th>Bank</th><th>Market Value</th><th>Forced Sale Value</th><th>Valuation Date</th><th>Expiry</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:var(--text-2);padding:20px">No valuation records submitted yet.</td></tr>'}</tbody>
@@ -3128,7 +3129,18 @@ const AdminPortal = {
   },
 
   renderSubPage() {
-    const a = Store.getAsset(this.selectedAssetId);
+    let a = Store.getAsset(this.selectedAssetId);
+    if (!a && this.subPage === 'valuation-verify' && this.selectedValuationId) {
+      const v = Store.valuations.find(record => record.id === this.selectedValuationId);
+      if (v) {
+        a = Store.getAsset(v.asset_id) || {
+          id: v.asset_id,
+          ref: v.asset_ref || v.asset_id,
+          bankName: v.bank_name || 'Bank Partner',
+          valuationDocumentId: v.document_id
+        };
+      }
+    }
     if (!a) return '<div class="empty-state"><p>Select an asset to continue.</p></div>';
     switch (this.subPage) {
       case 'legal-review': return this.renderLegalWorkspace(a);
