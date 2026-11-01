@@ -59,6 +59,13 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/marketplace",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:match*",
