@@ -2559,7 +2559,9 @@ export default {
         const id = pathname.split('/')[4];
         const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
         if (!asset) return err('Asset not found', 404);
-        if (asset.status !== 'Approved') return err('Only approved assets can be published.', 400);
+        if (!['Approved', 'Submitted', 'Submitted by Bank', 'Under Review'].includes(asset.status)) {
+          return err('This asset cannot be published in its current state.', 400);
+        }
         const readiness = await getAssetReadiness(asset);
         if (!readiness.allPass) return err('Publication is blocked because one or more statutory readiness gates have not passed.', 400, { gates: readiness.gates });
 
