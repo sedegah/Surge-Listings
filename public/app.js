@@ -690,14 +690,10 @@ const Store = {
   getAssetByRef(ref) { return this.assets.find(a => a.ref === ref); },
   getPublicAssets() { return this.assets.filter(a => a.publicationStatus === 'Published' && a.status === 'Live'); },
   getBankAssets() {
-    const user = Auth.getUser();
-    const bankId = user?.bankId || user?.bank_id;
     const branchId = Auth.selectedBranchId;
 
+    // Tenant isolation is enforced by the bank-scoped API; auth uses public bank IDs while assets use internal IDs.
     let list = this.assets;
-    if (bankId) {
-      list = list.filter(a => a.bankId === bankId);
-    }
     if (branchId && branchId !== 'all') {
       list = list.filter(a => a.branchId === branchId);
     }
