@@ -494,11 +494,6 @@ export default {
         const uname = username.trim().toLowerCase();
         const passwordValue = password.trim();
 
-        const loginLimits = await checkLoginRateLimit(uname, ipAddress);
-        if (loginLimits.accountLocked || loginLimits.ipRateLimited) {
-          return err('Too many sign-in attempts. Wait 15 minutes before trying again.', 429);
-        }
-
         const user = await env.DB.prepare(`
           SELECT u.*, r.name as role_name, r.scope, o.name as org_name, o.public_id as organization_public_id,
                  b.id as bank_id, b.public_id as bank_public_id, b.legal_name as bank_name,
@@ -509,10 +504,16 @@ export default {
           LEFT JOIN banks b ON u.bank_id = b.id
           WHERE (u.username = ? OR u.email = ?) AND u.status = 'Active'
         `).bind(uname, uname).first();
+        const lockoutUsername = String(user?.username || uname).trim().toLowerCase();
+
+        const loginLimits = await checkLoginRateLimit(lockoutUsername, ipAddress);
+        if (loginLimits.accountLocked || loginLimits.ipRateLimited) {
+          return err('Too many sign-in attempts. Wait 15 minutes before trying again.', 429);
+        }
 
         const recordFailure = async (reason) => {
           await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, failure_reason, attempted_at) VALUES (?, ?, ?, 0, ?, datetime('now'))`)
-            .bind(randomId(), uname, ipAddress, reason).run();
+            .bind(randomId(), lockoutUsername, ipAddress, reason).run();
         };
 
         if (!user) { await recordFailure('USER_NOT_FOUND'); return err('The username or password is incorrect.', 401); }
