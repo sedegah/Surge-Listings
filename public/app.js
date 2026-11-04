@@ -5134,18 +5134,708 @@ const PublicMarket = {
     UI.toast(`Formal offer submitted. Reference: ${ref}. Recovery Bank notified.`, 'success');
   },
 
-  renderHow() { return `<div class="hero" style="padding:24px 28px"><h2>How It Works</h2></div><div class="group"><div class="caption">1. Browse &amp; Enquire</div><div class="body"><p style="margin:0;font-size:12.5px">Submit a free enquiry. No account needed.</p></div></div><div class="group"><div class="caption">2. Surge Contacts You</div><div class="body"><p style="margin:0;font-size:12.5px">A Surge officer discusses the asset and qualifies your interest.</p></div></div><div class="group"><div class="caption">3. KYC Verification</div><div class="body"><p style="margin:0;font-size:12.5px">Submit identity docs. Surge verifies.</p></div></div><div class="group"><div class="caption">4. Viewing &amp; Offer</div><div class="body"><p style="margin:0;font-size:12.5px">Schedule a viewing, then submit a formal offer.</p></div></div><div class="group"><div class="caption">5. Completion</div><div class="body"><p style="margin:0;font-size:12.5px">Bank decides. If accepted, Surge issues sale docs and invoice.</p></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Live Assets</button></div>`; },
-  renderKyc() { return `<div class="hero" style="padding:24px 28px"><h2>KYC &amp; Verification</h2></div><div class="group"><div class="caption">Why KYC</div><div class="body"><p style="margin:0;font-size:12.5px">KYC is required before viewings and offers, but not to browse. We confirm your identity and source of funds.</p></div></div><div class="group"><div class="caption">What we collect</div><div class="body"><ul style="margin:0;padding-left:20px;font-size:12.5px"><li>Full name and contact</li><li>Ghana Card (encrypted)</li><li>Proof of funds</li><li>Consents</li></ul></div></div><div class="group"><div class="caption">How we protect it</div><div class="body"><ul style="margin:0;padding-left:20px;font-size:12.5px"><li>AES-256-GCM encryption</li><li>Encrypted cloud document vault with audited access</li><li>Only verified reviewers can access</li><li>All access logged</li></ul></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Assets</button></div>`; },
-  renderFaq() { return `<div class="hero" style="padding:24px 28px"><h2>FAQ</h2></div><div class="group"><div class="caption">Do I need an account?</div><div class="body"><p style="margin:0;font-size:12.5px">No — browsing and enquiries are free.</p></div></div><div class="group"><div class="caption">Can I contact the bank?</div><div class="body"><p style="margin:0;font-size:12.5px">No. Surge is the sole intermediary.</p></div></div><div class="group"><div class="caption">Is KYC safe?</div><div class="body"><p style="margin:0;font-size:12.5px">Yes — encrypted and audited.</p></div></div><div style="margin-top:18px"><button class="btn primary" onclick="PublicMarket.goHome()">Browse Assets</button></div>`; },
-  renderContact() {
-    return `<div class="hero" style="padding:24px 28px"><h2>Contact Surge</h2></div><div class="grid2"><div class="group"><div class="caption">Enquiry Form</div><div class="body"><div class="field"><span class="lbl">Name <span class="req">*</span></span><div class="ctl"><input id="ct-name" style="width:100%"></div></div><div class="field"><span class="lbl">Phone <span class="req">*</span></span><div class="ctl"><input id="ct-phone" style="width:100%"></div></div><div class="field"><span class="lbl">Message</span><div class="ctl"><textarea id="ct-msg"></textarea></div></div><button class="btn primary" onclick="PublicMarket.submitContact()">Submit</button></div></div><div class="group"><div class="caption">Contact Details</div><div class="body"><div class="kv-row"><span class="kv-k">Email</span><span class="kv-v">enquiries@surge.gh</span></div><div class="kv-row"><span class="kv-k">Phone</span><span class="kv-v">+233 30 274 0000</span></div><div class="kv-row"><span class="kv-k">Hours</span><span class="kv-v">Mon-Fri, 08:00-17:00 GMT</span></div></div></div></div>`;
+  faqCategory: 'all',
+  faqQuery: '',
+
+  setFaqCategory(cat) {
+    this.faqCategory = cat;
+    this.render();
   },
+
+  handleFaqSearch(val) {
+    this.faqQuery = (val || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('.pub-faq-row');
+    rows.forEach(r => {
+      const text = (r.getAttribute('data-search') || '').toLowerCase();
+      const match = !this.faqQuery || text.includes(this.faqQuery);
+      r.style.display = match ? 'block' : 'none';
+    });
+  },
+
+  toggleFaq(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('active');
+  },
+
+  renderHow() {
+    return `
+      <div class="pub-hero">
+        <div class="pub-hero-badge"><span class="sq"></span>Statutory Asset Disposition Framework</div>
+        <h2>How Distressed Asset Acquisition Works</h2>
+        <p>Surge Solutions is the licensed recovery and disposition intermediary for commercial banks in Ghana. We provide a transparent, 5-stage acquisition pipeline that connects qualified purchasers directly to verified bank-held and court-ordered inventory.</p>
+        <div class="pub-metrics-bar">
+          <div class="pub-metric-item"><span class="pub-metric-val">5-Gate</span><span class="pub-metric-lbl">Legal Title Clearance</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">4.0%</span><span class="pub-metric-lbl">Fixed Statutory Fee (No Markups)</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">14–30 Days</span><span class="pub-metric-lbl">Bank Conveyance SLA</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">100%</span><span class="pub-metric-lbl">Bank Escrow Protected</span></div>
+        </div>
+      </div>
+
+      <div class="pub-stepper">
+        <div class="pub-step-card">
+          <div class="pub-step-num"><span class="num">01</span><span class="label">Intake</span></div>
+          <div class="pub-step-content">
+            <div class="pub-step-header">
+              <span class="pub-step-title">Bank Ingestion &amp; 5-Gate Legal Verification</span>
+              <span class="badge live">Pre-Listing Audit</span>
+            </div>
+            <p class="pub-step-desc">Assets originate directly from partner commercial banks following loan default recovery. Surge conducts a rigorous 5-gate audit before any asset is published: High Court Writ of Possession verification, Lands Commission title search, Collateral Registry lien clearance, independent chartered valuation, and on-ground occupancy inspection.</p>
+            <div class="pub-step-safeguard"><b>Safeguard:</b> Only unencumbered assets with court-affirmed disposal mandates reach public listing. Assets with active disputes are placed on immediate Legal Hold.</div>
+          </div>
+        </div>
+
+        <div class="pub-step-card">
+          <div class="pub-step-num"><span class="num">02</span><span class="label">Search</span></div>
+          <div class="pub-step-content">
+            <div class="pub-step-header">
+              <span class="pub-step-title">Sanitized Marketplace Discovery &amp; Free Enquiry</span>
+              <span class="badge info">No Registration Required</span>
+            </div>
+            <p class="pub-step-desc">Prospective purchasers browse verified listings across Greater Accra, Ashanti, Western, and Central regions. Asset profiles feature verified specifications, general locality maps, photographic documentation, and reserve price benchmarks. Submit direct inquiries free of charge without paywalls or subscriptions.</p>
+            <div class="pub-step-safeguard"><b>Safeguard:</b> Exact cadastral coordinates and borrower details remain restricted prior to KYC to protect security and privacy.</div>
+          </div>
+        </div>
+
+        <div class="pub-step-card">
+          <div class="pub-step-num"><span class="num">03</span><span class="label">KYC</span></div>
+          <div class="pub-step-content">
+            <div class="pub-step-header">
+              <span class="pub-step-title">Assigned Recovery Officer &amp; KYC Verification</span>
+              <span class="badge pending">Act 1044 Regulated</span>
+            </div>
+            <p class="pub-step-desc">A designated Surge Asset Recovery Officer contacts you within 24 hours to confirm asset specifications and qualify your interest. Under the Anti-Money Laundering Act, 2020 (Act 1044), prospective buyers verify identity via Ghana Card PIN and declare their source of funds prior to viewing or offer submission.</p>
+            <div class="pub-step-safeguard"><b>Safeguard:</b> Fast-track compliance approval (under 24 hours) with AES-256-GCM encrypted document vaulting and strict audit logging.</div>
+          </div>
+        </div>
+
+        <div class="pub-step-card">
+          <div class="pub-step-num"><span class="num">04</span><span class="label">Inspect</span></div>
+          <div class="pub-step-content">
+            <div class="pub-step-header">
+              <span class="pub-step-title">Supervised On-Site Inspection &amp; Formal Offer</span>
+              <span class="badge ok">Direct Bank Filing</span>
+            </div>
+            <p class="pub-step-desc">Surge security and recovery officers escort you for an extensive physical viewing. You are welcome to bring chartered surveyors or structural engineers. Once satisfied, submit a formal purchase offer specifying price, financing structure (Direct Wire, Mortgage Facility, or Staged Settlement), and validity period.</p>
+            <div class="pub-step-safeguard"><b>Safeguard:</b> Offers are formally logged, timestamped, and transmitted directly to the managing bank's Credit and Recovery Committee.</div>
+          </div>
+        </div>
+
+        <div class="pub-step-card">
+          <div class="pub-step-num"><span class="num">05</span><span class="label">Close</span></div>
+          <div class="pub-step-content">
+            <div class="pub-step-header">
+              <span class="pub-step-title">Bank Committee Acceptance &amp; Legal Conveyance</span>
+              <span class="badge sale">Title Perfection</span>
+            </div>
+            <p class="pub-step-desc">Upon committee approval, Surge issues the formal disposition agreement and earnest settlement invoice. Funds are deposited strictly into designated recovery escrow accounts at the partner bank. Surge legal counsel coordinates the Deed of Assignment, High Court Certificate of Purchase, and Lands Commission registration.</p>
+            <div class="pub-step-safeguard"><b>Safeguard:</b> 100% audited transactional trail. Zero cash handling. Guaranteed unencumbered title conveyance.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pub-features-grid">
+        <div class="pub-feat-box">
+          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--blue);border-radius:1px;display:inline-block"></span>Guaranteed Clear Title</div>
+          <p class="pub-feat-desc">Every listing is backed by validated court judgments, Lands Commission searches, and Collateral Registry certifications.</p>
+        </div>
+        <div class="pub-feat-box accent-red">
+          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--red);border-radius:1px;display:inline-block"></span>Zero Broker Markups</div>
+          <p class="pub-feat-desc">Statutory standard commission (4.0%) prevents arbitrary agent markups, unauthorized fees, and speculative price escalation.</p>
+        </div>
+        <div class="pub-feat-box accent-success">
+          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--success);border-radius:1px;display:inline-block"></span>Escrow Bank Settlement</div>
+          <p class="pub-feat-desc">Payments are made directly to authorized bank recovery escrow accounts. No mobile money transfers or personal accounts.</p>
+        </div>
+        <div class="pub-feat-box accent-warn">
+          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--warning);border-radius:1px;display:inline-block"></span>Diaspora Friendly</div>
+          <p class="pub-feat-desc">Remote video walkthroughs, digital Ghana Card compliance, and institutional power-of-attorney coordination for overseas buyers.</p>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">Comparative Model: Surge Regulated Disposition vs. Informal Broker Market</div>
+        <div class="body" style="padding:0">
+          <div class="pub-table-wrap" style="margin:0;border:none">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:28%">Transaction Parameter</th>
+                  <th style="width:36%">Surge Solutions Regulated Intermediary</th>
+                  <th style="width:36%">Traditional Informal Real Estate Market</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><b>Title Origin &amp; Verification</b></td>
+                  <td>Direct court execution &amp; 5-Gate Lands Commission audit</td>
+                  <td style="color:var(--text-2)">Unverified indentures; high risk of multi-party litigation</td>
+                </tr>
+                <tr>
+                  <td><b>Pricing Transparency</b></td>
+                  <td>Independent chartered valuation with published reserve benchmarks</td>
+                  <td style="color:var(--text-2)">Arbitrary broker markups (often 10–25% above actual value)</td>
+                </tr>
+                <tr>
+                  <td><b>Dispute Protection</b></td>
+                  <td>Enforceable High Court Writ of Possession and police clearance</td>
+                  <td style="color:var(--text-2)">Vulnerability to land guards and customary stool injunctions</td>
+                </tr>
+                <tr>
+                  <td><b>Financial Settlement</b></td>
+                  <td>Designated bank recovery escrow account with formal invoice</td>
+                  <td style="color:var(--text-2)">Personal cash requests or unregulated third-party accounts</td>
+                </tr>
+                <tr>
+                  <td><b>Conveyance Timeline</b></td>
+                  <td>14–30 business days with structured legal handover</td>
+                  <td style="color:var(--text-2)">Indefinite delays, incomplete indentures, lack of registration</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+        <button class="btn primary" onclick="PublicMarket.goHome()">Browse Live Assets</button>
+        <button class="btn" onclick="PublicMarket.goKyc()">Start KYC Verification</button>
+        <button class="btn" onclick="PublicMarket.goContact()">Speak With an Asset Officer</button>
+      </div>
+    `;
+  },
+
+  renderKyc() {
+    return `
+      <div class="pub-hero">
+        <div class="pub-hero-badge"><span class="sq"></span>Regulatory Compliance · Act 1044</div>
+        <h2>Buyer KYC &amp; Identity Verification</h2>
+        <p>Under the Anti-Money Laundering Act, 2020 (Act 1044) and Bank of Ghana asset realization directives, prospective purchasers must complete customer due diligence prior to scheduling supervised physical viewings or filing binding purchase offers.</p>
+        <div class="pub-metrics-bar">
+          <div class="pub-metric-item"><span class="pub-metric-val">Act 1044</span><span class="pub-metric-lbl">Statutory Compliance</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">AES-256-GCM</span><span class="pub-metric-lbl">Vault Data Encryption</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">&lt; 24 Hrs</span><span class="pub-metric-lbl">Compliance Turnaround</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Audited</span><span class="pub-metric-lbl">Immutable Review Log</span></div>
+        </div>
+      </div>
+
+      <div class="pub-contact-grid">
+        <div>
+          <div class="group">
+            <div class="caption">Submit Buyer KYC Application</div>
+            <div class="body">
+              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;line-height:1.5">Complete this digital verification form. Your information is encrypted at rest in our secure cloud document vault and reviewed exclusively by certified Surge compliance staff.</p>
+
+              <div class="field">
+                <span class="lbl">Full Legal Name <span class="req">*</span></span>
+                <div class="ctl">
+                  <input id="kyc-fullname" placeholder="As shown on your Ghana Card" style="width:100%">
+                  <span class="help">Individual or Registered Corporate Entity Name</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Ghana Card PIN <span class="req">*</span></span>
+                <div class="ctl">
+                  <input id="kyc-card" placeholder="GHA-XXXXXXXXX-X" style="width:100%">
+                  <span class="help">Format: GHA-123456789-0</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Email Address <span class="req">*</span></span>
+                <div class="ctl">
+                  <input type="email" id="kyc-email" placeholder="purchaser@domain.com" style="width:100%">
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Phone Number <span class="req">*</span></span>
+                <div class="ctl">
+                  <input id="kyc-phone" placeholder="+233 24 000 0000" style="width:100%">
+                  <span class="help">Include country code for diaspora buyers</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Buyer Category <span class="req">*</span></span>
+                <div class="ctl">
+                  <select id="kyc-category" style="width:100%">
+                    <option value="Individual Resident">Individual Ghanaian Resident</option>
+                    <option value="Corporate Entity">Registered Corporate Entity / Enterprise</option>
+                    <option value="Diaspora Ghanaian">Diaspora Ghanaian Investor</option>
+                    <option value="Foreign National">Foreign National / International Investor</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Source of Funds <span class="req">*</span></span>
+                <div class="ctl">
+                  <select id="kyc-source" style="width:100%">
+                    <option value="Personal Savings">Personal Savings &amp; Accumulated Earnings</option>
+                    <option value="Business Operations">Operating Business Revenue / Retained Earnings</option>
+                    <option value="Bank Mortgage Facility">Commercial Bank Mortgage / Pre-Approved Facility</option>
+                    <option value="Diaspora Remittances">Diaspora Foreign Exchange Remittances</option>
+                    <option value="Asset Sale / Liquidation">Proceeds from Previous Asset Sale or Investment</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Target Asset Ref</span>
+                <div class="ctl">
+                  <input id="kyc-asset-ref" placeholder="e.g. AST-ACC-2026-001 (Optional)" style="width:100%">
+                  <span class="help">Leave blank for general pre-approved buyer qualification</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Consent &amp; Authorization <span class="req">*</span></span>
+                <div class="ctl" style="padding-top:4px">
+                  <label style="font-size:12px;color:var(--text);display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="kyc-consent" style="margin-top:2px;width:auto;height:auto">
+                    <span>I certify that all details submitted are accurate and consent to verification with the National Identification Authority and partner bank compliance systems under Act 1044.</span>
+                  </label>
+                </div>
+              </div>
+
+              <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn primary" onclick="PublicMarket.submitKyc()">Submit KYC for Verification</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pub-contact-card">
+            <h4><span class="sq"></span>Why KYC is Mandatory</h4>
+            <p style="font-size:12px;color:var(--text-2);line-height:1.55;margin:0 0 10px">Repossessed assets are legally protected properties under court custody and commercial bank balance sheets. To prevent vexatious claims, unauthorized site trespass, or fraudulent bids, only verified parties are granted physical access and offer eligibility.</p>
+            <div class="banner info" style="margin-bottom:0">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              <span><b>Browsing is always free.</b> You do not need KYC simply to view listings or submit preliminary general inquiries.</span>
+            </div>
+          </div>
+
+          <div class="pub-contact-card">
+            <h4><span class="sq"></span>Required Verification Checklist</h4>
+            <div class="readiness-list">
+              <li>
+                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
+                <div class="item-label"><b>Ghana Card PIN</b><br><span style="font-size:11px;color:var(--text-2)">Issued by the National Identification Authority (NIA)</span></div>
+              </li>
+              <li>
+                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
+                <div class="item-label"><b>Proof of Acquisition Capacity</b><br><span style="font-size:11px;color:var(--text-2)">Bank reference letter, facility pre-approval, or funds statement</span></div>
+              </li>
+              <li>
+                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
+                <div class="item-label"><b>GhanaPost Digital Address</b><br><span style="font-size:11px;color:var(--text-2)">Official residential or commercial location identifier</span></div>
+              </li>
+              <li>
+                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
+                <div class="item-label"><b>Corporate Registration (If applicable)</b><br><span style="font-size:11px;color:var(--text-2)">RGD Form 3 and Board Resolution authorizing acquisition</span></div>
+              </li>
+            </div>
+          </div>
+
+          <div class="pub-contact-card">
+            <h4><span class="sq"></span>Data Security &amp; Vault Guarantee</h4>
+            <div class="kv-row"><span class="kv-k">Encryption Standard</span><span class="kv-v">AES-256-GCM at rest</span></div>
+            <div class="kv-row"><span class="kv-k">Access Protocol</span><span class="kv-v">Certified Compliance Officers only</span></div>
+            <div class="kv-row"><span class="kv-k">Audit Logging</span><span class="kv-v">Every retrieval cryptographically signed</span></div>
+            <div class="kv-row"><span class="kv-k">Third-Party Sharing</span><span class="kv-v">Zero sharing with brokers or marketers</span></div>
+          </div>
+
+          <div class="pub-safe-box">
+            <b>Regulatory Notice:</b> In accordance with the Anti-Money Laundering Act, 2020 (Act 1044), Surge Solutions is mandated to report suspicious transaction structures to the Financial Intelligence Centre (FIC).
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  async submitKyc() {
+    const name = document.getElementById('kyc-fullname')?.value?.trim();
+    const card = document.getElementById('kyc-card')?.value?.trim();
+    const email = document.getElementById('kyc-email')?.value?.trim();
+    const phone = document.getElementById('kyc-phone')?.value?.trim();
+    const category = document.getElementById('kyc-category')?.value;
+    const source = document.getElementById('kyc-source')?.value;
+    const assetRef = document.getElementById('kyc-asset-ref')?.value?.trim();
+    const consent = document.getElementById('kyc-consent')?.checked;
+
+    if (!name || !card || !email || !phone) {
+      return UI.toast('Full name, Ghana Card PIN, email, and phone are required.', 'error');
+    }
+    if (!consent) {
+      return UI.toast('Please authorize the compliance verification checkbox to proceed.', 'warn');
+    }
+
+    const kycId = 'KYC-2026-' + Math.floor(100000 + Math.random() * 900000);
+
+    try {
+      if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+        await fetch(Store.API_BASE + '/api/marketplace/buyers/kyc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: name,
+            ghana_card_number: card,
+            email,
+            phone,
+            source_of_funds: source,
+            related_asset_ref: assetRef
+          })
+        });
+      }
+    } catch (e) {
+      console.warn('KYC remote dispatch fallback:', e);
+    }
+
+    Store.addAudit(name, 'KYC_SUBMISSION', 'KYC', kycId, null, 'Pending Review', `Buyer KYC application submitted by ${name} (${card})`);
+
+    UI.modal('KYC Application Received', `
+      <div style="text-align:center;padding:12px 0 16px">
+        <div style="width:48px;height:48px;border-radius:50%;background:#D4EDDA;color:#155724;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+          <svg style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h3 style="margin:0 0 6px;font-size:16px">Verification Application Lodged</h3>
+        <p style="font-size:12.5px;color:var(--text-2);margin:0 0 14px">Your application has been received and routed to the Surge Compliance Desk.</p>
+        <div style="background:#F6F9FC;border:1px solid #C9D8EA;padding:10px 14px;border-radius:3px;font-family:Consolas,monospace;font-size:14px;font-weight:700;color:var(--blue)">
+          Reference: ${kycId}
+        </div>
+      </div>
+      <div class="kv-row"><span class="kv-k">Applicant Name</span><span class="kv-v">${UI.escapeHtml(name)}</span></div>
+      <div class="kv-row"><span class="kv-k">Ghana Card PIN</span><span class="kv-v">${UI.escapeHtml(card)}</span></div>
+      <div class="kv-row"><span class="kv-k">Source of Funds</span><span class="kv-v">${UI.escapeHtml(source)}</span></div>
+      <div class="kv-row"><span class="kv-k">Target Asset</span><span class="kv-v">${UI.escapeHtml(assetRef || 'General Buyer Pre-Approval')}</span></div>
+      <div class="kv-row"><span class="kv-k">Review Status</span><span class="kv-v"><span class="badge pending">Under Compliance Review</span></span></div>
+      <p style="font-size:11.5px;color:var(--text-2);margin:12px 0 0;line-height:1.5">You will receive an SMS and email notification upon verification within 4–24 business hours. You may quote this reference number when booking viewings.</p>
+    `, '<button class="btn primary" onclick="UI.closeModal();PublicMarket.goHome()">Return to Marketplace</button>');
+
+    UI.toast('KYC application submitted successfully.', 'success');
+  },
+
+  renderFaq() {
+    const faqs = [
+      {
+        id: 'faq-1',
+        cat: 'title',
+        catLabel: 'Legal & Title',
+        q: 'Where do the assets listed on Surge Solutions originate?',
+        a: 'All listed assets originate directly from partner commercial banks and licensed deposit-taking institutions in Ghana. They represent secured collateral repossessed following judicial default, High Court writs of execution, or consensual settlement recoveries. Surge is the designated intermediary authorized by these financial institutions to handle marketing and disposition.'
+      },
+      {
+        id: 'faq-2',
+        cat: 'title',
+        catLabel: 'Legal & Title',
+        q: 'How does Surge guarantee that properties are free from litigation and land guards?',
+        a: 'Every property published on Surge has passed our 5-Gate Legal Audit: 1) High Court Writ of Possession confirmation; 2) Official Lands Commission search certifying root of title; 3) Collateral Registry search clearing competing institutional claims; 4) Licensed independent valuation; and 5) Physical occupancy inspection by security personnel. Assets with active family or title disputes are placed on strict Legal Hold and never listed.'
+      },
+      {
+        id: 'faq-3',
+        cat: 'title',
+        catLabel: 'Legal & Title',
+        q: 'What legal title documents will I receive upon completing the purchase?',
+        a: 'The purchaser receives an official Deed of Assignment or Conveyance executed by the recovering bank (with High Court registrar attestation where court-mandated), accompanied by the Certificate of Purchase / Vesting Deed and certified cadastral site plans for expedited title registration at the Lands Commission.'
+      },
+      {
+        id: 'faq-4',
+        cat: 'pricing',
+        catLabel: 'Pricing & Terms',
+        q: 'Are listed prices negotiable, and what does "Reserve Price" mean?',
+        a: 'The Reserve Price represents the statutory liquidation threshold determined by independent chartered valuation surveyors and approved by the bank Credit Committee. Prospective buyers may submit formal offers at, above, or reasoned conditional offers near reserve. The bank Credit Committee evaluates each offer based on offered price, settlement speed, and payment method.'
+      },
+      {
+        id: 'faq-5',
+        cat: 'pricing',
+        catLabel: 'Pricing & Terms',
+        q: 'What payment structures and financing options are accepted?',
+        a: 'Three primary payment structures are accepted: 1) Direct Bank Wire / RTGS payment to the bank designated recovery escrow account; 2) Pre-approved mortgage facilities from registered Ghanaian commercial banks; and 3) Structured staged settlements (typically 10–20% earnest deposit upon offer acceptance, with the balance paid over 30 to 90 calendar days).'
+      },
+      {
+        id: 'faq-6',
+        cat: 'pricing',
+        catLabel: 'Pricing & Terms',
+        q: 'Does Surge Solutions charge the buyer any broker fees or search fees?',
+        a: 'No. Surge operates on a transparent, regulated statutory commission model (typically 4.0% included in the approved transaction structure). We never charge upfront inspection fees, registration fees, or speculative agent markups. Searching and enquiring on our marketplace is completely free.'
+      },
+      {
+        id: 'faq-7',
+        cat: 'viewing',
+        catLabel: 'Viewing & Process',
+        q: 'Can I physically inspect a property before submitting an offer?',
+        a: 'Yes. Physical inspections are mandatory and supervised. All viewings must be scheduled in advance through Surge and are conducted alongside an authorized Surge Asset Recovery Officer and security escort. For compliance and property preservation reasons, unescorted visits are strictly prohibited.'
+      },
+      {
+        id: 'faq-8',
+        cat: 'viewing',
+        catLabel: 'Viewing & Process',
+        q: 'Can I bring my own structural engineer, valuer, or legal counsel to the inspection?',
+        a: 'We strongly encourage prospective buyers to bring their chartered surveyors, structural engineers, or legal representatives during the scheduled viewing. Detailed measurements, physical assessments, and structural tests may be performed during the appointment.'
+      },
+      {
+        id: 'faq-9',
+        cat: 'viewing',
+        catLabel: 'Viewing & Process',
+        q: 'Why is KYC required before viewing or offer submission?',
+        a: 'Repossessed real estate is under sensitive judicial and banking administration. Requiring Ghana Card verification and proof of acquisition capacity protects the asset from unlawful trespass, preserves borrower privacy, and fulfills mandatory Bank of Ghana Anti-Money Laundering requirements under Act 1044.'
+      },
+      {
+        id: 'faq-10',
+        cat: 'diaspora',
+        catLabel: 'Diaspora & Foreign',
+        q: 'Can Ghanaians living abroad (Diaspora) purchase assets remotely through Surge?',
+        a: 'Yes. Surge provides a comprehensive Diaspora Acquisition Service. Overseas buyers can conduct live video walkthrough inspections, verify compliance digitally using the Ghana Card PIN or passport, and appoint a local representative or legal counsel through our power-of-attorney protocol.'
+      },
+      {
+        id: 'faq-11',
+        cat: 'diaspora',
+        catLabel: 'Diaspora & Foreign',
+        q: 'Can foreign nationals or non-Ghanaian corporations buy land through Surge?',
+        a: 'Under Article 266 of the 1992 Constitution of Ghana and the Land Act, 2020 (Act 1036), non-citizens and foreign companies may hold residential or commercial land on renewable leasehold terms up to 50 years. Surge verifies the remaining unexpired leasehold term for every listed asset before publishing.'
+      },
+      {
+        id: 'faq-12',
+        cat: 'diaspora',
+        catLabel: 'Diaspora & Foreign',
+        q: 'How are funds transferred safely from international accounts?',
+        a: 'International buyers remit settlement funds strictly through direct SWIFT / RTGS wire transfers into the designated commercial bank recovery escrow accounts in Ghana. Surge never accepts cash transfers via informal money transmitters or personal mobile money accounts.'
+      }
+    ];
+
+    const currentCat = this.faqCategory || 'all';
+    const filteredFaqs = currentCat === 'all' ? faqs : faqs.filter(f => f.cat === currentCat);
+
+    return `
+      <div class="pub-hero">
+        <div class="pub-hero-badge"><span class="sq"></span>Regulatory &amp; Transaction Knowledge Base</div>
+        <h2>Frequently Asked Questions</h2>
+        <p>Comprehensive guidance regarding repossessed asset verification, reserve pricing, inspection protocols, legal title transfer, and escrow settlement in Ghana.</p>
+        <div class="pub-metrics-bar">
+          <div class="pub-metric-item"><span class="pub-metric-val">12</span><span class="pub-metric-lbl">Standard Guidance Topics</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Act 1036</span><span class="pub-metric-lbl">Land Law Aligned</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Direct Bank</span><span class="pub-metric-lbl">No Intermediary Markup</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">100%</span><span class="pub-metric-lbl">Verified Bank Escrow</span></div>
+        </div>
+      </div>
+
+      <div class="pub-faq-toolbar">
+        <div class="pub-faq-filter-pills">
+          <button class="pub-faq-pill ${currentCat === 'all' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('all')">All Questions</button>
+          <button class="pub-faq-pill ${currentCat === 'title' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('title')">Legal &amp; Title</button>
+          <button class="pub-faq-pill ${currentCat === 'pricing' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('pricing')">Pricing &amp; Terms</button>
+          <button class="pub-faq-pill ${currentCat === 'viewing' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('viewing')">Viewing &amp; Process</button>
+          <button class="pub-faq-pill ${currentCat === 'diaspora' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('diaspora')">Diaspora &amp; Foreign</button>
+        </div>
+        <div class="pub-faq-search">
+          <svg class="ico" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--text-2)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input placeholder="Filter questions by keyword..." onkeyup="PublicMarket.handleFaqSearch(this.value)">
+        </div>
+      </div>
+
+      <div class="pub-faq-list" id="pub-faq-container">
+        ${filteredFaqs.map(f => `
+          <div class="pub-faq-row" id="${f.id}" data-search="${UI.escapeHtml(f.q + ' ' + f.a + ' ' + f.catLabel)}">
+            <button class="pub-faq-q" onclick="PublicMarket.toggleFaq('${f.id}')">
+              <span><span class="pub-faq-cat-badge">${f.catLabel}</span>${f.q}</span>
+              <span class="pub-faq-chevron">&#9660;</span>
+            </button>
+            <div class="pub-faq-a">${f.a}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="group" style="background:#EDF1F5">
+        <div class="body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <h4 style="margin:0 0 4px;font-size:14px;color:var(--blue)">Have a question about a specific asset?</h4>
+            <p style="margin:0;font-size:12px;color:var(--text-2)">Our Asset Recovery Officers provide tailored advice on title reports, cadastral surveys, and formal bank offer structuring.</p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn primary" onclick="PublicMarket.goContact()">Submit Asset Enquiry</button>
+            <button class="btn" onclick="PublicMarket.goHome()">Browse Live Listings</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderContact() {
+    return `
+      <div class="pub-hero">
+        <div class="pub-hero-badge"><span class="sq"></span>Official Communications &amp; Advisory Desk</div>
+        <h2>Contact Surge Solutions</h2>
+        <p>Direct communication channels to our Asset Recovery Advisory Desk, Legal Verification Department, and Supervised Viewing Coordinators in Accra.</p>
+        <div class="pub-metrics-bar">
+          <div class="pub-metric-item"><span class="pub-metric-val">Accra, GH</span><span class="pub-metric-lbl">Headquarters &amp; Operations</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">&lt; 4 Hours</span><span class="pub-metric-lbl">Average Response Time</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Direct Lines</span><span class="pub-metric-lbl">Advisory &amp; Legal Desk</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Mon–Sat</span><span class="pub-metric-lbl">Operational Schedule</span></div>
+        </div>
+      </div>
+
+      <div class="pub-contact-grid">
+        <div>
+          <div class="group">
+            <div class="caption">Official Asset Enquiry &amp; Support Request</div>
+            <div class="body">
+              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;line-height:1.5">Submit your inquiry directly to our asset desk. An assigned recovery specialist will review your request and get in touch promptly.</p>
+
+              <div class="field">
+                <span class="lbl">Full Legal Name <span class="req">*</span></span>
+                <div class="ctl">
+                  <input id="ct-name" placeholder="Your full name" style="width:100%">
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Phone Number <span class="req">*</span></span>
+                <div class="ctl">
+                  <input id="ct-phone" placeholder="+233 24 000 0000" style="width:100%">
+                  <span class="help">Include country code for diaspora callers</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Email Address <span class="req">*</span></span>
+                <div class="ctl">
+                  <input type="email" id="ct-email" placeholder="you@domain.com" style="width:100%">
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Nature of Enquiry <span class="req">*</span></span>
+                <div class="ctl">
+                  <select id="ct-subject" style="width:100%">
+                    <option value="Specific Asset Inquiry">Specific Asset Details &amp; Reserve Inquiry</option>
+                    <option value="Schedule Viewing">Request Supervised Physical Viewing</option>
+                    <option value="Diaspora Advisory">Diaspora Investor Advisory &amp; Remote Purchase</option>
+                    <option value="Institutional Purchase">Corporate / Bulk Asset Acquisition</option>
+                    <option value="Legal & Title Clearance">Legal Title Verification &amp; Court Writ Inquiries</option>
+                    <option value="General Information">General Market Information</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Asset Reference</span>
+                <div class="ctl">
+                  <input id="ct-asset-ref" placeholder="e.g. AST-ACC-2026-001 (Optional)" style="width:100%">
+                  <span class="help">Specify if enquiring about an existing listing</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Preferred Contact</span>
+                <div class="ctl">
+                  <select id="ct-channel" style="width:100%">
+                    <option value="Phone Call">Direct Phone Call</option>
+                    <option value="WhatsApp">WhatsApp Message</option>
+                    <option value="Email">Formal Email Correspondence</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="lbl">Message / Inquiry <span class="req">*</span></span>
+                <div class="ctl">
+                  <textarea id="ct-msg" style="width:100%;height:84px" placeholder="Please describe your interest, preferred locations, budget range, or specific questions..."></textarea>
+                </div>
+              </div>
+
+              <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn primary" onclick="PublicMarket.submitContact()">Submit Official Enquiry</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pub-contact-card">
+            <h4><span class="sq"></span>Principal Office &amp; Operations Centre</h4>
+            <div class="kv-row"><span class="kv-k">Physical Address</span><span class="kv-v">Surge Asset Recovery Centre<br>4th Floor, Ridge Financial Enclave<br>Independence Avenue, Accra</span></div>
+            <div class="kv-row"><span class="kv-k">Digital Address</span><span class="kv-v"><span class="badge live">GA-019-4821</span></span></div>
+            <div class="kv-row"><span class="kv-k">Postal Address</span><span class="kv-v">P.O. Box CT 4892, Cantonments, Accra</span></div>
+          </div>
+
+          <div class="pub-contact-card">
+            <h4><span class="sq"></span>Direct Communications</h4>
+            <div class="kv-row"><span class="kv-k">General Switchboard</span><span class="kv-v"><b>+233 (0) 30 274 0000</b></span></div>
+            <div class="kv-row"><span class="kv-k">Asset Advisory Desk</span><span class="kv-v"><b>+233 (0) 24 455 0192</b></span></div>
+            <div class="kv-row"><span class="kv-k">Diaspora WhatsApp</span><span class="kv-v"><b>+233 (0) 50 123 4567</b></span></div>
+            <div class="kv-row"><span class="kv-k">General Enquiries</span><span class="kv-v"><a href="mailto:enquiries@surge.gh">enquiries@surge.gh</a></span></div>
+            <div class="kv-row"><span class="kv-k">Legal &amp; Compliance</span><span class="kv-v"><a href="mailto:legal@surge.gh">legal@surge.gh</a></span></div>
+            <div class="kv-row"><span class="kv-k">Buyer KYC Vault</span><span class="kv-v"><a href="mailto:kyc@surge.gh">kyc@surge.gh</a></span></div>
+          </div>
+
+          <div class="pub-contact-card">
+            <h4><span class="sq"></span>Operating Hours &amp; Viewing Schedule</h4>
+            <div class="kv-row"><span class="kv-k">Monday &ndash; Friday</span><span class="kv-v">08:00 &ndash; 17:00 GMT</span></div>
+            <div class="kv-row"><span class="kv-k">Saturday</span><span class="kv-v">09:00 &ndash; 14:00 GMT (Supervised Viewings Only)</span></div>
+            <div class="kv-row"><span class="kv-k">Sunday &amp; Holidays</span><span class="kv-v">Closed (Emergency Security Protocol Active)</span></div>
+          </div>
+
+          <div class="pub-safe-box">
+            <b>Anti-Fraud Notice:</b> Surge Solutions never requests cash payments in person or to personal mobile money numbers. All formal transaction funds must be settled via certified bank transfers directly into designated partner bank recovery escrow accounts.
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
   submitContact() {
-    const name = document.getElementById('ct-name').value;
-    const phone = document.getElementById('ct-phone').value;
-    if (!name || !phone) return UI.toast('Name and phone required', 'error');
-    UI.toast('Contact submitted', 'success');
-    this.goHome();
+    const name = document.getElementById('ct-name')?.value?.trim();
+    const phone = document.getElementById('ct-phone')?.value?.trim();
+    const email = document.getElementById('ct-email')?.value?.trim();
+    const subject = document.getElementById('ct-subject')?.value || 'General';
+    const assetRef = document.getElementById('ct-asset-ref')?.value?.trim() || '';
+    const channel = document.getElementById('ct-channel')?.value || 'Phone Call';
+    const msg = document.getElementById('ct-msg')?.value?.trim();
+
+    if (!name || !phone || !email || !msg) {
+      return UI.toast('Full name, phone, email, and message are required.', 'error');
+    }
+
+    const ref = 'SL-LEAD-2026-' + String(Store.leads.length + 104).padStart(6, '0');
+    Store.leads.push({
+      id: 'l' + Date.now(),
+      ref,
+      assetId: null,
+      assetRef,
+      name,
+      phone,
+      email,
+      status: 'New',
+      source: 'Contact Desk (' + subject + ')',
+      channel,
+      assignedTo: null,
+      createdAt: new Date().toISOString()
+    });
+
+    Store.addAudit('Public Buyer', 'ENQUIRY', 'Lead', ref, null, 'New', `Official contact enquiry from ${name} [${subject}]`);
+
+    UI.modal('Enquiry Successfully Submitted', `
+      <div style="text-align:center;padding:12px 0 16px">
+        <div style="width:48px;height:48px;border-radius:50%;background:#D4EDDA;color:#155724;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+          <svg style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h3 style="margin:0 0 6px;font-size:16px">Enquiry Reference Assigned</h3>
+        <p style="font-size:12.5px;color:var(--text-2);margin:0 0 14px">Your message has been logged with the Surge Asset Recovery Desk.</p>
+        <div style="background:#F6F9FC;border:1px solid #C9D8EA;padding:10px 14px;border-radius:3px;font-family:Consolas,monospace;font-size:14px;font-weight:700;color:var(--blue)">
+          Reference: ${ref}
+        </div>
+      </div>
+      <div class="kv-row"><span class="kv-k">Sender</span><span class="kv-v">${UI.escapeHtml(name)}</span></div>
+      <div class="kv-row"><span class="kv-k">Phone</span><span class="kv-v">${UI.escapeHtml(phone)}</span></div>
+      <div class="kv-row"><span class="kv-k">Email</span><span class="kv-v">${UI.escapeHtml(email)}</span></div>
+      <div class="kv-row"><span class="kv-k">Enquiry Classification</span><span class="kv-v"><b>${UI.escapeHtml(subject)}</b></span></div>
+      <div class="kv-row"><span class="kv-k">Preferred Channel</span><span class="kv-v">${UI.escapeHtml(channel)}</span></div>
+      <p style="font-size:11.5px;color:var(--text-2);margin:12px 0 0;line-height:1.5">An Asset Recovery Officer will contact you within 4 hours during business days. Thank you for contacting Surge Solutions.</p>
+    `, '<button class="btn primary" onclick="UI.closeModal();PublicMarket.goHome()">Return to Marketplace</button>');
+
+    UI.toast(`Enquiry received. Tracking Reference: ${ref}`, 'success');
   },
 };
 
