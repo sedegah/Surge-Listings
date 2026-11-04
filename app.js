@@ -1903,21 +1903,68 @@ const BankPortal = {
     const interior = photos.find(p => p.caption === 'interior');
     const street = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
     const totalCount = photos.length || a.images || 0;
+    const isComplete = Boolean(exterior && interior && street);
 
     return `
       <div class="group">
-        <div class="caption">Listing Photographs <button class="btn small" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">Manage Photos (3 Required)</button></div>
+        <div class="caption">
+          Listing Photographs &amp; Media Assets
+          <button class="btn small primary" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            Manage Photos (${totalCount} Uploaded)
+          </button>
+        </div>
         <div class="body">
-          <div class="kv-row"><span class="kv-k">Total Photographs</span><span class="kv-v">${totalCount} uploaded</span></div>
-          <div class="kv-row"><span class="kv-k">1. Exterior Front Elevation</span><span class="kv-v">${exterior ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
-          <div class="kv-row"><span class="kv-k">2. Interior Living Space</span><span class="kv-v">${interior ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
-          <div class="kv-row"><span class="kv-k">3. Street View &amp; Surroundings</span><span class="kv-v">${street ? UI.badge('Uploaded') : '<span class="badge alert">Missing — required</span>'}</span></div>
-          ${!exterior || !interior || !street ? `
-            <div class="banner amber" style="margin-top:12px;margin-bottom:0">
+          ${isComplete ? `
+            <div class="banner success" style="margin-bottom:14px">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+              <div><b>Mandatory Photographs Complete (3/3).</b> All 3 required viewing angles have been uploaded and verified for marketplace publication.</div>
+            </div>
+          ` : `
+            <div class="banner amber" style="margin-bottom:14px">
               <svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></svg>
               <div><b>3 Photos Required for Publication.</b> The listing must include exterior front elevation, interior living space, and street surroundings views before it can be published.</div>
             </div>
-          ` : ''}
+          `}
+
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;margin-bottom:14px">
+            <div style="border:1px solid var(--border);border-radius:3px;overflow:hidden;background:#fff">
+              <div style="height:120px;background:#EAEAEA;display:flex;align-items:center;justify-content:center;position:relative">
+                ${exterior && exterior.url ? `<img src="${UI.escapeHtml(exterior.url)}" alt="Exterior" style="width:100%;height:100%;object-fit:cover">` : '<svg class="ico" viewBox="0 0 24 24" style="width:36px;height:36px;color:#999"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'}
+                <span class="badge ${exterior ? 'ok' : 'alert'}" style="position:absolute;top:6px;left:6px">${exterior ? '✓ Uploaded' : 'Missing'}</span>
+              </div>
+              <div style="padding:8px 10px">
+                <b style="font-size:12px">1. Exterior Front</b>
+                <div style="font-size:10.5px;color:var(--text-2)">Primary marketplace cover</div>
+              </div>
+            </div>
+
+            <div style="border:1px solid var(--border);border-radius:3px;overflow:hidden;background:#fff">
+              <div style="height:120px;background:#EAEAEA;display:flex;align-items:center;justify-content:center;position:relative">
+                ${interior && interior.url ? `<img src="${UI.escapeHtml(interior.url)}" alt="Interior" style="width:100%;height:100%;object-fit:cover">` : '<svg class="ico" viewBox="0 0 24 24" style="width:36px;height:36px;color:#999"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'}
+                <span class="badge ${interior ? 'ok' : 'alert'}" style="position:absolute;top:6px;left:6px">${interior ? '✓ Uploaded' : 'Missing'}</span>
+              </div>
+              <div style="padding:8px 10px">
+                <b style="font-size:12px">2. Interior Living Space</b>
+                <div style="font-size:10.5px;color:var(--text-2)">Living area / main hall</div>
+              </div>
+            </div>
+
+            <div style="border:1px solid var(--border);border-radius:3px;overflow:hidden;background:#fff">
+              <div style="height:120px;background:#EAEAEA;display:flex;align-items:center;justify-content:center;position:relative">
+                ${street && street.url ? `<img src="${UI.escapeHtml(street.url)}" alt="Street View" style="width:100%;height:100%;object-fit:cover">` : '<svg class="ico" viewBox="0 0 24 24" style="width:36px;height:36px;color:#999"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'}
+                <span class="badge ${street ? 'ok' : 'alert'}" style="position:absolute;top:6px;left:6px">${street ? '✓ Uploaded' : 'Missing'}</span>
+              </div>
+              <div style="padding:8px 10px">
+                <b style="font-size:12px">3. Street View</b>
+                <div style="font-size:10.5px;color:var(--text-2)">Road &amp; surroundings</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end">
+            <button class="btn primary" onclick="BankPortal.openSubPage('edit-media')">Manage &amp; Upload Photos →</button>
+          </div>
         </div>
       </div>
     `;
@@ -2299,91 +2346,151 @@ const BankPortal = {
     const exteriorPhoto = photos.find(p => p.caption === 'exterior' || p.is_exterior) || (a.exteriorImage ? { caption: 'exterior' } : null);
     const interiorPhoto = photos.find(p => p.caption === 'interior');
     const streetPhoto = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
+    const requiredCount = (exteriorPhoto ? 1 : 0) + (interiorPhoto ? 1 : 0) + (streetPhoto ? 1 : 0);
+    const otherPhotos = photos.filter(p => p !== exteriorPhoto && p !== interiorPhoto && p !== streetPhoto);
+
+    const renderSlotCard = (type, title, tagline, photo) => {
+      const isMissing = !photo;
+      return `
+        <div class="photo-slot-card">
+          <div class="slot-head">
+            <div>
+              <span class="slot-title">${title}</span>
+              <span class="slot-hint">${tagline}</span>
+            </div>
+            ${photo ? '<span class="badge live">✓ Uploaded</span>' : '<span class="badge alert">Missing — Required</span>'}
+          </div>
+          <div class="slot-body">
+            ${photo ? `
+              <div class="photo-preview-row">
+                <div class="photo-thumb-wrap" onclick="BankPortal.viewFullPhoto('${photo.url}', '${title}')" style="cursor:pointer" title="Click to enlarge">
+                  <img src="${UI.escapeHtml(photo.url)}" alt="${title}" onerror="this.style.display='none'">
+                </div>
+                <div class="photo-meta">
+                  <div style="font-weight:600;font-size:13px">${title}</div>
+                  <div style="font-size:11.5px;color:var(--text-2)">${tagline}</div>
+                  <div style="font-size:11px;color:var(--text-2)">Verified Angle · Ready for Listing</div>
+                  <div class="photo-actions">
+                    <button type="button" class="btn small" onclick="BankPortal.viewFullPhoto('${photo.url}', '${title}')">
+                      <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+                      View Large
+                    </button>
+                    <button type="button" class="btn small" onclick="document.getElementById('file-photo-${type}').click()">
+                      <svg class="ico" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                      Replace Photo
+                    </button>
+                    <button type="button" class="btn small danger" onclick="BankPortal.deletePhoto('${a.id}', '${photo.id}', '${type}')">
+                      <svg class="ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      Delete
+                    </button>
+                  </div>
+                  <div id="photo-${type}-status" style="font-size:11.5px;margin-top:4px"></div>
+                </div>
+              </div>
+              <input type="file" id="file-photo-${type}" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" style="display:none" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', '${type}')">
+            ` : `
+              <div class="upload-zone" onclick="document.getElementById('file-photo-${type}').click()"
+                   ondragover="event.preventDefault(); this.style.borderColor='var(--blue)'; this.style.background='#F0F5FA';"
+                   ondragleave="this.style.borderColor='var(--border)'; this.style.background='';"
+                   ondrop="event.preventDefault(); this.style.borderColor='var(--border)'; this.style.background=''; BankPortal.handleDropPhoto(event, '${a.id}', '${type}')">
+                <input type="file" id="file-photo-${type}" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', '${type}')">
+                <svg class="ico" viewBox="0 0 24 24" style="width:36px;height:36px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                <div style="font-weight:600;margin:6px 0 2px">Click to browse or drag &amp; drop photo here</div>
+                <div style="font-size:11px;color:var(--text-2)">Supports JPG, PNG, WebP · Max 10MB</div>
+                <div id="photo-${type}-status" style="font-size:11.5px;font-weight:600;margin-top:6px;color:var(--blue)"></div>
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    };
 
     return `
       <div class="page-head">
         <button class="btn small" onclick="BankPortal.closeSubPage()">← Back to Asset</button>
-        <h1>Listing Photographs</h1>
-        <span class="crumb">${a.ref} · 3 Required Angles</span>
+        <h1>Listing Photographs &amp; Media Management</h1>
+        <span class="crumb">${a.ref} · ${requiredCount}/3 Mandatory Angles</span>
       </div>
 
-      <div class="banner info">
-        <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><b>Mandatory 3-Photo Upload.</b> Provide 3 distinct photographs: Exterior Front Elevation (primary marketplace cover), Interior Living Space, and Street View / Surroundings.</div>
-      </div>
+      ${requiredCount === 3 ? `
+        <div class="banner success" style="margin-bottom:14px">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+          <div><b>All 3 Mandatory Angles Uploaded (3/3).</b> Publication Gate 5 (Photographic Evidence) is fully satisfied.</div>
+        </div>
+      ` : `
+        <div class="banner amber" style="margin-bottom:14px">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <div><b>Mandatory 3-Photo Upload Required (${requiredCount}/3).</b> You must provide all 3 distinct photographs: Exterior Front Elevation, Interior Living Space, and Street View / Surroundings before this asset can be published.</div>
+        </div>
+      `}
 
-      <div class="group">
-        <div class="caption">1. Exterior Front Elevation <span class="hint">Primary marketplace cover</span></div>
+      ${renderSlotCard('exterior', '1. Exterior Front Elevation', 'Primary marketplace cover image', exteriorPhoto)}
+      ${renderSlotCard('interior', '2. Interior Living Space', 'Main hall, living area, or primary room', interiorPhoto)}
+      ${renderSlotCard('street', '3. Street View &amp; Surroundings', 'Access road, frontage, or neighborhood view', streetPhoto)}
+
+      <div class="group" style="margin-top:16px">
+        <div class="caption">
+          Additional Gallery Photographs (${otherPhotos.length})
+          <span class="hint">Compound, bedrooms, kitchen, floor plans, aerial views</span>
+        </div>
         <div class="body">
-          ${exteriorPhoto ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
-              <div>
-                <b style="font-size:13px">Exterior Front Elevation</b>
-                <div style="font-size:11px;color:var(--text-2)">Public cover image for listing card &amp; search</div>
-              </div>
-              <span class="badge ok">✓ Uploaded</span>
+          ${otherPhotos.length > 0 ? `
+            <div class="photo-grid-extra">
+              ${otherPhotos.map(p => `
+                <div class="photo-extra-item">
+                  <div class="thumb" onclick="BankPortal.viewFullPhoto('${p.url}', '${UI.escapeHtml(p.caption || 'Photo')}')" style="cursor:pointer">
+                    <img src="${UI.escapeHtml(p.url)}" alt="${UI.escapeHtml(p.caption || '')}" onerror="this.style.display='none'">
+                    ${p.is_primary ? '<span class="badge live" style="position:absolute;top:6px;left:6px">Cover</span>' : ''}
+                  </div>
+                  <div class="info">
+                    <span class="caption-txt" title="${UI.escapeHtml(p.caption || 'Gallery')}">${UI.escapeHtml(p.caption || 'Gallery Photo')}</span>
+                    <div style="display:flex;gap:4px">
+                      <button class="btn small" style="flex:1" onclick="BankPortal.viewFullPhoto('${p.url}', '${UI.escapeHtml(p.caption || 'Photo')}')">View</button>
+                      <button class="btn small danger" onclick="BankPortal.deletePhoto('${a.id}', '${p.id}', 'other')">Delete</button>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
             </div>
-          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Exterior Front view is required to publish.</p>'}
-          <div class="upload-zone" onclick="document.getElementById('file-photo-exterior').click()">
-            <input type="file" id="file-photo-exterior" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'exterior')">
-            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <div id="photo-exterior-status">${exteriorPhoto ? 'Upload replacement Exterior photo (JPG, PNG)' : 'Upload Exterior Front photo (JPG, PNG · max 10MB)'}</div>
+          ` : '<p style="font-size:12px;color:var(--text-2);margin:0 0 10px">No additional photos uploaded yet. You may upload up to 20 photos per asset.</p>'}
+
+          <div style="margin-top:14px;background:#FAFBFD;border:1px solid var(--border);border-radius:3px;padding:12px 14px">
+            <div style="font-weight:600;font-size:12.5px;margin-bottom:8px">Upload Additional Photo</div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input id="photo-extra-caption" placeholder="Photo caption (e.g. Master Bedroom, Compound, Kitchen...)" style="flex:1;min-width:220px;height:30px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12px">
+              <input type="file" id="file-photo-extra" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" style="display:none" onchange="BankPortal.uploadAdditionalPhoto(event, '${a.id}')">
+              <button class="btn primary" onclick="document.getElementById('file-photo-extra').click()">
+                <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                Choose File &amp; Upload
+              </button>
+            </div>
+            <div id="photo-extra-status" style="font-size:11px;margin-top:6px;color:var(--text-2)">Supports JPG, PNG, WebP up to 10MB</div>
           </div>
         </div>
       </div>
 
-      <div class="group">
-        <div class="caption">2. Interior Living Space <span class="hint">Main hall, living area, or primary room</span></div>
-        <div class="body">
-          ${interiorPhoto ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
-              <div>
-                <b style="font-size:13px">Interior Living Space</b>
-                <div style="font-size:11px;color:var(--text-2)">Interior view of primary living area</div>
-              </div>
-              <span class="badge ok">✓ Uploaded</span>
-            </div>
-          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Interior view is required.</p>'}
-          <div class="upload-zone" onclick="document.getElementById('file-photo-interior').click()">
-            <input type="file" id="file-photo-interior" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'interior')">
-            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <div id="photo-interior-status">${interiorPhoto ? 'Upload replacement Interior photo (JPG, PNG)' : 'Upload Interior Living Space photo (JPG, PNG · max 10MB)'}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="group">
-        <div class="caption">3. Street View &amp; Surroundings <span class="hint">Access road, frontage, or neighborhood view</span></div>
-        <div class="body">
-          ${streetPhoto ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border,#d1d5db);border-radius:4px;margin-bottom:10px">
-              <div>
-                <b style="font-size:13px">Street View &amp; Surroundings</b>
-                <div style="font-size:11px;color:var(--text-2)">Access road and neighborhood surroundings</div>
-              </div>
-              <span class="badge ok">✓ Uploaded</span>
-            </div>
-          ` : '<p style="color:var(--danger);font-size:12px;margin:0 0 8px">Missing — Street view / surroundings is required.</p>'}
-          <div class="upload-zone" onclick="document.getElementById('file-photo-street').click()">
-            <input type="file" id="file-photo-street" accept="image/jpeg,image/png,image/webp" style="display:none" onclick="event.stopPropagation()" onchange="BankPortal.handleSlotPhoto(event, '${a.id}', 'street')">
-            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <div id="photo-street-status">${streetPhoto ? 'Upload replacement Street View photo (JPG, PNG)' : 'Upload Street View / Surroundings photo (JPG, PNG · max 10MB)'}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn" onclick="BankPortal.closeSubPage()">Done / Back to Asset</button>
+      <div class="form-actions" style="margin-top:18px">
+        <button class="btn primary" onclick="BankPortal.closeSubPage()">Done / Back to Asset</button>
       </div>
     `;
   },
 
+  handleDropPhoto(event, assetId, type) {
+    if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+      this.uploadPhotoFile(event.dataTransfer.files[0], assetId, type);
+    }
+  },
+
   async handleSlotPhoto(event, assetId, type) {
-    const file = event.target.files[0];
+    const file = event.target ? (event.target.files && event.target.files[0]) : event;
+    if (!file) return;
+    await this.uploadPhotoFile(file, assetId, type);
+  },
+
+  async uploadPhotoFile(file, assetId, type, customCaption) {
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      UI.toast('Photo must be less than 10MB.', 'error');
-      return;
+      return UI.toast('Photo must be less than 10MB.', 'error');
     }
     const statusEl = document.getElementById(`photo-${type}-status`);
     if (statusEl) statusEl.textContent = `Uploading ${file.name}...`;
@@ -2391,31 +2498,83 @@ const BankPortal = {
     const form = new FormData();
     form.append('file', file, file.name);
     form.append('category', type);
-    form.append('caption', type);
+    form.append('caption', customCaption || type);
     form.append('is_exterior', type === 'exterior' ? '1' : '0');
     form.append('is_primary', type === 'exterior' ? '1' : '0');
+
+    const headers = {};
+    const token = Auth.getToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
 
     try {
       const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/upload`, {
         method: 'POST',
-        headers: Store.getAuthHeaders(),
+        headers,
         body: form
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Upload failed');
-      const label = type === 'exterior' ? 'Exterior Front' : type === 'interior' ? 'Interior' : 'Street view';
-      UI.toast(`${label} photo uploaded successfully.`, 'success');
+      const label = type === 'exterior' ? 'Exterior Front' : type === 'interior' ? 'Interior' : type === 'street' ? 'Street view' : 'Photo';
+      UI.toast(`${label} uploaded successfully.`, 'success');
       await this.loadPhotos(assetId);
       const a = Store.getAsset(assetId);
       if (a) {
         a.images = (a.images || 0) + 1;
-        if (type === 'exterior') a.exteriorImage = true;
+        if (type === 'exterior') {
+          a.exteriorImage = true;
+          if (json.url) a.primaryImage = json.url;
+        }
       }
       this.render();
     } catch (err) {
       UI.toast(err.message || 'Photo upload failed', 'error');
       if (statusEl) statusEl.textContent = `Upload failed: ${err.message}`;
     }
+  },
+
+  async uploadAdditionalPhoto(event, assetId) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const captionInput = document.getElementById('photo-extra-caption');
+    const caption = (captionInput?.value?.trim()) || 'Gallery Photo';
+    const statusEl = document.getElementById('photo-extra-status');
+    if (statusEl) statusEl.textContent = `Uploading ${file.name}...`;
+
+    await this.uploadPhotoFile(file, assetId, 'other', caption);
+  },
+
+  async deletePhoto(assetId, photoId, type) {
+    if (!confirm('Are you sure you want to delete this photograph?')) return;
+    const headers = {};
+    const token = Auth.getToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
+
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/${encodeURIComponent(photoId)}`, {
+        method: 'DELETE',
+        headers
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Delete failed');
+      UI.toast('Photo deleted successfully.', 'success');
+      await this.loadPhotos(assetId);
+      const a = Store.getAsset(assetId);
+      if (a && type === 'exterior') {
+        const hasExterior = (this._currentPhotos || []).some(p => p.caption === 'exterior' || p.is_exterior);
+        if (!hasExterior) a.exteriorImage = false;
+      }
+      this.render();
+    } catch (err) {
+      UI.toast(err.message || 'Photo deletion failed.', 'error');
+    }
+  },
+
+  viewFullPhoto(url, title) {
+    UI.modal(title || 'Property Photograph', `
+      <div style="text-align:center;background:#111;padding:12px;border-radius:3px">
+        <img src="${UI.escapeHtml(url)}" alt="${UI.escapeHtml(title)}" style="max-width:100%;max-height:75vh;object-fit:contain;border-radius:2px">
+      </div>
+    `, '<button class="btn" onclick="UI.closeModal()">Close</button>', true);
   },
 
   renderEditTitle(a) {
