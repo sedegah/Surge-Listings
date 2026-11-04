@@ -2162,14 +2162,14 @@ export default {
           SELECT i.object_key
           FROM asset_images i
           JOIN assets a ON a.id = i.asset_id
-          WHERE a.public_ref = ? AND i.id = ? AND a.status = 'Live' AND a.legal_hold_active = 0
-        `).bind(publicRef, imageId).first();
+          WHERE (a.public_ref = ? OR a.id = ?) AND i.id = ?
+        `).bind(publicRef, publicRef, imageId).first();
         if (!image?.object_key) return err('Image not found or currently unavailable.', 404);
         const object = await env.ASSETS_BUCKET.get(image.object_key);
         if (!object) return err('Stored image not found.', 404);
 
         const headers = new Headers(corsHeaders);
-        headers.set('Content-Type', object.httpMetadata?.contentType || 'application/octet-stream');
+        headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
         headers.set('Content-Disposition', 'inline');
         headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
         headers.set('X-Content-Type-Options', 'nosniff');
