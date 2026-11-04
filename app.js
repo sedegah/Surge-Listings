@@ -5436,7 +5436,7 @@ const PublicMarket = {
               <span class="badge pending">Act 1044 Regulated</span>
             </div>
             <p class="pub-step-desc">A designated Surge Asset Recovery Officer contacts you within 24 hours to confirm asset specifications and qualify your interest. Under the Anti-Money Laundering Act, 2020 (Act 1044), prospective buyers verify identity via Ghana Card PIN and declare their source of funds prior to viewing or offer submission.</p>
-            <div class="pub-step-safeguard"><b>Safeguard:</b> Fast-track compliance approval (under 24 hours) with AES-256-GCM encrypted document vaulting and strict audit logging.</div>
+            <div class="pub-step-safeguard"><b>Safeguard:</b> Fast-track compliance approval (under 24 hours) with strict confidentiality and verified buyer records.</div>
           </div>
         </div>
 
@@ -5544,9 +5544,9 @@ const PublicMarket = {
         <p>Under the Anti-Money Laundering Act, 2020 (Act 1044) and Bank of Ghana asset realization directives, prospective purchasers must complete customer due diligence prior to scheduling supervised physical viewings or filing binding purchase offers.</p>
         <div class="pub-metrics-bar">
           <div class="pub-metric-item"><span class="pub-metric-val">Act 1044</span><span class="pub-metric-lbl">Statutory Compliance</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">AES-256-GCM</span><span class="pub-metric-lbl">Vault Data Encryption</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Confidential</span><span class="pub-metric-lbl">Protected Buyer Data</span></div>
           <div class="pub-metric-item"><span class="pub-metric-val">&lt; 24 Hrs</span><span class="pub-metric-lbl">Compliance Turnaround</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Audited</span><span class="pub-metric-lbl">Immutable Review Log</span></div>
+          <div class="pub-metric-item"><span class="pub-metric-val">Bank-Grade</span><span class="pub-metric-lbl">Due Diligence</span></div>
         </div>
       </div>
 
@@ -5555,7 +5555,7 @@ const PublicMarket = {
           <div class="group">
             <div class="caption">Submit Buyer KYC Application</div>
             <div class="body">
-              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;line-height:1.5">Complete this digital verification form. Your information is encrypted at rest in our secure cloud document vault and reviewed exclusively by certified Surge compliance staff.</p>
+              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;line-height:1.5">Complete this digital verification form. Your details are treated with strict confidentiality and reviewed exclusively by authorized Surge compliance officers.</p>
 
               <div class="field">
                 <span class="lbl">Full Legal Name <span class="req">*</span></span>
@@ -5671,11 +5671,10 @@ const PublicMarket = {
           </div>
 
           <div class="pub-contact-card">
-            <h4><span class="sq"></span>Data Security &amp; Vault Guarantee</h4>
-            <div class="kv-row"><span class="kv-k">Encryption Standard</span><span class="kv-v">AES-256-GCM at rest</span></div>
-            <div class="kv-row"><span class="kv-k">Access Protocol</span><span class="kv-v">Certified Compliance Officers only</span></div>
-            <div class="kv-row"><span class="kv-k">Audit Logging</span><span class="kv-v">Every retrieval cryptographically signed</span></div>
-            <div class="kv-row"><span class="kv-k">Third-Party Sharing</span><span class="kv-v">Zero sharing with brokers or marketers</span></div>
+            <h4><span class="sq"></span>Confidentiality &amp; Privacy Safeguards</h4>
+            <div class="kv-row"><span class="kv-k">Statutory Purpose</span><span class="kv-v">Bank recovery due diligence only</span></div>
+            <div class="kv-row"><span class="kv-k">Authorized Review</span><span class="kv-v">Designated Surge compliance officers</span></div>
+            <div class="kv-row"><span class="kv-k">Third-Party Disclosure</span><span class="kv-v">Never shared with commercial brokers or marketers</span></div>
           </div>
 
           <div class="pub-safe-box">
@@ -5998,7 +5997,7 @@ const PublicMarket = {
             <div class="kv-row"><span class="kv-k">Diaspora WhatsApp</span><span class="kv-v"><b>+233 (0) 50 123 4567</b></span></div>
             <div class="kv-row"><span class="kv-k">General Enquiries</span><span class="kv-v"><a href="mailto:enquiries@surge.gh">enquiries@surge.gh</a></span></div>
             <div class="kv-row"><span class="kv-k">Legal &amp; Compliance</span><span class="kv-v"><a href="mailto:legal@surge.gh">legal@surge.gh</a></span></div>
-            <div class="kv-row"><span class="kv-k">Buyer KYC Vault</span><span class="kv-v"><a href="mailto:kyc@surge.gh">kyc@surge.gh</a></span></div>
+            <div class="kv-row"><span class="kv-k">Buyer KYC Compliance</span><span class="kv-v"><a href="mailto:kyc@surge.gh">kyc@surge.gh</a></span></div>
           </div>
 
           <div class="pub-contact-card">
