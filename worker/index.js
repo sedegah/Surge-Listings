@@ -184,21 +184,68 @@ export default {
     }
 
     function extensionForMime(mimeType) {
+      const normalized = String(mimeType || '').split(';')[0].trim().toLowerCase();
       return ({
         'application/pdf': 'pdf',
         'application/x-pdf': 'pdf',
+        'application/acrobat': 'pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
         'application/msword': 'doc',
         'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/pjpeg': 'jpg',
+        'image/jfif': 'jpg',
         'image/png': 'png',
-        'image/webp': 'webp'
-      })[mimeType] || null;
+        'image/x-png': 'png',
+        'image/webp': 'webp',
+        'image/x-webp': 'webp',
+        'image/heic': 'heic',
+        'image/heif': 'heif'
+      })[normalized] || null;
     }
 
     async function isValidFile(file, imageOnly = false) {
+      if (!file || typeof file.arrayBuffer !== 'function') return false;
       let mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+      const name = String(file.name || '').toLowerCase();
+
+      // Normalize common MIME aliases
+      if (mimeType === 'image/jpg' || mimeType === 'image/pjpeg' || mimeType === 'image/jfif' || mimeType === 'image/x-citrix-jpeg') {
+        mimeType = 'image/jpeg';
+      } else if (mimeType === 'image/x-png') {
+        mimeType = 'image/png';
+      } else if (mimeType === 'image/x-webp') {
+        mimeType = 'image/webp';
+      } else if (mimeType === 'application/x-pdf' || mimeType === 'application/acrobat') {
+        mimeType = 'application/pdf';
+      }
+
+      // Read magic bytes for binary inspection
+      let bytes = new Uint8Array(0);
+      try {
+        bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+      } catch (e) {
+        bytes = new Uint8Array(0);
+      }
+      const startsWith = (...values) => values.length <= bytes.length && values.every((value, index) => bytes[index] === value);
+
+      const isJpeg = bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xD8;
+      const isPng = startsWith(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+      const isPdf = startsWith(0x25, 0x50, 0x44, 0x46);
+      const isWebp = bytes.length >= 12 &&
+        String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
+        String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
+      const isDoc = startsWith(0x50, 0x4B, 0x03, 0x04) || startsWith(0xD0, 0xCF, 0x11, 0xE0);
+
+      // Binary magic bytes take highest priority to overcome broken browser MIME types
+      if (isJpeg) mimeType = 'image/jpeg';
+      else if (isPng) mimeType = 'image/png';
+      else if (isWebp) mimeType = 'image/webp';
+      else if (isPdf && !imageOnly) mimeType = 'application/pdf';
+      else if (isDoc && !imageOnly) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      // Fallback: check file extension if MIME header is empty or generic
       if (!mimeType || mimeType === 'application/octet-stream') {
-        const name = String(file.name || '').toLowerCase();
         if (name.endsWith('.pdf')) mimeType = 'application/pdf';
         else if (name.endsWith('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         else if (name.endsWith('.doc')) mimeType = 'application/msword';
@@ -206,22 +253,13 @@ export default {
         else if (name.endsWith('.png')) mimeType = 'image/png';
         else if (name.endsWith('.webp')) mimeType = 'image/webp';
       }
-      if (mimeType === 'application/x-pdf') mimeType = 'application/pdf';
+
+      if (imageOnly) {
+        return isJpeg || isPng || isWebp || (mimeType.startsWith('image/') && (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.webp')));
+      }
+
       const extension = extensionForMime(mimeType);
-      if (!extension || (imageOnly && !mimeType.startsWith('image/'))) return false;
-      const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-      const startsWith = (...values) => values.every((value, index) => bytes[index] === value);
-      if (mimeType === 'application/pdf') return startsWith(0x25, 0x50, 0x44, 0x46);
-      if (mimeType === 'image/jpeg') return startsWith(0xff, 0xd8, 0xff);
-      if (mimeType === 'image/png') return startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
-      if (mimeType === 'image/webp') {
-        return String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
-          String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
-      }
-      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') {
-        return startsWith(0x50, 0x4b, 0x03, 0x04) || startsWith(0xd0, 0xcf, 0x11, 0xe0);
-      }
-      return false;
+      return Boolean(extension) || isJpeg || isPng || isWebp || isPdf || isDoc;
     }
 
     // Helper: Parse JSON safely
@@ -1594,11 +1632,12 @@ export default {
         return json({ success: true, count: branches.results.length, data: branches.results });
       }
 
-      const photoUploadMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/photos\/upload$/);
-      const documentUploadMatch = pathname.match(/^\/api\/bank\/assets\/([a-zA-Z0-9_-]+)\/documents\/upload$/);
+      const photoUploadMatch = pathname.match(/^\/api\/(bank|admin)\/assets\/([a-zA-Z0-9_-]+)\/photos\/upload$/);
+      const documentUploadMatch = pathname.match(/^\/api\/(bank|admin)\/assets\/([a-zA-Z0-9_-]+)\/documents\/upload$/);
       if ((photoUploadMatch || documentUploadMatch) && method === 'POST') {
-        const session = await requireBankAuth();
-        const assetRef = decodeURIComponent((photoUploadMatch || documentUploadMatch)[1]);
+        const isAdminRoute = (photoUploadMatch || documentUploadMatch)[1] === 'admin';
+        const session = isAdminRoute ? await requireAdminAuth() : await requireBankAuth();
+        const assetRef = decodeURIComponent((photoUploadMatch || documentUploadMatch)[2]);
         const asset = session.scope === 'surge'
           ? await env.DB.prepare(`
               SELECT id, public_ref, bank_id FROM assets
@@ -1651,10 +1690,34 @@ export default {
           return err('Case number is required.', 400);
         }
         let mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
-        if (!mimeType || mimeType === 'application/octet-stream') {
-          const name = String(file.name || '').toLowerCase();
+        if (mimeType === 'image/jpg' || mimeType === 'image/pjpeg' || mimeType === 'image/jfif' || mimeType === 'image/x-citrix-jpeg') {
+          mimeType = 'image/jpeg';
+        } else if (mimeType === 'image/x-png') {
+          mimeType = 'image/png';
+        } else if (mimeType === 'image/x-webp') {
+          mimeType = 'image/webp';
+        } else if (mimeType === 'application/x-pdf' || mimeType === 'application/acrobat') {
+          mimeType = 'application/pdf';
+        }
+
+        const name = String(file.name || '').toLowerCase();
+        let sniffBytes = new Uint8Array(0);
+        try {
+          sniffBytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+        } catch (e) {}
+
+        if (sniffBytes.length >= 2 && sniffBytes[0] === 0xFF && sniffBytes[1] === 0xD8) {
+          mimeType = 'image/jpeg';
+        } else if (sniffBytes.length >= 8 && sniffBytes[0] === 0x89 && sniffBytes[1] === 0x50 && sniffBytes[2] === 0x4E && sniffBytes[3] === 0x47) {
+          mimeType = 'image/png';
+        } else if (sniffBytes.length >= 12 && String.fromCharCode(...sniffBytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...sniffBytes.slice(8, 12)) === 'WEBP') {
+          mimeType = 'image/webp';
+        } else if (sniffBytes.length >= 4 && sniffBytes[0] === 0x25 && sniffBytes[1] === 0x50 && sniffBytes[2] === 0x44 && sniffBytes[3] === 0x46) {
+          mimeType = 'application/pdf';
+        } else if (!mimeType || mimeType === 'application/octet-stream') {
           if (name.endsWith('.pdf')) mimeType = 'application/pdf';
           else if (name.endsWith('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else if (name.endsWith('.doc')) mimeType = 'application/msword';
           else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
           else if (name.endsWith('.png')) mimeType = 'image/png';
           else if (name.endsWith('.webp')) mimeType = 'image/webp';
