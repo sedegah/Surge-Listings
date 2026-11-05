@@ -227,13 +227,9 @@
   outline-offset: 1px;
 }
 
-/* Footer: Timer and Progress Indicator */
+/* Footer: Timer is explicitly disabled per user specification */
 .surge-notify-footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  padding-top: 2px;
+  display: none !important;
 }
 
 .surge-notify-timer {

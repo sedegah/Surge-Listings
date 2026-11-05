@@ -8,7 +8,7 @@
   // SVG Lucide Icons
   const ICONS = {
     check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
-    alertCircle: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    alertCircle: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
     alertTriangle: '<svg viewBox="0 0 24 24" width="22" height="22" fill="#F59E0B" stroke="#D97706" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13" stroke="#FFFFFF" stroke-width="2.6"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="#FFFFFF" stroke-width="2.6"/></svg>',
     info: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
     clock: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
@@ -217,10 +217,7 @@
     card.setAttribute('role', type === 'error' || type === 'warning' ? 'alert' : 'status');
     card.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
 
-    const durationSeconds = Math.max(1, Math.round(duration / 1000));
-
-    // Build Card inner HTML
-    const showTimerFooter = duration > 0 && type !== 'loading';
+    // Build Card inner HTML (Clean enterprise notification without visible timer footer)
     const showActionRow = Boolean(action && action.label);
 
     card.innerHTML = `
@@ -236,17 +233,6 @@
           </button>
         ` : ''}
       </div>
-      ${showTimerFooter ? `
-        <div class="surge-notify-footer">
-          <div class="surge-notify-timer">
-            ${ICONS.clock}
-            <span>Dismisses in <b class="surge-notify-sec">${durationSeconds}</b>s</span>
-          </div>
-          <div class="surge-notify-progress-track">
-            <div class="surge-notify-progress-bar"></div>
-          </div>
-        </div>
-      ` : ''}
       ${showActionRow ? `
         <div class="surge-notify-actions">
           <button type="button" class="surge-notify-btn ${action.secondary ? 'secondary' : ''}">
@@ -412,8 +398,6 @@
           ? nextOpts.duration
           : (nextOpts.persistent ? 0 : (DEFAULT_DURATIONS[next.type] !== undefined ? DEFAULT_DURATIONS[next.type] : 5000));
 
-        const nextSec = Math.max(1, Math.round(nextDuration / 1000));
-        const showNextFooter = nextDuration > 0 && next.type !== 'loading';
         const nextAction = nextOpts.action;
 
         card.innerHTML = `
@@ -429,17 +413,6 @@
               </button>
             ` : ''}
           </div>
-          ${showNextFooter ? `
-            <div class="surge-notify-footer">
-              <div class="surge-notify-timer">
-                ${ICONS.clock}
-                <span>Dismisses in <b class="surge-notify-sec">${nextSec}</b>s</span>
-              </div>
-              <div class="surge-notify-progress-track">
-                <div class="surge-notify-progress-bar"></div>
-              </div>
-            </div>
-          ` : ''}
           ${nextAction ? `
             <div class="surge-notify-actions">
               <button type="button" class="surge-notify-btn ${nextAction.secondary ? 'secondary' : ''}">
