@@ -217,10 +217,7 @@
     card.setAttribute('role', type === 'error' || type === 'warning' ? 'alert' : 'status');
     card.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
 
-    const durationSeconds = Math.max(1, Math.round(duration / 1000));
-
-    // Build Card inner HTML
-    const showTimerFooter = duration > 0 && type !== 'loading';
+    // Build Card inner HTML (Clean enterprise notification without visible timer footer)
     const showActionRow = Boolean(action && action.label);
 
     card.innerHTML = `
@@ -236,17 +233,6 @@
           </button>
         ` : ''}
       </div>
-      ${showTimerFooter ? `
-        <div class="surge-notify-footer">
-          <div class="surge-notify-timer">
-            ${ICONS.clock}
-            <span>Dismisses in <b class="surge-notify-sec">${durationSeconds}</b>s</span>
-          </div>
-          <div class="surge-notify-progress-track">
-            <div class="surge-notify-progress-bar"></div>
-          </div>
-        </div>
-      ` : ''}
       ${showActionRow ? `
         <div class="surge-notify-actions">
           <button type="button" class="surge-notify-btn ${action.secondary ? 'secondary' : ''}">
@@ -412,8 +398,6 @@
           ? nextOpts.duration
           : (nextOpts.persistent ? 0 : (DEFAULT_DURATIONS[next.type] !== undefined ? DEFAULT_DURATIONS[next.type] : 5000));
 
-        const nextSec = Math.max(1, Math.round(nextDuration / 1000));
-        const showNextFooter = nextDuration > 0 && next.type !== 'loading';
         const nextAction = nextOpts.action;
 
         card.innerHTML = `
@@ -429,17 +413,6 @@
               </button>
             ` : ''}
           </div>
-          ${showNextFooter ? `
-            <div class="surge-notify-footer">
-              <div class="surge-notify-timer">
-                ${ICONS.clock}
-                <span>Dismisses in <b class="surge-notify-sec">${nextSec}</b>s</span>
-              </div>
-              <div class="surge-notify-progress-track">
-                <div class="surge-notify-progress-bar"></div>
-              </div>
-            </div>
-          ` : ''}
           ${nextAction ? `
             <div class="surge-notify-actions">
               <button type="button" class="surge-notify-btn ${nextAction.secondary ? 'secondary' : ''}">

@@ -367,7 +367,7 @@ const Store = {
         fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' }),
         fetch(this.API_BASE + '/api/v1/viewings' + scopeParam, { headers, cache: 'no-store' }),
         fetch(this.API_BASE + '/api/v1/invoices' + scopeParam, { headers, cache: 'no-store' }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs', { headers, cache: 'no-store' }),
+        portal === 'public' ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs' + (portal === 'bank' ? '' : scopeParam), { headers, cache: 'no-store' }),
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers, cache: 'no-store' }),
         skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers, cache: 'no-store' }),
         documentsEndpoint ? fetch(this.API_BASE + documentsEndpoint, { headers, cache: 'no-store' }) : Promise.resolve(null),
@@ -575,17 +575,22 @@ const Store = {
         }
       }
 
-      // Audit Log
+      // Audit Log — Track activity related to assets and documents (isolated per bank; no hash codes)
       if (auditRes.status === 'fulfilled' && auditRes.value?.ok) {
         const json = await auditRes.value.json();
         if (json.success && Array.isArray(json.data)) {
           this.auditLog = json.data
             .filter(a => ['Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase'].includes(a.entity_type) && !a.action_type?.startsWith('SESSION_'))
             .map(a => ({
-              id: a.id, when: a.created_at, who: a.actor_name, actorRole: a.actor_role,
-              actorPublicId: a.actor_public_id || null,
-              action: a.action_type, entity: a.entity_type,
-              entityRef: a.entity_id, detail: a.delta_summary
+              id: a.id,
+              when: a.created_at,
+              who: a.actor_name,
+              actorRole: a.actor_role,
+              organization: a.organization,
+              action: a.action_type,
+              entity: a.entity_type,
+              entityRef: a.entity_id,
+              detail: a.delta_summary
             }));
         }
       }
@@ -816,6 +821,28 @@ const Store = {
     return list;
   },
 
+  getBankAuditLogs() {
+    const bankAssets = this.getBankAssets();
+    const assetRefs = new Set();
+    bankAssets.forEach(a => {
+      if (a.ref) assetRefs.add(a.ref);
+      if (a.id) assetRefs.add(a.id);
+    });
+    const user = Auth.getUser();
+    const bankName = user?.organizationName || user?.bankName || user?.bank_name;
+    const bankCode = user?.bankCode || user?.bank_code;
+    const bankId = user?.bankId || user?.bank_id;
+
+    return (this.auditLog || []).filter(entry => {
+      if (entry.entityRef && assetRefs.has(entry.entityRef)) return true;
+      if (entry.assetRef && assetRefs.has(entry.assetRef)) return true;
+      if (bankId && (entry.organization === bankId || entry.organizationId === bankId)) return true;
+      if (bankName && entry.organization === bankName) return true;
+      if (bankCode && entry.organization === bankCode) return true;
+      return false;
+    });
+  },
+
   updateAsset(id, changes, actor, detail) {
     const asset = this.getAsset(id);
     if (!asset) return null;
@@ -1011,9 +1038,35 @@ const UI = {
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
   fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
   auditActor(entry) {
-    if (entry.actorPublicId) return `${this.escapeHtml(entry.who || 'Signed-in user')} · ${this.escapeHtml(entry.actorPublicId)}`;
-    if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') return `${this.escapeHtml(entry.who || 'Buyer')} · external actor`;
-    return 'Legacy event · actor not verified';
+    if (!entry) return 'System';
+    const who = this.escapeHtml(entry.who || 'Staff Member');
+    const role = this.escapeHtml(entry.actorRole || 'Staff');
+    const org = this.escapeHtml(entry.organization || '');
+    if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') {
+      return `${who} · Buyer`;
+    }
+    // Do not show hash codes of logs: display only verified names, roles and organizations
+    const parts = [who, role, org].filter(Boolean);
+    return parts.join(' · ') || 'Verified Staff';
+  },
+  cleanAuditDetail(detail, entry) {
+    if (!detail) return entry?.action || 'Activity recorded';
+    // Remove any hex hash codes, UUIDs, or raw database ID hashes
+    let clean = String(detail)
+      .replace(/\b[0-9a-fA-F]{24,64}\b/g, '')
+      .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '')
+      .replace(/\b(u|doc|val|li|img|sess|asset|bank|branch)-[a-zA-Z0-9_-]{8,}\b/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return this.escapeHtml(clean || entry?.action || 'Activity recorded');
+  },
+  cleanAuditRef(ref, entityType) {
+    if (!ref) return '';
+    if (/^AST-[A-Z0-9-]+$/i.test(ref)) return ref;
+    if (/^[0-9a-fA-F-]{16,}$/.test(ref) || /^(doc|val|li|img|lead|inv)-/i.test(ref)) {
+      return entityType || 'Record';
+    }
+    return ref;
   },
   fmtDateShort(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
   badge(status) {
