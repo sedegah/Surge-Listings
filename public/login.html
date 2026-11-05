@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in — Surge Solutions Bank Portal</title>
 <meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="notifications.css">
 <style>
 :root {
   --blue: #0B3C75; --blue-hover: #092F5C; --red: #B3262E;
@@ -148,6 +149,7 @@ input[aria-invalid=true] { border-color: var(--danger) }
   </div>
 </div>
 
+<script src="notifications.js"></script>
 <script>
 (function () {
   var API_BASE = '';
@@ -213,20 +215,43 @@ input[aria-invalid=true] { border-color: var(--danger) }
 
   var why = qs.get('reason') || (safeNext ? 'required' : null);
   var notes = { expired: 'Your session expired. Sign in again to continue.', signedout: 'You have been signed out.', required: 'Sign in to open the bank portal.' };
-  if (notes[why]) { $('note-msg').textContent = notes[why]; $('note').classList.add('show'); }
+  if (notes[why]) {
+    $('note-msg').textContent = notes[why];
+    $('note').classList.add('show');
+    if (window.NotificationSystem) {
+      NotificationSystem.info(notes[why], why === 'expired' ? 'Session Expired' : 'Information');
+    }
+  }
 
   function showError(msg, fields) {
+    fields = fields || [];
     $('err-msg').textContent = msg;
     $('err').classList.remove('show'); void $('err').offsetWidth; $('err').classList.add('show');
     user.setAttribute('aria-invalid', fields.indexOf('u') > -1);
     pass.setAttribute('aria-invalid', fields.indexOf('p') > -1);
+    if (window.NotificationSystem) {
+      NotificationSystem.error(msg, 'Unable to sign in');
+      if (fields.indexOf('u') > -1) NotificationSystem.setFieldError(user, msg);
+      if (fields.indexOf('p') > -1) NotificationSystem.setFieldError(pass, msg);
+    }
     (fields.indexOf('u') > -1 ? user : pass).focus();
   }
-  function clearError() { $('err').classList.remove('show'); user.removeAttribute('aria-invalid'); pass.removeAttribute('aria-invalid'); }
+  function clearError() {
+    $('err').classList.remove('show');
+    user.removeAttribute('aria-invalid');
+    pass.removeAttribute('aria-invalid');
+    if (window.NotificationSystem) {
+      NotificationSystem.clearFieldError(user);
+      NotificationSystem.clearFieldError(pass);
+    }
+  }
 
   function startLock() {
     lockedUntil = Date.now() + LOCK_MS; btn.disabled = true;
     $('lock').classList.add('show');
+    if (window.NotificationSystem) {
+      NotificationSystem.warning('Too many failed attempts. Try again in 60 seconds.', 'Account Temporarily Locked');
+    }
     clearInterval(lockTimer);
     lockTimer = setInterval(function () {
       var s = Math.ceil((lockedUntil - Date.now()) / 1000);
@@ -254,10 +279,13 @@ input[aria-invalid=true] { border-color: var(--danger) }
     if (!p) return showError('Enter your password.', ['p']);
 
     btn.disabled = true; btn.textContent = 'Signing in…';
+    var loginToast = window.NotificationSystem ? NotificationSystem.loading('Verifying your credentials...', 'Signing in') : null;
+
     fetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: u, password: p, remember: $('remember').checked }), cache: 'no-store' })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, json: j }; }); })
       .then(function (res) {
         if (res.ok && res.json.success !== false) {
+          if (loginToast) loginToast.success('Signed in successfully. Redirecting...', 'Access Granted');
           var u = res.json.user || {};
           try {
             sessionStorage.removeItem('surge_token');
@@ -277,15 +305,19 @@ input[aria-invalid=true] { border-color: var(--danger) }
           var dest = safeNext || home;
           if (dest === ADMIN_PAGE && u.scope !== 'surge') dest = NEXT_PAGE;
           console.info('[Login Page] Sign-in succeeded. Redirecting to:', dest);
-          location.href = dest;
+          setTimeout(function() {
+            location.href = dest;
+          }, 350);
           return;
         }
+        if (loginToast) loginToast.dismiss();
         tries++; btn.textContent = 'Sign in'; btn.disabled = false; pass.value = '';
         if (res.status === 423 || res.status === 429 || tries >= MAX_TRIES) { startLock(); return; }
         if (res.status === 403) return showError(res.json.error || 'Sign-in is not allowed for this account. Contact your Surge administrator.', ['u']);
         showError('The username or password is incorrect. ' + (MAX_TRIES - tries) + ' attempt' + (MAX_TRIES - tries === 1 ? '' : 's') + ' left.', ['p']);
       })
       .catch(function () {
+        if (loginToast) loginToast.dismiss();
         btn.textContent = 'Sign in'; btn.disabled = false;
         showError('Cannot reach the server. Check your connection and try again.', ['u']);
       });

@@ -6,6 +6,7 @@
 <title>Surge Solutions - Administration Portal</title>
 <meta name="description" content="Surge Solutions Super Administrator Portal — Platform oversight, 5-gate publish readiness verification, legal holds, bank partner management, and audit records.">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="notifications.css">
 <style>
 body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
 #portal-auth-status { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; text-align: center; background: #DCDCDC; color: #1F1F1F; font: 14px "Segoe UI", Inter, Arial, sans-serif; }
@@ -77,7 +78,8 @@ body.auth-ready #portal-auth-status { display: none; }
   </section>
 </div>
 
-<div class="surge-toast" id="toast"></div>
+<div id="surge-notification-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+<div class="surge-toast" id="toast" style="display:none"></div>
 <div class="surge-modal-backdrop" id="modal-backdrop">
   <div class="surge-modal-window" id="modal-window">
     <div class="surge-modal-header">
@@ -89,6 +91,7 @@ body.auth-ready #portal-auth-status { display: none; }
   </div>
 </div>
 
+<script src="notifications.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

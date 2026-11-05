@@ -6,6 +6,7 @@
 <title>Surge Solutions — Public Asset Marketplace</title>
 <meta name="description" content="Surge Solutions is a licensed intermediary platform for bank-repossessed and distressed asset disposition in Ghana. Browse verified listings, complete KYC, and submit purchase offers.">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="notifications.css">
 </head>
 <body data-portal="public">
 
@@ -32,7 +33,8 @@
   </section>
 </div>
 
-<div class="surge-toast" id="toast"></div>
+<div id="surge-notification-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+<div class="surge-toast" id="toast" style="display:none"></div>
 <div class="surge-modal-backdrop" id="modal-backdrop">
   <div class="surge-modal-window" id="modal-window">
     <div class="surge-modal-header">
@@ -44,6 +46,7 @@
   </div>
 </div>
 
+<script src="notifications.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

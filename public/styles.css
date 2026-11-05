@@ -1,3 +1,5 @@
+@import url('notifications.css');
+
 :root {
   --blue: #0B3C75; --blue-hover: #092F5C; --red: #B3262E;
   --win-bg: #F3F3F3; --panel: #FFFFFF; --border: #C8C8C8;
@@ -228,11 +230,8 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
 .pub-footer { border-top: 1px solid var(--border); margin-top: 18px; padding: 14px 4px 0; font-size: 11px; color: var(--text-2); display: flex; gap: 18px; flex-wrap: wrap }
 .pub-footer .spacer { flex: 1 }
 .pub-footer .legal { max-width: 560px; line-height: 1.5 }
-.surge-toast { position: fixed; z-index: 9999; right: 22px; bottom: 22px; background: #1f2937; color: white; padding: 12px 16px; border-radius: 4px; box-shadow: 0 4px 20px #0003; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .18s, transform .18s; max-width: 400px; font-size: 12.5px; }
-.surge-toast.show { opacity: 1; transform: translateY(0); pointer-events: auto }
-.surge-toast.success { border-left: 4px solid var(--success) }
-.surge-toast.warn { border-left: 4px solid var(--warning) }
-.surge-toast.error { border-left: 4px solid var(--danger) }
+/* Legacy Toast Container retired in favor of modern top-sliding notification system */
+.surge-toast { display: none !important; }
 .surge-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; display: none; align-items: center; justify-content: center; }
 .surge-modal-backdrop.open { display: flex }
 .surge-modal-window { background: var(--panel); border: 1px solid #999; border-radius: 4px; width: 720px; max-width: 92vw; max-height: 88vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.25); }
