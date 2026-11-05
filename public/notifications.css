@@ -1,0 +1,551 @@
+/**
+ * Surge Listings — Modern Enterprise Notification System
+ * Visual Design Specification matching Attached Reference
+ */
+
+/* Notification Container: Fixed at TOP of screen */
+#surge-notification-container {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 100050;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  #surge-notification-container {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    gap: 10px;
+  }
+}
+
+/* Toast Card Base */
+.surge-notify-card {
+  pointer-events: auto;
+  position: relative;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  font-family: var(--font, "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif);
+  box-sizing: border-box;
+  overflow: hidden;
+  will-change: transform, opacity, max-height, margin;
+  animation: surgeNotifySlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+@keyframes surgeNotifySlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.surge-notify-card.surge-notify-exit {
+  animation: surgeNotifySlideUp 0.26s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  pointer-events: none;
+}
+
+@keyframes surgeNotifySlideUp {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 200px;
+    margin-bottom: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+    max-height: 0;
+    margin-bottom: -12px;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+  }
+}
+
+@keyframes surgeNotifyWiggle {
+  0%, 100% { transform: translateY(0) scale(1); }
+  20%, 60% { transform: translateY(-4px) scale(1.02); }
+  40%, 80% { transform: translateY(2px) scale(1.01); }
+}
+
+.surge-notify-card.surge-notify-wiggle {
+  animation: surgeNotifyWiggle 0.4s ease-in-out;
+}
+
+/* Notification Types: Soft semantic colors & subtle borders */
+.surge-notify-success {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+}
+
+.surge-notify-error {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+}
+
+.surge-notify-warning {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+}
+
+.surge-notify-info {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+}
+
+.surge-notify-loading {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+}
+
+/* Card Content Header */
+.surge-notify-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+/* Icon Badges */
+.surge-notify-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.surge-notify-icon-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.surge-notify-success .surge-notify-icon-circle {
+  background: #16A34A;
+  color: #FFFFFF;
+}
+
+.surge-notify-error .surge-notify-icon-circle {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+.surge-notify-info .surge-notify-icon-circle {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+.surge-notify-warning .surge-notify-icon-wrap {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Loading Spinner */
+.surge-notify-spinner {
+  width: 20px;
+  height: 20px;
+  animation: surgeSpinnerRotate 0.85s linear infinite;
+  color: #2563EB;
+}
+
+@keyframes surgeSpinnerRotate {
+  100% { transform: rotate(360deg); }
+}
+
+/* Body / Hierarchy */
+.surge-notify-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.surge-notify-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0F172A;
+  margin: 0 0 3px 0;
+  letter-spacing: -0.01em;
+}
+
+.surge-notify-message {
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #475569;
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Close Button */
+.surge-notify-close {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -2px -2px 0 0;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.surge-notify-close:hover {
+  color: #334155;
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+.surge-notify-close:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 1px;
+}
+
+/* Footer: Timer and Progress Indicator */
+.surge-notify-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 2px;
+}
+
+.surge-notify-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748B;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.surge-notify-timer svg {
+  flex-shrink: 0;
+  stroke: #64748B;
+}
+
+.surge-notify-progress-track {
+  flex: 1 1 auto;
+  height: 3px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.surge-notify-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  width: 100%;
+  transform-origin: left;
+}
+
+.surge-notify-success .surge-notify-progress-bar {
+  background: #16A34A;
+}
+
+.surge-notify-error .surge-notify-progress-bar {
+  background: #DC2626;
+}
+
+.surge-notify-warning .surge-notify-progress-bar {
+  background: #D97706;
+}
+
+.surge-notify-info .surge-notify-progress-bar {
+  background: #2563EB;
+}
+
+/* Pause progress when hovering */
+.surge-notify-card.surge-notify-paused .surge-notify-progress-bar {
+  animation-play-state: paused !important;
+}
+
+/* Action Button Row (e.g., Persistent Error Retry button) */
+.surge-notify-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.surge-notify-btn {
+  background: #0F172A;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #0F172A;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.surge-notify-btn:hover {
+  background: #1E293B;
+  border-color: #1E293B;
+  color: #FFFFFF;
+}
+
+.surge-notify-btn:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 1px;
+}
+
+.surge-notify-btn.secondary {
+  background: #FFFFFF;
+  color: #334155;
+  border-color: #CBD5E1;
+}
+
+.surge-notify-btn.secondary:hover {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+/* ============================================================
+   CONFIRMATION DIALOG (Design Reference Specification)
+   ============================================================ */
+.surge-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 100060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.surge-confirm-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.surge-confirm-dialog {
+  background: #FFFFFF;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #E2E8F0;
+  padding: 22px 24px;
+  transform: scale(0.96) translateY(-8px);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font, "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif);
+  box-sizing: border-box;
+}
+
+.surge-confirm-backdrop.open .surge-confirm-dialog {
+  transform: scale(1) translateY(0);
+}
+
+.surge-confirm-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.surge-confirm-icon-wrap {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #DC2626;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.surge-confirm-icon-wrap.info {
+  background: #2563EB;
+}
+
+.surge-confirm-icon-wrap.warning {
+  background: #D97706;
+}
+
+.surge-confirm-title-area {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.surge-confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 6px 0;
+  line-height: 1.3;
+}
+
+.surge-confirm-message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+  margin: 0;
+}
+
+.surge-confirm-close {
+  border: none;
+  background: transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin: -4px -4px 0 0;
+  transition: color 0.15s;
+}
+
+.surge-confirm-close:hover {
+  color: #0F172A;
+}
+
+.surge-confirm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.surge-confirm-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+
+.surge-confirm-btn-cancel {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #334155;
+}
+
+.surge-confirm-btn-cancel:hover {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.surge-confirm-btn-danger {
+  background: #DC2626;
+  border: 1px solid #DC2626;
+  color: #FFFFFF;
+}
+
+.surge-confirm-btn-danger:hover {
+  background: #B91C1C;
+  border-color: #B91C1C;
+}
+
+.surge-confirm-btn-primary {
+  background: #0B3C75;
+  border: 1px solid #0B3C75;
+  color: #FFFFFF;
+}
+
+.surge-confirm-btn-primary:hover {
+  background: #092F5C;
+  border-color: #092F5C;
+}
+
+/* ============================================================
+   INLINE & FORM ERRORS (Design Reference Specification)
+   ============================================================ */
+.surge-input-has-error {
+  position: relative;
+}
+
+.surge-input-has-error input,
+.surge-input-has-error select,
+.surge-input-has-error textarea,
+input.surge-input-error,
+select.surge-input-error,
+textarea.surge-input-error,
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 0 1px #EF4444 !important;
+  outline: none !important;
+}
+
+.surge-input-has-error input {
+  padding-right: 32px !important;
+}
+
+.surge-input-alert-icon {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #EF4444;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.surge-form-error-text {
+  font-size: 11.5px;
+  color: #DC2626;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.4;
+  font-family: var(--font, "Segoe UI", Inter, sans-serif);
+}
