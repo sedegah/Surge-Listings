@@ -469,9 +469,18 @@ export default {
     }
 
     // Require bank-level authentication — scope must be 'bank' or 'surge'
+    // All staff of Surge are also staff of the Surge Partner Bank
     async function requireBankAuth() {
       const session = await requireAuth();
-      if (session.scope === 'surge') return session;
+      if (session.scope === 'surge') {
+        if (!session.bank_id) {
+          const partnerBank = await env.DB.prepare(`SELECT id, legal_name, short_code FROM banks WHERE id = 'bank-surge' OR id = 'bank-gcb' ORDER BY (id = 'bank-surge') DESC LIMIT 1`).first();
+          session.bank_id = partnerBank?.id || 'bank-surge';
+          session.bank_name = session.bank_name || partnerBank?.legal_name || 'Surge Partner Bank';
+          session.bank_code = session.bank_code || partnerBank?.short_code || 'SURGE';
+        }
+        return session;
+      }
       if (session.scope !== 'bank' && session.scope !== 'surge') {
         throw new Response(JSON.stringify({ success: false, error: 'Bank Portal access denied. This account does not have bank portal permissions.', code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
       }
@@ -800,7 +809,6 @@ export default {
         /^\/api\/v1\/banks\/[a-zA-Z0-9_-]+$/.test(pathname) ||
         pathname === '/api/v1/users' ||
         /^\/api\/v1\/users\/[a-zA-Z0-9_-]+(?:\/reset-password)?$/.test(pathname) ||
-        pathname === '/api/v1/audit-logs' ||
         pathname === '/api/v1/kyc' ||
         /^\/api\/(v1|bank|admin)\/assets\/[a-zA-Z0-9_-]+\/(review|approve|request-changes|reject|publish|unpublish|hold|release-hold|readiness)$/.test(pathname);
       const isAssetApi = /^\/api\/(v1|bank|admin)\/assets(?:\/[a-zA-Z0-9_-]+)?$/.test(pathname);
@@ -811,7 +819,8 @@ export default {
         '/api/v1/enquiries',
         '/api/v1/viewings',
         '/api/v1/offers',
-        '/api/v1/invoices'
+        '/api/v1/invoices',
+        '/api/v1/audit-logs'
       ].includes(pathname);
       if (pathname === '/api/admin' || pathname.startsWith('/api/admin/') || isAdminAlias) {
         await requireAdminAuth();
@@ -3039,17 +3048,74 @@ export default {
       }
 
       // Audit Logs — Track activity related to assets and documents
-      if (['/api/v1/audit-logs', '/api/admin/audit-logs'].includes(pathname)) {
-        const logs = await env.DB.prepare(`
-          SELECT a.id, a.actor_name, a.actor_role, a.organization, a.action_type, a.entity_type,
-                 a.entity_id, a.delta_summary, a.old_values, a.new_values, a.created_at,
-                 u.public_id AS actor_public_id
-          FROM audit_logs a
-          LEFT JOIN users u ON u.id = a.actor_user_id
-          WHERE a.entity_type IN ('Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase')
-          ORDER BY a.created_at DESC LIMIT 150
-        `).all();
-        return json({ success: true, count: logs.results.length, data: logs.results });
+      // Bank audit logs are isolated to that bank and its assets; hash codes are stripped
+      if (['/api/v1/audit-logs', '/api/admin/audit-logs', '/api/bank/audit-logs'].includes(pathname)) {
+        const session = pathname === '/api/admin/audit-logs'
+          ? await requireAdminAuth()
+          : await requireBankAuth();
+
+        const canViewAllBanks = session.scope === 'surge' && (pathname === '/api/admin/audit-logs' || url.searchParams.get('scope') === 'all');
+        const targetBankId = url.searchParams.get('bank_id') || session.bank_id || 'bank-surge';
+
+        let logs;
+        if (canViewAllBanks) {
+          logs = await env.DB.prepare(`
+            SELECT a.id, a.actor_name, a.actor_role, a.organization, a.action_type, a.entity_type,
+                   a.entity_id, a.delta_summary, a.old_values, a.new_values, a.created_at,
+                   u.public_id AS actor_public_id
+            FROM audit_logs a
+            LEFT JOIN users u ON u.id = a.actor_user_id
+            WHERE a.entity_type IN ('Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase')
+            ORDER BY a.created_at DESC LIMIT 150
+          `).all();
+        } else {
+          // ISOLATED strictly to that bank and its assets
+          logs = await env.DB.prepare(`
+            SELECT a.id, a.actor_name, a.actor_role, a.organization, a.action_type, a.entity_type,
+                   a.entity_id, a.delta_summary, a.old_values, a.new_values, a.created_at,
+                   u.public_id AS actor_public_id
+            FROM audit_logs a
+            LEFT JOIN users u ON u.id = a.actor_user_id
+            LEFT JOIN assets ast ON (a.entity_id = ast.id OR a.entity_id = ast.public_ref)
+            WHERE a.entity_type IN ('Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase')
+              AND (
+                ast.bank_id = ?
+                OR a.organization = ?
+                OR a.organization = (SELECT legal_name FROM banks WHERE id = ?)
+                OR a.organization = (SELECT short_code FROM banks WHERE id = ?)
+                OR a.entity_id IN (SELECT public_ref FROM assets WHERE bank_id = ?)
+                OR a.entity_id IN (SELECT id FROM assets WHERE bank_id = ?)
+              )
+            ORDER BY a.created_at DESC LIMIT 150
+          `).bind(targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId).all();
+        }
+
+        // Do not show hash codes of logs: sanitize hash codes and internal IDs from results
+        const sanitized = logs.results.map(row => {
+          let cleanDetail = row.delta_summary || '';
+          if (cleanDetail) {
+            cleanDetail = cleanDetail
+              .replace(/\b[0-9a-fA-F]{24,64}\b/g, '')
+              .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '')
+              .replace(/\b(u|doc|val|li|img|sess|asset|bank|branch)-[a-zA-Z0-9_-]{8,}\b/g, '')
+              .replace(/\s{2,}/g, ' ')
+              .trim();
+          }
+
+          let cleanEntityRef = row.entity_id || '';
+          if (/^[0-9a-fA-F-]{16,}$/.test(cleanEntityRef) || /^(doc|val|li|img|lead|inv)-/i.test(cleanEntityRef)) {
+            cleanEntityRef = row.entity_type || 'Record';
+          }
+
+          return {
+            ...row,
+            entity_id: cleanEntityRef,
+            delta_summary: cleanDetail,
+            actor_public_id: null
+          };
+        });
+
+        return json({ success: true, count: sanitized.length, data: sanitized });
       }
 
       // =========================================================================
