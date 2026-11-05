@@ -204,12 +204,13 @@ const Auth = {
       } else if (requiredScope === 'surge') {
         if (data.user.scope !== 'surge') {
           console.warn('[Auth Guard] Non-admin user attempted to open admin portal.');
-          alert('Access denied. Administrator privileges required.');
-          window.location.href = 'bank.html';
+          UI.notify.error('Access denied. Administrator privileges required.', 'Access Denied');
+          setTimeout(() => { window.location.href = 'bank.html'; }, 1200);
           return false;
         }
       }
       this.updateUIProfile();
+      this.scheduleSessionExpiryWarning();
       console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
       const adminPortalLink = document.getElementById('admin-portal-link');
       if (adminPortalLink) adminPortalLink.hidden = data.user.scope !== 'surge';
@@ -223,6 +224,14 @@ const Auth = {
       this.showVerificationError(message, requiredScope);
       return false;
     }
+  },
+
+  scheduleSessionExpiryWarning() {
+    clearTimeout(this._expiryWarningTimer);
+    // Warn user 5 minutes before expiration (at 25 minutes mark)
+    this._expiryWarningTimer = setTimeout(() => {
+      UI.notify.info('Your session will expire in 5 minutes.', 'Information');
+    }, 25 * 60 * 1000);
   },
 
   updateUIProfile() {
@@ -327,29 +336,13 @@ const Store = {
   },
 
   showDeploymentUpdateNotice() {
-    if (document.getElementById('deployment-update-notice')) return;
-    const notice = document.createElement('div');
-    notice.id = 'deployment-update-notice';
-    notice.setAttribute('role', 'status');
-    notice.setAttribute('aria-live', 'polite');
-    Object.assign(notice.style, {
-      position: 'fixed', right: '16px', bottom: '16px', zIndex: '10000',
-      display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px',
-      borderRadius: '6px', background: '#172b4d', color: '#fff',
-      boxShadow: '0 4px 18px rgba(0,0,0,.24)', font: '13px system-ui, sans-serif'
+    UI.notify.info('A newer version of Surge Listings is ready. Refresh safely to load the update.', 'Update Available', {
+      persistent: true,
+      action: {
+        label: 'Refresh safely',
+        onClick: () => window.location.reload()
+      }
     });
-    const message = document.createElement('span');
-    message.textContent = 'A newer version is ready.';
-    const refresh = document.createElement('button');
-    refresh.type = 'button';
-    refresh.textContent = 'Refresh safely';
-    Object.assign(refresh.style, {
-      border: '0', borderRadius: '4px', padding: '7px 10px',
-      background: '#fff', color: '#172b4d', fontWeight: '600', cursor: 'pointer'
-    });
-    refresh.addEventListener('click', () => window.location.reload());
-    notice.append(message, refresh);
-    document.body.appendChild(notice);
   },
 
   persist() {
@@ -753,7 +746,13 @@ const Store = {
   async deleteUser(userId) {
     const user = this.users.find(u => u.id === userId);
     if (!user) return;
-    if (!confirm(`Are you sure you want to permanently remove staff account @${user.username} (${user.fullName})?`)) return;
+    const confirmed = await UI.confirm({
+      title: 'Remove Staff Account',
+      message: `Are you sure you want to permanently remove staff account @${user.username} (${user.fullName})?`,
+      confirmText: 'Delete Account',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
         method: 'DELETE',
@@ -771,7 +770,13 @@ const Store = {
   async deleteBank(bankId) {
     const bank = this.banks.find(b => b.id === bankId);
     if (!bank) return;
-    if (!confirm(`Are you sure you want to remove partner bank "${bank.name}" (${bank.code}) and all its associated staff?`)) return;
+    const confirmed = await UI.confirm({
+      title: 'Remove Partner Bank',
+      message: `Are you sure you want to remove partner bank "${bank.name}" (${bank.code}) and all its associated staff?`,
+      confirmText: 'Remove Bank',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(this.API_BASE + `/api/v1/banks/${bankId}`, {
         method: 'DELETE',
@@ -939,11 +944,42 @@ const Store = {
 // ============================================================
 const UI = {
   toast(msg, type = 'success', duration = 3500) {
+    if (typeof window !== 'undefined' && window.NotificationSystem) {
+      if (typeof msg === 'object' && msg !== null) {
+        return window.NotificationSystem.notify(msg);
+      }
+      return window.NotificationSystem.notify({ message: msg, type, duration });
+    }
     const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.className = 'surge-toast show ' + type;
-    clearTimeout(el._timer);
-    el._timer = setTimeout(() => el.classList.remove('show'), duration);
+    if (el) {
+      el.textContent = typeof msg === 'object' ? (msg.message || msg.title || '') : msg;
+      el.className = 'surge-toast show ' + type;
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove('show'), duration);
+    }
+  },
+  notify: {
+    success: (msg, title, opt) => (window.NotificationSystem ? window.NotificationSystem.success(msg, title, opt) : UI.toast(msg, 'success')),
+    error: (msg, title, opt) => (window.NotificationSystem ? window.NotificationSystem.error(msg, title, opt) : UI.toast(msg, 'error')),
+    warn: (msg, title, opt) => (window.NotificationSystem ? window.NotificationSystem.warning(msg, title, opt) : UI.toast(msg, 'warn')),
+    warning: (msg, title, opt) => (window.NotificationSystem ? window.NotificationSystem.warning(msg, title, opt) : UI.toast(msg, 'warn')),
+    info: (msg, title, opt) => (window.NotificationSystem ? window.NotificationSystem.info(msg, title, opt) : UI.toast(msg, 'info')),
+    loading: (msg, title, opt) => (window.NotificationSystem ? window.NotificationSystem.loading(msg, title, opt) : UI.toast(msg, 'info')),
+    persistentError: (msg, title, onRetry) => (window.NotificationSystem ? window.NotificationSystem.persistentError(msg, title, onRetry) : UI.toast(msg, 'error')),
+    promise: (...args) => window.NotificationSystem?.promise(...args)
+  },
+  confirm(opts) {
+    if (typeof window !== 'undefined' && window.NotificationSystem?.confirm) {
+      return window.NotificationSystem.confirm(opts);
+    }
+    const message = typeof opts === 'string' ? opts : (opts?.message || 'Are you sure?');
+    return Promise.resolve(window.confirm(message));
+  },
+  showFieldError(input, msg) {
+    window.NotificationSystem?.setFieldError(input, msg);
+  },
+  clearFieldError(input) {
+    window.NotificationSystem?.clearFieldError(input);
   },
   modal(title, bodyHtml, footerHtml, wide) {
     const mb = document.getElementById('modal-backdrop');
