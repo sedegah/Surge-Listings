@@ -32,7 +32,7 @@
 .surge-notify-card {
   pointer-events: auto;
   position: relative;
-  border-radius: 12px;
+  border-radius: 0 !important;
   padding: 14px 16px;
   box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
   font-family: var(--font, "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif);
@@ -134,25 +134,37 @@
 .surge-notify-icon-circle {
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .surge-notify-success .surge-notify-icon-circle {
-  background: #16A34A;
-  color: #FFFFFF;
+  width: 22px;
+  height: 22px;
+  border-radius: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .surge-notify-error .surge-notify-icon-circle {
-  background: #DC2626;
-  color: #FFFFFF;
+  width: 22px;
+  height: 22px;
+  border-radius: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .surge-notify-info .surge-notify-icon-circle {
-  background: #2563EB;
-  color: #FFFFFF;
+  width: 22px;
+  height: 22px;
+  border-radius: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .surge-notify-warning .surge-notify-icon-wrap {
@@ -209,7 +221,7 @@
   background: transparent;
   color: #94A3B8;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -252,14 +264,14 @@
   flex: 1 1 auto;
   height: 3px;
   background: rgba(15, 23, 42, 0.08);
-  border-radius: 999px;
+  border-radius: 0 !important;
   overflow: hidden;
   position: relative;
 }
 
 .surge-notify-progress-bar {
   height: 100%;
-  border-radius: 999px;
+  border-radius: 0 !important;
   width: 100%;
   transform-origin: left;
 }
@@ -300,7 +312,7 @@
   font-size: 12px;
   font-weight: 500;
   padding: 6px 14px;
-  border-radius: 6px;
+  border-radius: 0 !important;
   border: 1px solid #0F172A;
   cursor: pointer;
   transition: background-color 0.15s, border-color 0.15s;
@@ -360,7 +372,7 @@
 
 .surge-confirm-dialog {
   background: #FFFFFF;
-  border-radius: 12px;
+  border-radius: 0 !important;
   width: 100%;
   max-width: 440px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -385,7 +397,7 @@
 .surge-confirm-icon-wrap {
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: 0 !important;
   background: #DC2626;
   color: #FFFFFF;
   display: flex;
@@ -429,7 +441,7 @@
   color: #94A3B8;
   cursor: pointer;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -454,7 +466,7 @@
 
 .surge-confirm-btn {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: 0 !important;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
