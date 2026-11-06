@@ -1297,6 +1297,74 @@ const BankPortal = {
   subPage: null,
   branches: [],
   branchStats: null,
+  tabs: [
+    { id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }
+  ],
+  activeTabId: 'dashboard',
+
+  getViewTitle(view) {
+    const titleMap = {
+      'dashboard': 'Dashboard',
+      'assets': 'My Assets',
+      'legal': 'Legal Instruments',
+      'documents': 'Documents',
+      'offers': 'Offers & Decisions',
+      'reports': 'Reports',
+      'notifications': 'Notifications'
+    };
+    return titleMap[view] || 'Workspace';
+  },
+
+  openTab(tab) {
+    if (!Array.isArray(this.tabs)) this.tabs = [];
+    if (!tab || !tab.id) return;
+    const existingIndex = this.tabs.findIndex(t => t.id === tab.id);
+    if (existingIndex >= 0) {
+      this.tabs[existingIndex] = { ...this.tabs[existingIndex], ...tab };
+    } else {
+      this.tabs.push(tab);
+    }
+    this.switchTab(tab.id);
+  },
+
+  switchTab(tabId) {
+    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
+      this.tabs = [{ id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }];
+    }
+    const tab = this.tabs.find(t => t.id === tabId) || this.tabs[0];
+    if (!tab) return;
+    this.activeTabId = tab.id;
+    this.currentView = tab.view || 'dashboard';
+    this.selectedAssetId = tab.assetId || null;
+    this.selectedOfferId = tab.selectedOfferId || null;
+    this.subPage = tab.subPage || null;
+    this.detailTab = tab.detailTab || 'overview';
+
+    document.querySelectorAll('#bank-nav .navitem').forEach(n => {
+      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
+    });
+
+    this.render();
+  },
+
+  closeTab(tabId, event) {
+    if (event) event.stopPropagation();
+    if (!Array.isArray(this.tabs)) return;
+    const idx = this.tabs.findIndex(t => t.id === tabId);
+    if (idx < 0) return;
+    const wasActive = this.activeTabId === tabId;
+    this.tabs.splice(idx, 1);
+    if (this.tabs.length === 0) {
+      this.tabs = [{ id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }];
+      this.activeTabId = 'dashboard';
+      this.switchTab('dashboard');
+    } else if (wasActive) {
+      const nextTab = this.tabs[Math.min(idx, this.tabs.length - 1)];
+      this.switchTab(nextTab.id);
+    } else {
+      this.renderDoctabs();
+    }
+  },
 
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('bank');
@@ -1459,6 +1527,11 @@ const BankPortal = {
   renderDoctabs() {
     const el = document.getElementById('bank-doctabs');
     if (!el) return;
+    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
+      const current = this.currentView || 'dashboard';
+      this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Dashboard', view: current, closable: false }];
+      this.activeTabId = current;
+    }
     el.innerHTML = this.tabs.map(t => `
       <div class="dtab ${t.id === this.activeTabId ? 'active' : ''}" onclick="BankPortal.switchTab('${UI.escapeHtml(t.id)}')">
         <span>${UI.escapeHtml(t.title)}</span>
@@ -3506,6 +3579,76 @@ const AdminPortal = {
   activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '', selectedValuationId: null,
   openedReviewDocuments: new Set(), gateReadiness: null, gateReadinessAssetId: null,
   gateReadinessLoading: false, gateReadinessError: '',
+  tabs: [
+    { id: 'assets', title: 'Assets', view: 'assets', closable: false }
+  ],
+  activeTabId: 'assets',
+
+  getViewTitle(view) {
+    const titleMap = {
+      'dashboard': 'Dashboard',
+      'assets': 'Assets',
+      'review': 'Review Queue',
+      'legal': 'Legal Verification',
+      'title': 'Title & Valuation',
+      'offers': 'Offers',
+      'banks': 'Banks & Staff',
+      'audit': 'Audit Log'
+    };
+    return titleMap[view] || 'Workspace';
+  },
+
+  openTab(tab) {
+    if (!Array.isArray(this.tabs)) this.tabs = [];
+    if (!tab || !tab.id) return;
+    const existingIndex = this.tabs.findIndex(t => t.id === tab.id);
+    if (existingIndex >= 0) {
+      this.tabs[existingIndex] = { ...this.tabs[existingIndex], ...tab };
+    } else {
+      this.tabs.push(tab);
+    }
+    this.switchTab(tab.id);
+  },
+
+  switchTab(tabId) {
+    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
+      this.tabs = [{ id: 'assets', title: 'Assets', view: 'assets', closable: false }];
+    }
+    const tab = this.tabs.find(t => t.id === tabId) || this.tabs[0];
+    if (!tab) return;
+    this.activeTabId = tab.id;
+    this.currentView = tab.view || 'assets';
+    this.selectedAssetId = tab.assetId || null;
+    this.selectedValuationId = tab.selectedValuationId || null;
+    this.selectedOfferId = tab.selectedOfferId || null;
+    this.subPage = tab.subPage || null;
+    this.detailTab = tab.detailTab || 'overview';
+
+    document.querySelectorAll('#admin-nav .navitem').forEach(n => {
+      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
+    });
+
+    this.render();
+  },
+
+  closeTab(tabId, event) {
+    if (event) event.stopPropagation();
+    if (!Array.isArray(this.tabs)) return;
+    const idx = this.tabs.findIndex(t => t.id === tabId);
+    if (idx < 0) return;
+    const wasActive = this.activeTabId === tabId;
+    this.tabs.splice(idx, 1);
+    if (this.tabs.length === 0) {
+      this.tabs = [{ id: 'assets', title: 'Assets', view: 'assets', closable: false }];
+      this.activeTabId = 'assets';
+      this.switchTab('assets');
+    } else if (wasActive) {
+      const nextTab = this.tabs[Math.min(idx, this.tabs.length - 1)];
+      this.switchTab(nextTab.id);
+    } else {
+      this.renderDoctabs();
+    }
+  },
 
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
@@ -3652,6 +3795,11 @@ const AdminPortal = {
   renderDoctabs() {
     const el = document.getElementById('admin-doctabs');
     if (!el) return;
+    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
+      const current = this.currentView || 'assets';
+      this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Assets', view: current, closable: false }];
+      this.activeTabId = current;
+    }
     el.innerHTML = this.tabs.map(t => `
       <div class="dtab ${t.id === this.activeTabId ? 'active' : ''}" onclick="AdminPortal.switchTab('${UI.escapeHtml(t.id)}')">
         <span>${UI.escapeHtml(t.title)}</span>
