@@ -1548,7 +1548,9 @@ const BankPortal = {
   renderDashboard() {
     const assets = Store.getBankAssets();
     const user = Auth.getUser();
-    const bankName = user?.organizationName || user?.bankName || user?.bank_name || 'Partner Bank';
+    const bankName = user?.scope === 'surge'
+      ? (user?.bankName || user?.bank_name || 'Surge Partner Bank · Surge Solutions')
+      : (user?.bankName || user?.bank_name || user?.organizationName || 'Partner Bank');
     const activeBranch = this.branches.find(b => b.id === Auth.selectedBranchId);
     const branchLabel = activeBranch ? `${activeBranch.name} (${activeBranch.region} / ${activeBranch.district || 'Hub'})` : 'All Branches (Whole Bank Portfolio)';
 
@@ -1592,7 +1594,9 @@ const BankPortal = {
   renderAssetList() {
     const assets = Store.getBankAssets();
     const user = Auth.getUser();
-    const bankName = user?.organizationName || user?.bankName || user?.bank_name || 'Partner Bank';
+    const bankName = user?.scope === 'surge'
+      ? (user?.bankName || user?.bank_name || 'Surge Partner Bank · Surge Solutions')
+      : (user?.bankName || user?.bank_name || user?.organizationName || 'Partner Bank');
     return `
       <div class="page-head">
         <h1>My Assets</h1>

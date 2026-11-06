@@ -2336,8 +2336,13 @@ export default {
           `;
           let stmt;
           if (!canViewAllBanks) {
-            sql += ` WHERE a.bank_id = ? ORDER BY a.updated_at DESC`;
-            stmt = env.DB.prepare(sql).bind(callerBankId);
+            if (callerBankId === 'bank-surge' || session.scope === 'surge') {
+              sql += ` WHERE (a.bank_id = ? OR a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE') ORDER BY a.updated_at DESC`;
+              stmt = env.DB.prepare(sql).bind(callerBankId);
+            } else {
+              sql += ` WHERE a.bank_id = ? ORDER BY a.updated_at DESC`;
+              stmt = env.DB.prepare(sql).bind(callerBankId);
+            }
           } else {
             sql += ` ORDER BY a.updated_at DESC`;
             stmt = env.DB.prepare(sql);
@@ -2365,8 +2370,9 @@ export default {
             `;
             const instrumentStmt = canViewAllBanks
               ? env.DB.prepare(`${instrumentSql} GROUP BY li.id ORDER BY uploaded_at DESC`)
-              : env.DB.prepare(`${instrumentSql} WHERE a.bank_id = ? GROUP BY li.id ORDER BY uploaded_at DESC`)
-                .bind(callerBankId);
+              : (callerBankId === 'bank-surge' || session.scope === 'surge')
+                ? env.DB.prepare(`${instrumentSql} WHERE (a.bank_id = ? OR a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE') GROUP BY li.id ORDER BY uploaded_at DESC`).bind(callerBankId)
+                : env.DB.prepare(`${instrumentSql} WHERE a.bank_id = ? GROUP BY li.id ORDER BY uploaded_at DESC`).bind(callerBankId);
             const instrumentRows = await instrumentStmt.all();
             for (const instrument of instrumentRows.results) {
               const assetInstruments = instrumentsByAsset.get(instrument.asset_id) || [];
