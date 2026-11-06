@@ -1359,12 +1359,15 @@ const BankPortal = {
   },
 
   nav(view) {
-    document.querySelectorAll('#bank-nav .navitem').forEach(n => n.classList.toggle('active', n.dataset.view === view));
-    this.currentView = view;
-    this.selectedAssetId = null;
-    this.detailTab = 'overview';
-    this.subPage = null;
-    this.render();
+    this.openTab({
+      id: view,
+      title: this.getViewTitle(view),
+      view: view,
+      assetId: null,
+      subPage: null,
+      detailTab: 'overview',
+      closable: this.tabs.length > 0 && view !== 'dashboard'
+    });
   },
 
   render() {
@@ -1427,7 +1430,13 @@ const BankPortal = {
     if (linkedToVerifiedRecord) {
       return UI.toast('This document supports a completed verification. Ask Surge to revoke it before deleting.', 'error');
     }
-    if (!confirm(`Delete "${doc.title}" (${doc.category})? This removes the stored file and returns any pending linked review to pending.`)) return;
+    const confirmed = await UI.confirm({
+      title: 'Delete Document?',
+      message: `Delete "${doc.title}" (${doc.category})? This removes the stored file and returns any pending linked review to pending.`,
+      confirmText: 'Delete Document',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       const response = await fetch(
         Store.API_BASE + `/api/bank/documents/${encodeURIComponent(documentId)}`,
@@ -1450,26 +1459,12 @@ const BankPortal = {
   renderDoctabs() {
     const el = document.getElementById('bank-doctabs');
     if (!el) return;
-    if (this.selectedAssetId) {
-      const a = Store.getAsset(this.selectedAssetId);
-      el.innerHTML = `
-        <div class="dtab" onclick="BankPortal.nav('assets')">Assets</div>
-        <div class="dtab active">${a ? a.ref : 'Asset'}${this.subPage ? ' — ' + this.getSubPageTitle() : ''}<span class="x" onclick="event.stopPropagation();BankPortal.closeAsset()">×</span></div>
-      `;
-    } else if (this.subPage === 'offer-detail' && this.selectedOfferId) {
-      const o = Store.offers.find(x => x.id === this.selectedOfferId);
-      el.innerHTML = `
-        <div class="dtab" onclick="BankPortal.nav('offers')">Offers</div>
-        <div class="dtab active">${o ? o.ref : 'Offer'}<span class="x" onclick="event.stopPropagation();BankPortal.closeSubPage()">×</span></div>
-      `;
-    } else {
-      const titleMap = {
-        'dashboard': 'Dashboard', 'assets': 'Assets', 'legal': 'Legal Instruments',
-        'documents': 'Documents', 'offers': 'Offers & Decisions', 'reports': 'Reports',
-        'notifications': 'Notifications'
-      };
-      el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
-    }
+    el.innerHTML = this.tabs.map(t => `
+      <div class="dtab ${t.id === this.activeTabId ? 'active' : ''}" onclick="BankPortal.switchTab('${UI.escapeHtml(t.id)}')">
+        <span>${UI.escapeHtml(t.title)}</span>
+        ${t.closable ? `<span class="x" title="Close tab" onclick="BankPortal.closeTab('${UI.escapeHtml(t.id)}', event)">×</span>` : ''}
+      </div>
+    `).join('');
   },
 
   getSubPageTitle() {
@@ -1508,10 +1503,10 @@ const BankPortal = {
         <div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity ${activeBranch ? '— ' + activeBranch.name : ''}</strong></div>
         <div style="padding:10px 14px">
           <ul class="timeline">
-            ${Store.auditLog.filter(a => assets.some(x => x.ref === a.entityRef)).slice(0, 6).map(a => `
+            ${Store.getBankAuditLogs().slice(0, 8).map(a => `
               <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span>
                 <div class="tl-when">${UI.fmtDate(a.when)}</div>
-                <div class="tl-what">${a.detail || a.action}</div>
+                <div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} — ${UI.cleanAuditDetail(a.detail, a)}</div>
                 <div class="tl-who">${UI.auditActor(a)}</div>
               </li>
             `).join('') || '<li style="color:var(--text-2)">No recent activity</li>'}
@@ -2633,7 +2628,13 @@ const BankPortal = {
   },
 
   async deletePhoto(assetId, photoId, type) {
-    if (!confirm('Are you sure you want to delete this photograph?')) return;
+    const confirmed = await UI.confirm({
+      title: 'Delete Photograph?',
+      message: 'Are you sure you want to delete this photograph from the listing?',
+      confirmText: 'Delete Photo',
+      danger: true
+    });
+    if (!confirmed) return;
     const headers = {};
     const token = Auth.getToken();
     if (token) headers.Authorization = 'Bearer ' + token;
@@ -3139,7 +3140,8 @@ const BankPortal = {
   },
 
   renderNotificationsView() {
-    return `<div class="page-head"><h1>Notifications</h1></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.filter(a => Store.getBankAssets().some(x => x.ref === a.entityRef)).slice(0, 10).map(n => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(n.when)}</div><div class="ae-what"><b>${n.action}</b> on ${n.entityRef} — ${n.detail || ''}</div></div>`).join('')}</div></div>`;
+    const logs = Store.getBankAuditLogs();
+    return `<div class="page-head"><h1>Notifications &amp; Activity</h1><span class="crumb">${logs.length} bank-isolated events</span></div><div class="gridwrap"><div style="padding:10px 14px">${logs.slice(0, 30).map(n => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(n.when)}</div><div class="ae-who">${UI.auditActor(n)}</div><div class="ae-what"><b>${UI.escapeHtml(n.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(n.entityRef, n.entity))} — ${UI.cleanAuditDetail(n.detail, n)}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No notifications recorded for this bank.</p>'}</div></div>`;
   },
 
   async newAsset() {
@@ -3267,9 +3269,13 @@ const BankPortal = {
     if (a.status === 'Live') {
       return UI.toast('Published assets cannot be deleted directly. Please use "Request Deletion" to notify Surge Admin.', 'warn');
     }
-    if (!confirm(`Are you sure you want to permanently delete asset ${a.ref}? This action cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await UI.confirm({
+      title: 'Permanently Delete Asset?',
+      message: `Are you sure you want to permanently delete asset ${a.ref}? All linked records will be deleted. This action cannot be undone.`,
+      confirmText: 'Delete Permanently',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -3442,7 +3448,13 @@ const BankPortal = {
   async decideOffer(offerId, decision) {
     const offer = Store.offers.find(o => o.id === offerId);
     if (!offer) return;
-    if (!confirm(`Are you sure you want to mark offer ${offer.ref} as ${decision}?`)) return;
+    const confirmed = await UI.confirm({
+      title: 'Confirm Offer Decision',
+      message: `Are you sure you want to mark offer ${offer.ref} as ${decision}?`,
+      confirmText: `Confirm ${decision}`,
+      danger: decision === 'Rejected'
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/decide`, {
         method: 'POST',
@@ -3462,7 +3474,13 @@ const BankPortal = {
   async rescindOffer(offerId) {
     const offer = Store.offers.find(o => o.id === offerId);
     if (!offer) return;
-    if (!confirm(`Are you sure you want to rescind acceptance of offer ${offer.ref}? The asset listing will be restored from Sold back to Live on the marketplace.`)) return;
+    const confirmed = await UI.confirm({
+      title: 'Rescind Offer Acceptance?',
+      message: `Are you sure you want to rescind acceptance of offer ${offer.ref}? The asset listing will be restored from Sold back to Live on the marketplace.`,
+      confirmText: 'Rescind Acceptance',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/rescind`, {
         method: 'POST',
@@ -3634,20 +3652,12 @@ const AdminPortal = {
   renderDoctabs() {
     const el = document.getElementById('admin-doctabs');
     if (!el) return;
-    if (this.selectedAssetId) {
-      const a = Store.getAsset(this.selectedAssetId);
-      el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('assets')">Assets</div><div class="dtab active">${a ? a.ref : 'Asset'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeAsset()">×</span></div>`;
-    } else if (this.subPage === 'offer-verify' && this.selectedOfferId) {
-      const o = Store.offers.find(x => x.id === this.selectedOfferId);
-      el.innerHTML = `<div class="dtab" onclick="AdminPortal.nav('offers')">Offers</div><div class="dtab active">${o ? o.ref : 'Offer Verification'}<span class="x" onclick="event.stopPropagation();AdminPortal.closeSubPage()">×</span></div>`;
-    } else {
-      const titleMap = {
-        'dashboard': 'Dashboard', 'assets': 'Assets', 'review': 'Review Queue',
-        'legal': 'Legal Verification', 'title': 'Title & Valuation', 'offers': 'Offers',
-        'audit': 'Audit Log', 'banks': 'Banks & Staff'
-      };
-      el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
-    }
+    el.innerHTML = this.tabs.map(t => `
+      <div class="dtab ${t.id === this.activeTabId ? 'active' : ''}" onclick="AdminPortal.switchTab('${UI.escapeHtml(t.id)}')">
+        <span>${UI.escapeHtml(t.title)}</span>
+        ${t.closable ? `<span class="x" title="Close tab" onclick="AdminPortal.closeTab('${UI.escapeHtml(t.id)}', event)">×</span>` : ''}
+      </div>
+    `).join('');
   },
 
   renderDashboard() {
@@ -3664,7 +3674,7 @@ const AdminPortal = {
         <div class="kpi" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Partner Banks</div><div class="v">${Store.banks.length}</div></div>
         <div class="kpi ok" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Active Staff</div><div class="v">${Store.users.length}</div></div>
       </div>
-      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `      <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${a.action}</b> ${a.entityRef} — ${a.detail || ''}</div><div class="tl-who">${UI.auditActor(a)}</div></li>`).join('')}</ul></div></div>
+      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `      <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} — ${UI.cleanAuditDetail(a.detail, a)}</div><div class="tl-who">${UI.auditActor(a)}</div></li>`).join('')}</ul></div></div>
     `;
   },
 
@@ -3737,7 +3747,9 @@ const AdminPortal = {
       closable: true
     });
   },
-  closeAsset() { this.selectedAssetId = null; this.subPage = null; this.render(); },
+  closeAsset() {
+    this.closeTab(this.activeTabId);
+  },
   setTab(t) {
     this.detailTab = t;
     if (t === 'review' && this.selectedAssetId) {
@@ -3972,7 +3984,8 @@ const AdminPortal = {
   },
 
   renderAuditTab(a) {
-    return `<div class="group"><div class="caption">Audit</div><div class="body">${Store.auditLog.filter(x => x.entityRef === a.ref).map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${x.action}</b>${x.oldValue ? ` — <span class="ae-old">${x.oldValue}</span> → <span class="ae-new">${x.newValue}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${x.detail}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
+    const list = Store.auditLog.filter(x => x.entityRef === a.ref || x.entityRef === a.id);
+    return `<div class="group"><div class="caption">Audit</div><div class="body">${list.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b>${x.oldValue ? ` — <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
   },
 
   renderReviewQueue() {
@@ -4018,7 +4031,7 @@ const AdminPortal = {
       <td><button class="btn small primary" onclick="AdminPortal.openValuation('${UI.escapeHtml(valuation.asset_id)}','${UI.escapeHtml(valuation.id)}')">Review</button></td>
     </tr>`).join('');
     return `
-      <div class="page-head"><h1>Title &amp; Valuation Review</h1>
+      <div class="page-head"><h1>Title &amp; Valuation</h1>
         <span class="crumb">${Store.titles.filter(item => item.verification_status !== 'Verified').length} title reviews · ${Store.valuations.filter(item => item.status !== 'Valid').length} valuation reviews</span>
       </div>
       <div class="group"><div class="caption">Title Records · ${Store.titles.length}</div><div class="gridwrap"><table class="grid">
@@ -4137,7 +4150,7 @@ const AdminPortal = {
   },
 
   renderAuditView() {
-    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${x.action}</b> ${x.entityRef}${x.oldValue ? ` — <span class="ae-old">${x.oldValue}</span> → <span class="ae-new">${x.newValue}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${x.detail}</span>` : ''}</div></div>`).join('')}</div></div>`;
+    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(x.entityRef, x.entity))}${x.oldValue ? ` — <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No audit events recorded.</p>'}</div></div>`;
   },
 
   renderSubPage() {
@@ -4387,7 +4400,13 @@ const AdminPortal = {
       UI.toast('Enter a reason before revoking legal clearance.', 'error');
       return;
     }
-    if (!window.confirm('Revoke legal clearance for this asset? This will make the gate fail and return an approved or live asset to review.')) return;
+    const confirmed = await UI.confirm({
+      title: 'Revoke Legal Clearance?',
+      message: 'Revoke legal clearance for this asset? This will make the gate fail and return an approved or live asset to review.',
+      confirmText: 'Revoke Clearance',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       const response = await fetch(
         `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/legal-clearance/revoke`,
@@ -5208,9 +5227,14 @@ const AdminPortal = {
   async verifyOffer(offerId) {
     const offer = Store.offers.find(o => o.id === offerId);
     const label = offer ? `offer ${offer.ref} (${UI.fmtMoney(offer.amount)})` : 'this offer';
-    if (!confirm(`Verify ${label}? Once verified, the recovery bank will be able to see the offer and decide whether to accept or reject it.`)) {
-      return;
-    }
+    const confirmed = await UI.confirm({
+      title: 'Verify Buyer Offer',
+      message: `Verify ${label}? Once verified, the recovery bank will be able to see the offer and decide whether to accept or reject it.`,
+      confirmText: 'Verify Offer',
+      danger: false,
+      type: 'info'
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/verify`, {
         method: 'POST',
@@ -5277,7 +5301,13 @@ const AdminPortal = {
     const promptMsg = a.status === 'Live'
       ? `Are you sure you want to permanently delete listing ${a.ref}?\n\nThis listing is currently PUBLISHED on the live marketplace. Deleting it will remove it from the marketplace and delete all associated records (documents, valuations, titles, offers). This action CANNOT be undone.`
       : `Are you sure you want to permanently delete asset ${a.ref}? All associated records will be deleted.`;
-    if (!confirm(promptMsg)) return;
+    const confirmed = await UI.confirm({
+      title: 'Delete Listing?',
+      message: promptMsg,
+      confirmText: 'Delete Listing',
+      danger: true
+    });
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}`, {
@@ -5300,7 +5330,14 @@ const AdminPortal = {
   async rejectDeletionRequest(id = this.selectedAssetId) {
     const a = Store.getAsset(id);
     if (!a) return;
-    if (!confirm(`Dismiss the deletion request for ${a.ref}? The listing will remain published.`)) return;
+    const confirmed = await UI.confirm({
+      title: 'Dismiss Deletion Request?',
+      message: `Dismiss the deletion request for ${a.ref}? The listing will remain published.`,
+      confirmText: 'Dismiss Request',
+      danger: false,
+      type: 'info'
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}/reject-deletion-request`, {
         method: 'POST',
