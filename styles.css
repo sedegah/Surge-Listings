@@ -59,39 +59,37 @@ a:hover { text-decoration: underline }
 .workspace { flex: 1; display: flex; flex-direction: column; min-width: 0 }
 .doctabs {
   display: flex;
-  gap: 2px;
+  gap: 1px;
   background: var(--border);
-  padding: 2px 2px 0 2px;
-  min-height: 28px;
+  padding: 0;
+  min-height: 26px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
 }
 .doctabs::-webkit-scrollbar {
-  height: 4px;
+  height: 3px;
 }
 .doctabs::-webkit-scrollbar-thumb {
   background: #cbd5e1;
-  border-radius: 2px;
 }
 .dtab {
-  padding: 6px 14px;
-  background: #E8EEF5;
+  padding: 5px 12px;
+  background: var(--win-bg);
   color: var(--text-2);
   cursor: pointer;
   font-size: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   white-space: nowrap;
   max-width: 240px;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
+  border-radius: 0 !important;
   user-select: none;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .dtab:hover {
-  background: #F1F5F9;
+  background: #E4ECF5;
   color: var(--text);
 }
 .dtab.active {
@@ -99,24 +97,19 @@ a:hover { text-decoration: underline }
   color: var(--text);
   font-weight: 600;
   border-top: 2px solid var(--blue);
-  box-shadow: 0 -1px 3px rgba(0,0,0,0.04);
+  border-radius: 0 !important;
 }
 .dtab .x {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
   margin-left: 4px;
-  border-radius: 50%;
   cursor: pointer;
   color: var(--text-2);
   font-size: 13px;
   line-height: 1;
-  transition: background 0.15s ease, color 0.15s ease;
 }
 .dtab .x:hover {
-  background: rgba(224, 85, 92, 0.15);
   color: var(--red);
 }
 .work { flex: 1; padding: 14px; overflow: auto }
