@@ -3508,9 +3508,16 @@ const AdminPortal = {
   },
 
   nav(view) {
-    document.querySelectorAll('#admin-nav .navitem').forEach(n => n.classList.toggle('active', n.dataset.view === view));
-    this.currentView = view; this.selectedAssetId = null; this.detailTab = 'overview'; this.subPage = null;
-    this.render();
+    if (view === 'valuations') view = 'title';
+    this.openTab({
+      id: view,
+      title: this.getViewTitle(view),
+      view: view,
+      assetId: null,
+      subPage: null,
+      detailTab: 'overview',
+      closable: this.tabs.length > 0 && view !== 'dashboard'
+    });
   },
 
   render() {
@@ -3528,7 +3535,7 @@ const AdminPortal = {
       case 'review': el.innerHTML = this.renderReviewQueue(); break;
       case 'legal': el.innerHTML = this.renderLegalQueue(); break;
       case 'title': el.innerHTML = this.renderTitleQueue(); break;
-      case 'valuations': el.innerHTML = this.renderValuationQueue(); break;
+      case 'valuations': el.innerHTML = this.renderTitleQueue(); break;
       case 'offers': el.innerHTML = this.renderOffersView(); break;
       case 'audit': el.innerHTML = this.renderAuditView(); break;
       case 'banks': el.innerHTML = this.renderBanksAndStaffView(); break;
@@ -3636,7 +3643,7 @@ const AdminPortal = {
     } else {
       const titleMap = {
         'dashboard': 'Dashboard', 'assets': 'Assets', 'review': 'Review Queue',
-        'legal': 'Legal Verification', 'title': 'Title & Valuation', 'valuations': 'Valuation Review', 'offers': 'Offers',
+        'legal': 'Legal Verification', 'title': 'Title & Valuation', 'offers': 'Offers',
         'audit': 'Audit Log', 'banks': 'Banks & Staff'
       };
       el.innerHTML = `<div class="dtab active">${titleMap[this.currentView] || 'Assets'}</div>`;
@@ -3665,14 +3672,30 @@ const AdminPortal = {
     return `<div class="page-head"><h1>All Assets</h1><span class="crumb">${Store.assets.length} assets</span></div><div class="gridwrap"><table class="grid"><thead><tr><th>Reference</th><th>Managing Bank</th><th>Owner</th><th>Category</th><th>Status</th><th>Legal</th><th>Readiness</th></tr></thead><tbody>${Store.assets.length ? Store.assets.map(a => { const r = Store.checkPublishReadiness(a); return `<tr onclick="AdminPortal.openAsset('${a.id}')"><td class="ref">${a.ref}</td><td>${UI.escapeHtml(a.bankName)}</td><td>${UI.escapeHtml(UI.assetOwnerLabel(a))}</td><td>${UI.escapeHtml(a.category)}</td><td>${UI.badge(a.status)}</td><td>${UI.badge(a.legalStatus)}</td><td><span class="badge ${r.allPass ? 'ok' : 'warn'}">${r.checks.filter(c => c.pass).length}/${r.checks.length}</span></td></tr>`; }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-2);padding:30px">No assets registered in the platform yet.</td></tr>'}</tbody></table></div>`;
   },
 
-  openAsset(id) { this.selectedAssetId = id; this.currentView = 'assets'; this.detailTab = 'overview'; this.subPage = null; this.render(); },
+  openAsset(id) {
+    const a = Store.getAsset(id);
+    this.openTab({
+      id: 'asset-' + id,
+      title: a ? a.ref : 'Asset',
+      view: 'assets',
+      assetId: id,
+      subPage: null,
+      detailTab: 'overview',
+      closable: true
+    });
+  },
   openValuation(assetId, valuationId) {
-    this.selectedAssetId = assetId;
-    this.selectedValuationId = valuationId;
-    this.currentView = 'valuations';
-    this.detailTab = 'overview';
-    this.subPage = 'valuation-verify';
-    this.render();
+    const a = Store.getAsset(assetId);
+    this.openTab({
+      id: 'val-verify-' + valuationId,
+      title: 'Valuation: ' + (a ? a.ref : valuationId),
+      view: 'title',
+      assetId: assetId,
+      selectedValuationId: valuationId,
+      subPage: 'valuation-verify',
+      detailTab: 'overview',
+      closable: true
+    });
   },
   openLatestValuation(assetId) {
     const valuation = Store.valuations
@@ -3695,22 +3718,24 @@ const AdminPortal = {
         Number(right.record_order || 0) - Number(left.record_order || 0)
       )[0];
     if (valuation) {
-        this.selectedAssetId = assetId;
-        this.selectedValuationId = valuation.id;
-        this.subPage = 'valuation-verify';
-        this.render();
-        return;
-      }
-    this.nav('valuations');
-    UI.toast('The asset has no valuation record yet. The valuation review queue is open.', 'warn');
+      this.openValuation(assetId, valuation.id);
+      return;
+    }
+    this.nav('title');
+    UI.toast('The asset has no valuation record yet. The Title & Valuation queue is open.', 'warn');
   },
   openTitleReview(assetId) {
-    this.selectedAssetId = assetId;
-    this.selectedValuationId = null;
-    this.currentView = 'title';
-    this.detailTab = 'overview';
-    this.subPage = 'title-verify';
-    this.render();
+    const a = Store.getAsset(assetId);
+    this.openTab({
+      id: 'title-verify-' + assetId,
+      title: 'Title: ' + (a ? a.ref : assetId),
+      view: 'title',
+      assetId: assetId,
+      selectedValuationId: null,
+      subPage: 'title-verify',
+      detailTab: 'overview',
+      closable: true
+    });
   },
   closeAsset() { this.selectedAssetId = null; this.subPage = null; this.render(); },
   setTab(t) {
@@ -3927,7 +3952,7 @@ const AdminPortal = {
     let fix = '';
     if (c.key === 'legal' || c.key === 'injunction' || c.key === 'hold') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open Legal Review</button>`;
     else if (c.key === 'title' || c.key === 'landSearch') fix = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Open Title Review</button>`;
-    else if (c.key === 'valuation') fix = `<button class="btn small primary" onclick="AdminPortal.openAssetValuationReview('${UI.escapeHtml(a.id)}')">Open Valuation Review</button>`;
+    else if (c.key === 'valuation') fix = `<button class="btn small primary" onclick="AdminPortal.openAssetValuationReview('${UI.escapeHtml(a.id)}')">Open Title &amp; Valuation</button>`;
     else if (!c.pass) fix = `<span style="font-size:11px;color:var(--text-2);font-style:italic">Awaiting bank submission</span>`;
     return `
       <div class="gate-item">
@@ -4448,7 +4473,7 @@ const AdminPortal = {
     return `
       <div class="page-head">
         <button class="btn small" onclick="AdminPortal.closeSubPage()">← Back to Queue</button>
-        <h1>Valuation Review</h1>${UI.badge(valuation.status)}
+        <h1>Valuation Verification</h1>${UI.badge(valuation.status)}
         <span class="crumb">${UI.escapeHtml(a.ref)} · ${UI.escapeHtml(a.bankName)}</span>
       </div>
       <div class="group"><div class="caption">Submitted Valuation</div><div class="body">
