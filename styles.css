@@ -480,10 +480,10 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #DCDCDC;
+  background: #E8ECEF;
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
 }
 
@@ -491,22 +491,101 @@ body.auth-ready #portal-auth-status {
   display: none !important;
 }
 
-#portal-auth-status .switcher {
-  position: relative !important;
-  top: 0 !important;
-  z-index: 1;
-}
-
-#portal-auth-status .viewport {
-  position: relative !important;
-  top: 0 !important;
-  flex: 1;
+.auth-dialog-card {
+  width: 380px;
+  max-width: 92vw;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  box-shadow: 0 12px 32px rgba(14, 42, 71, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
   overflow: hidden;
-  padding: 18px;
-  background: #DCDCDC;
+  text-align: center;
 }
 
-#portal-auth-status .window {
-  min-height: calc(100vh - 74px);
-  height: 100%;
+.auth-dialog-header {
+  height: 32px;
+  background: #0E2A47;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+.auth-dialog-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.auth-dialog-brand .sq {
+  width: 7px;
+  height: 7px;
+  background: #38BDF8;
+  display: inline-block;
+}
+
+.auth-dialog-env {
+  font-size: 9.5px;
+  color: #94A3B8;
+  letter-spacing: 0.8px;
+}
+
+.auth-dialog-body {
+  padding: 32px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.auth-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #E2E8F0;
+  border-top-color: #0E2A47;
+  border-radius: 50%;
+  animation: auth-spin 0.75s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+.auth-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #0E2A47;
+  margin-bottom: 4px;
+}
+
+.auth-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  margin-bottom: 20px;
+}
+
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.auth-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  display: inline-block;
 }
