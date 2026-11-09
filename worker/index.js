@@ -2389,7 +2389,7 @@ export default {
             const instrumentStmt = canViewAllBanks
               ? env.DB.prepare(`${instrumentSql} GROUP BY li.id ORDER BY uploaded_at DESC`)
               : (callerBankId === 'bank-surge' || session.scope === 'surge')
-                ? env.DB.prepare(`${instrumentSql} WHERE (a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE' OR b.id = 'bank-surge') GROUP BY li.id ORDER BY uploaded_at DESC`)
+                ? env.DB.prepare(`${instrumentSql} WHERE (a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge') GROUP BY li.id ORDER BY uploaded_at DESC`)
                 : env.DB.prepare(`${instrumentSql} WHERE a.bank_id = ? GROUP BY li.id ORDER BY uploaded_at DESC`).bind(callerBankId);
             const instrumentRows = await instrumentStmt.all();
             for (const instrument of instrumentRows.results) {
@@ -3110,7 +3110,7 @@ export default {
                 OR a.organization = (SELECT short_code FROM banks WHERE id = ?)
                 OR a.entity_id IN (SELECT public_ref FROM assets WHERE bank_id = ?)
                 OR a.entity_id IN (SELECT id FROM assets WHERE bank_id = ?)
-                OR a.entity_id IN (SELECT offer_ref FROM offers o JOIN assets oa ON o.asset_ref = oa.public_ref WHERE oa.bank_id = ?)
+                OR a.entity_id IN (SELECT offer_ref FROM offers o JOIN assets oa ON o.asset_id = oa.id WHERE oa.bank_id = ?)
                 OR a.entity_id IN (SELECT invoice_number FROM invoices WHERE bank_id = ?)
                 OR EXISTS (SELECT 1 FROM assets b_ast WHERE b_ast.bank_id = ? AND (a.delta_summary LIKE '%' || b_ast.public_ref || '%' OR a.entity_id = b_ast.public_ref))
               )
