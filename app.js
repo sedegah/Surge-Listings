@@ -1343,7 +1343,7 @@ const UI = {
         <table>
           <thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Entity</th><th>Reference</th><th>Detail</th></tr></thead>
           <tbody>
-            ${logs.map(a => `<tr><td style="white-space:nowrap">${this.fmtDate(a.when)}</td><td>${this.escapeHtml(a.who || '')}</td><td class="mono">${a.action}</td><td>${a.entity}</td><td class="mono">${a.entityRef || ''}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(a.detail || '')}</td></tr>`).join('')}
+            ${logs.map(a => `<tr><td style="white-space:nowrap">${this.fmtDate(a.when)}</td><td>${this.escapeHtml(a.who || '')}</td><td class="mono">${this.escapeHtml(this.auditActionLabel(a.action))}</td><td>${a.entity}</td><td class="mono">${a.entityRef || ''}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(this.cleanAuditDetail(a.detail, a))}</td></tr>`).join('')}
           </tbody>
         </table>`;
     }
