@@ -443,6 +443,12 @@ export default {
 
       if (!session) return null;
       if (session.user_status !== 'Active') return null;
+      if (session.scope === 'surge') {
+        session.bank_id = 'bank-surge';
+        session.bank_name = 'Surge Partner Bank';
+        session.bank_code = 'SURGE';
+        session.bank_public_id = 'bank-surge';
+      }
       activeSession = session;
       const currentIp = request.headers.get('CF-Connecting-IP') || '';
       if (session.secret_hash) {
@@ -473,12 +479,10 @@ export default {
     async function requireBankAuth() {
       const session = await requireAuth();
       if (session.scope === 'surge') {
-        if (!session.bank_id) {
-          const partnerBank = await env.DB.prepare(`SELECT id, legal_name, short_code FROM banks WHERE id = 'bank-surge' OR id = 'bank-gcb' ORDER BY (id = 'bank-surge') DESC LIMIT 1`).first();
-          session.bank_id = partnerBank?.id || 'bank-surge';
-          session.bank_name = session.bank_name || partnerBank?.legal_name || 'Surge Partner Bank';
-          session.bank_code = session.bank_code || partnerBank?.short_code || 'SURGE';
-        }
+        session.bank_id = 'bank-surge';
+        session.bank_name = 'Surge Partner Bank';
+        session.bank_code = 'SURGE';
+        session.bank_public_id = 'bank-surge';
         return session;
       }
       if (session.scope !== 'bank' && session.scope !== 'surge') {
@@ -658,14 +662,18 @@ export default {
         await env.DB.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).bind(user.id).run();
         await auditLog(user.full_name, user.role_code, user.org_name, 'LOGIN', 'User', user.public_id, `Signed in from ${ipAddress}`, null, null, user.id);
 
+        const isSurge = user.scope === 'surge';
         return json({
           success: true,
           expiresAt,
           user: {
             id: user.public_id, username: user.username, fullName: user.full_name,
             email: user.email, roleCode: user.role_code, roleName: user.role_name,
-            scope: user.scope, bankId: user.bank_public_id, bankName: user.bank_name,
-            bankCode: user.bank_code, organizationId: user.organization_public_id,
+            scope: user.scope,
+            bankId: isSurge ? 'bank-surge' : user.bank_public_id,
+            bankName: isSurge ? 'Surge Partner Bank' : user.bank_name,
+            bankCode: isSurge ? 'SURGE' : user.bank_code,
+            organizationId: user.organization_public_id,
             branchId: user.branch_id, mfaEnabled: !!user.mfa_enabled
           }
         });
@@ -725,14 +733,17 @@ export default {
         const branch = session.branch_id
           ? await env.DB.prepare('SELECT public_id FROM bank_branches WHERE id = ?').bind(session.branch_id).first()
           : null;
+        const isSurge = session.scope === 'surge';
         return json({
           success: true, authenticated: true,
           user: {
             id: session.user_public_id, username: session.username, fullName: session.full_name,
             email: session.email, roleCode: session.role_code, scope: session.scope,
-            bankId: session.bank_public_id, bankName: session.bank_name, bankCode: session.bank_code,
+            bankId: isSurge ? 'bank-surge' : session.bank_public_id,
+            bankName: isSurge ? 'Surge Partner Bank' : session.bank_name,
+            bankCode: isSurge ? 'SURGE' : session.bank_code,
             branchId: branch?.public_id || null, organizationId: session.organization_public_id,
-            organizationName: session.organization_name
+            organizationName: isSurge ? 'Surge Partner Bank' : session.organization_name
           }
         });
       }
@@ -945,7 +956,14 @@ export default {
           WHERE 1=1
         `;
         const params = [];
-        if (filterBankId) { sql += ` AND u.bank_id = ?`; params.push(filterBankId); }
+        if (filterBankId) {
+          if (filterBankId === 'bank-surge') {
+            sql += ` AND (u.bank_id = 'bank-surge' OR r.scope = 'surge' OR u.organization_id = 'org-surge')`;
+          } else {
+            sql += ` AND u.bank_id = ?`;
+            params.push(filterBankId);
+          }
+        }
         if (filterRole) { sql += ` AND u.role_code = ?`; params.push(filterRole); }
         sql += ` ORDER BY u.created_at DESC, u.full_name ASC`;
         const stmt = params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql);
@@ -2337,8 +2355,8 @@ export default {
           let stmt;
           if (!canViewAllBanks) {
             if (callerBankId === 'bank-surge' || session.scope === 'surge') {
-              sql += ` WHERE (a.bank_id = ? OR a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE') ORDER BY a.updated_at DESC`;
-              stmt = env.DB.prepare(sql).bind(callerBankId);
+              sql += ` WHERE (a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE' OR b.id = 'bank-surge') ORDER BY a.updated_at DESC`;
+              stmt = env.DB.prepare(sql);
             } else {
               sql += ` WHERE a.bank_id = ? ORDER BY a.updated_at DESC`;
               stmt = env.DB.prepare(sql).bind(callerBankId);
@@ -2371,7 +2389,7 @@ export default {
             const instrumentStmt = canViewAllBanks
               ? env.DB.prepare(`${instrumentSql} GROUP BY li.id ORDER BY uploaded_at DESC`)
               : (callerBankId === 'bank-surge' || session.scope === 'surge')
-                ? env.DB.prepare(`${instrumentSql} WHERE (a.bank_id = ? OR a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE') GROUP BY li.id ORDER BY uploaded_at DESC`).bind(callerBankId)
+                ? env.DB.prepare(`${instrumentSql} WHERE (a.bank_id = 'bank-surge' OR a.owner_bank_id = 'bank-surge' OR a.ownership_type = 'surge' OR b.short_code = 'SURGE' OR b.id = 'bank-surge') GROUP BY li.id ORDER BY uploaded_at DESC`)
                 : env.DB.prepare(`${instrumentSql} WHERE a.bank_id = ? GROUP BY li.id ORDER BY uploaded_at DESC`).bind(callerBankId);
             const instrumentRows = await instrumentStmt.all();
             for (const instrument of instrumentRows.results) {
@@ -3083,17 +3101,21 @@ export default {
             FROM audit_logs a
             LEFT JOIN users u ON u.id = a.actor_user_id
             LEFT JOIN assets ast ON (a.entity_id = ast.id OR a.entity_id = ast.public_ref)
-            WHERE a.entity_type IN ('Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase')
+            WHERE a.entity_type IN ('Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase', 'User', 'Session', 'Branch')
               AND (
                 ast.bank_id = ?
+                OR u.bank_id = ?
                 OR a.organization = ?
                 OR a.organization = (SELECT legal_name FROM banks WHERE id = ?)
                 OR a.organization = (SELECT short_code FROM banks WHERE id = ?)
                 OR a.entity_id IN (SELECT public_ref FROM assets WHERE bank_id = ?)
                 OR a.entity_id IN (SELECT id FROM assets WHERE bank_id = ?)
+                OR a.entity_id IN (SELECT offer_ref FROM offers o JOIN assets oa ON o.asset_ref = oa.public_ref WHERE oa.bank_id = ?)
+                OR a.entity_id IN (SELECT invoice_number FROM invoices WHERE bank_id = ?)
+                OR EXISTS (SELECT 1 FROM assets b_ast WHERE b_ast.bank_id = ? AND (a.delta_summary LIKE '%' || b_ast.public_ref || '%' OR a.entity_id = b_ast.public_ref))
               )
             ORDER BY a.created_at DESC LIMIT 150
-          `).bind(targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId).all();
+          `).bind(targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId, targetBankId).all();
         }
 
         // Do not show hash codes of logs: sanitize hash codes and internal IDs from results
