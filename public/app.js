@@ -1374,8 +1374,12 @@ const BankPortal = {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });
     this.render();
-    void Store.fetchRemote();
-    void this.loadBranches().then(() => this.render());
+    try {
+      await Store.fetchRemote();
+      await this.loadBranches();
+    } finally {
+      this.render();
+    }
   },
 
   async loadBranches() {
@@ -3681,7 +3685,11 @@ const AdminPortal = {
       el.addEventListener('click', () => this.nav(el.dataset.view));
     });
     this.render();
-    void Store.fetchRemote();
+    try {
+      await Store.fetchRemote();
+    } finally {
+      this.render();
+    }
   },
 
   onBankRegionChange(region) {
