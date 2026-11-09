@@ -120,7 +120,7 @@ const Auth = {
     retry.textContent = 'Retry';
     retry.addEventListener('click', async () => {
       retry.disabled = true;
-      status.replaceChildren(document.createTextNode('Verifying your session…'));
+      status.innerHTML = UI.renderSkeletonLoader();
       if (await this.checkAuth(requiredScope)) {
         await (requiredScope === 'surge' ? AdminPortal : BankPortal).init(true);
       }
