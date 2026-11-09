@@ -378,7 +378,7 @@ export default {
     async function resolveSession() {
       const authHeader = request.headers.get('Authorization') || '';
       const legacyToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-      const cookieSecret = readCookie(SESSION_COOKIE);
+      let cookieSecret = readCookie(SESSION_COOKIE);
       let session = null;
 
       if (cookieSecret) {
@@ -407,11 +407,11 @@ export default {
           JOIN users u ON s.user_id = u.id
           LEFT JOIN banks b ON s.bank_id = b.id
           LEFT JOIN organizations o ON o.id = s.organization_id
-          WHERE s.id = ? AND s.secret_hash IS NULL AND s.revoked = 0
+          WHERE s.id = ? AND s.revoked = 0
             AND datetime(s.expires_at) > datetime('now')
         `).bind(legacyToken).first();
 
-        if (session?.user_status === 'Active') {
+        if (session?.user_status === 'Active' && !session.secret_hash) {
           const newSecret = secureRandomHex(32);
           const newSessionId = randomId();
           const secretHash = await sha256Hex(newSecret);
@@ -433,6 +433,7 @@ export default {
           session.id = newSessionId;
           session.secret_hash = secretHash;
           session.last_ip = ipAddress;
+          cookieSecret = newSecret;
           setSessionCookie(newSecret, remembered ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
           await auditLog(session.full_name, session.role_code, session.bank_name, 'SESSION_ROTATED', 'Session', newSessionId, 'Legacy bearer session rotated to a secure HttpOnly cookie.');
         }
@@ -448,7 +449,7 @@ export default {
       }
       activeSession = session;
       const currentIp = request.headers.get('CF-Connecting-IP') || '';
-      if (session.secret_hash) {
+      if (session.secret_hash && cookieSecret) {
         const suspicious = Boolean(session.last_ip && currentIp && session.last_ip !== currentIp);
         const ttlDays = session.remembered === 1 ? 30 : SESSION_TTL_HOURS / 24;
         ctx.waitUntil(env.DB.prepare(`
@@ -457,7 +458,7 @@ export default {
               last_ip = ?, suspicious_activity_count = suspicious_activity_count + ?
           WHERE id = ? AND revoked = 0
         `).bind(`+${ttlDays} days`, currentIp, suspicious ? 1 : 0, session.id).run());
-        setSessionCookie(cookieSecret || '', session.remembered === 1 ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
+        setSessionCookie(cookieSecret, session.remembered === 1 ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
       }
       return session;
     }
