@@ -1548,8 +1548,9 @@ const BankPortal = {
   renderDashboard() {
     const assets = Store.getBankAssets();
     const user = Auth.getUser();
-    const bankName = user?.scope === 'surge'
-      ? (user?.bankName || user?.bank_name || 'Surge Partner Bank · Surge Solutions')
+    const isSurgeUser = user?.scope === 'surge';
+    const bankName = isSurgeUser
+      ? 'Surge Partner Bank'
       : (user?.bankName || user?.bank_name || user?.organizationName || 'Partner Bank');
     const activeBranch = this.branches.find(b => b.id === Auth.selectedBranchId);
     const branchLabel = activeBranch ? `${activeBranch.name} (${activeBranch.region} / ${activeBranch.district || 'Hub'})` : 'All Branches (Whole Bank Portfolio)';
@@ -1594,8 +1595,9 @@ const BankPortal = {
   renderAssetList() {
     const assets = Store.getBankAssets();
     const user = Auth.getUser();
-    const bankName = user?.scope === 'surge'
-      ? (user?.bankName || user?.bank_name || 'Surge Partner Bank · Surge Solutions')
+    const isSurgeUser = user?.scope === 'surge';
+    const bankName = isSurgeUser
+      ? 'Surge Partner Bank'
       : (user?.bankName || user?.bank_name || user?.organizationName || 'Partner Bank');
     return `
       <div class="page-head">
@@ -2214,7 +2216,7 @@ const BankPortal = {
     `;
   },
 
-  saveBasics() {
+  async saveBasics() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const category = document.getElementById('edit-category').value;
@@ -2241,14 +2243,33 @@ const BankPortal = {
       return;
     }
 
-    Store.updateAsset(this.selectedAssetId, {
-      category, assetType, description, region, district, publicLocation, exactAddress,
-      reserve, minOffer, showReserve
-    }, Auth.getActorName(), 'Updated asset basics, description and pricing');
+    try {
+      const res = await fetch(`${Store.API_BASE}/api/v1/assets/${encodeURIComponent(a.id)}?scope=bank`, {
+        method: 'PUT',
+        headers: Store.getAuthHeaders(),
+        body: JSON.stringify({
+          categoryCode: category,
+          assetType,
+          description,
+          region,
+          district,
+          publicLocation,
+          exactAddress,
+          reservePrice: reserve,
+          minimumOffer: minOffer,
+          showReservePublicly: showReserve
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save changes');
 
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Updated basic details and pricing');
-    UI.toast('Changes saved successfully. Readiness re-checked.', 'success');
-    this.closeSubPage();
+      await Store.fetchRemote();
+      UI.toast('Changes saved successfully.', 'success');
+      this.closeSubPage();
+      this.render();
+    } catch (err) {
+      UI.toast(err.message || 'Could not save asset basics.', 'error');
+    }
   },
 
   renderEditLegal(a) {
@@ -3412,7 +3433,7 @@ const BankPortal = {
     }
   },
 
-  saveOverview() {
+  async saveOverview() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
     const catEl = document.getElementById('edit-ov-category');
@@ -3450,8 +3471,8 @@ const BankPortal = {
     Store.addAudit(Auth.getActorName(), 'UPDATE', 'Asset', a.ref, null, null, 'Asset details updated');
     Store.persist();
 
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id) + '?scope=bank', {
+    try {
+      const res = await fetch(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id) + '?scope=bank', {
         method: 'PUT',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({
@@ -3468,17 +3489,15 @@ const BankPortal = {
           minimumOffer: a.minOffer,
           showReservePublicly: a.showReserve
         })
-      }).then(r => r.json()).then(res => {
-        if (!res.success) {
-          console.warn('API update warning:', res.error);
-        }
-      }).catch(err => {
-        console.error('API update failed:', err);
       });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save changes');
+      await Store.fetchRemote();
+      UI.toast('Asset details saved successfully.', 'success');
+      this.render();
+    } catch (err) {
+      UI.toast(err.message || 'Could not save asset details.', 'error');
     }
-
-    UI.toast('Asset details saved successfully.', 'success');
-    this.render();
   },
 
   saveCurrent() {
@@ -3935,7 +3954,7 @@ const AdminPortal = {
   },
   async recheckGate(assetId) {
     await this.loadGateReadiness(assetId);
-    if (!this.gateReadinessError) UI.toast('Gate status refreshed from Cloudflare.', 'success');
+    if (!this.gateReadinessError) UI.toast('Gate status refreshed.', 'success');
   },
   openOffer(offerId) {
     this.selectedOfferId = offerId;
@@ -4070,7 +4089,7 @@ const AdminPortal = {
 
   renderGateReviewTab(a) {
     if (this.gateReadinessLoading) {
-      return '<div class="group"><div class="body">Loading current gate status from Cloudflare…</div></div>';
+      return '<div class="group"><div class="body">Loading current gate status…</div></div>';
     }
     if (this.gateReadinessError) {
       return `<div class="group"><div class="body"><p class="error">${UI.escapeHtml(this.gateReadinessError)}</p><button class="btn primary" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Retry</button></div></div>`;
@@ -4099,10 +4118,10 @@ const AdminPortal = {
     }).join('');
     return `
       <div class="page-head"><h2>Review Readiness Gates</h2>
-        <span class="crumb">${this.gateReadiness.gates.filter(gate => gate.passed).length}/${this.gateReadiness.gates.length} passed · Cloudflare status</span>
+        <span class="crumb">${this.gateReadiness.gates.filter(gate => gate.passed).length}/${this.gateReadiness.gates.length} passed · Live verification</span>
         <button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Recheck all</button>
       </div>
-      <div class="banner info"><div>Review each gate independently. Legal, title, and valuation decisions can be reopened and revoked; evidence-based gates are recalculated from the current Cloudflare records.</div></div>
+      <div class="banner info"><div>Review each gate independently. Legal, title, and valuation decisions can be reopened and revoked; evidence-based gates are recalculated from verified records.</div></div>
       <div class="group"><div class="caption">Gate-by-gate review</div><div class="gridwrap"><table class="grid">
         <thead><tr><th>Gate and current evidence</th><th>Status</th><th>Review action</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="3" style="text-align:center;padding:20px">No readiness gates were returned for this asset.</td></tr>'}</tbody>
@@ -5660,7 +5679,7 @@ const PublicMarket = {
             <button class="btn primary" onclick="PublicMarket.enquiry('${a.id}')">Submit Enquiry</button>
             <button class="btn" onclick="PublicMarket.requestViewing('${a.id}')">Request Viewing</button>
             <button class="btn" onclick="PublicMarket.submitOffer('${a.id}')">Submit Formal Offer</button>
-          </div><div class="notice" style="margin-top:12px"><b>Listed by Surge Solutions.</b> Enquiries managed by Surge only.</div></div>
+          </div></div>
         </div>
       </div>
     `;
