@@ -9,13 +9,27 @@
 <link rel="stylesheet" href="notifications.css">
 <style>
 body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
-#portal-auth-status { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; text-align: center; background: #DCDCDC; color: #1F1F1F; font: 14px "Segoe UI", Inter, Arial, sans-serif; }
-body.auth-ready #portal-auth-status { display: none; }
 </style>
 </head>
 <body data-portal="admin">
-<div id="portal-auth-status" role="status" aria-label="Loading workspace">
-  <nav class="switcher">
+<div id="portal-auth-status" role="status" aria-live="polite" aria-label="Verifying session">
+  <div class="auth-dialog-card">
+    <div class="auth-dialog-header">
+      <span class="auth-dialog-brand"><span class="sq"></span>Surge Solutions</span>
+      <span class="auth-dialog-env">SURGE ADMIN</span>
+    </div>
+    <div class="auth-dialog-body">
+      <div class="auth-spinner"></div>
+      <div class="auth-title">Verifying session…</div>
+      <div class="auth-subtitle">Authenticating administrative console</div>
+      <div class="auth-badge">
+        <span class="auth-dot"></span>
+        Encrypted TLS 1.3 · Surge Platform Operator
+      </div>
+    </div>
+  </div>
+</div>
+<nav class="switcher">
     <span class="brandmark">SURGE <span>&#9632;</span></span>
     <span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</span><button class="active">Surge Admin</button>
     <span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</span>
