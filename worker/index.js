@@ -2446,9 +2446,21 @@ export default {
           const cat = body.categoryCode || 'House';
           const catPrefix = cat === 'House' ? 'RE' : cat === 'Vehicle' ? 'VH' : cat === 'Equipment' ? 'EQ' : 'AS';
 
-          const countRow = await env.DB.prepare(`SELECT COUNT(*) as c FROM assets WHERE public_ref LIKE ?`).bind(`SS-${catPrefix}-${year}-%`).first();
-          const seq = String((countRow ? countRow.c : 0) + 242).padStart(5, '0');
-          const publicRef = `SS-${catPrefix}-${year}-${seq}`;
+          const countRow = await env.DB.prepare(`SELECT public_ref FROM assets WHERE public_ref LIKE ? ORDER BY public_ref DESC`).bind(`SS-${catPrefix}-${year}-%`).all();
+          let maxSeq = 241;
+          for (const row of (countRow?.results || [])) {
+            const m = String(row.public_ref || '').match(/-(\d+)$/);
+            if (m) {
+              const num = parseInt(m[1], 10);
+              if (num > maxSeq) maxSeq = num;
+            }
+          }
+          let nextSeq = maxSeq + 1;
+          let publicRef = `SS-${catPrefix}-${year}-${String(nextSeq).padStart(5, '0')}`;
+          while (await env.DB.prepare('SELECT 1 FROM assets WHERE public_ref = ?').bind(publicRef).first()) {
+            nextSeq++;
+            publicRef = `SS-${catPrefix}-${year}-${String(nextSeq).padStart(5, '0')}`;
+          }
 
           await env.DB.prepare(`
             INSERT INTO assets (
