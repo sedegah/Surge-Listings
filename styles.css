@@ -459,8 +459,8 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
 }
 
 /* =========================================================================
-   SKELETON LOADING SYSTEM
-   Smooth shimmering placeholder system for portal startup & views
+   AUTHENTIC SKELETON LOADING SYSTEM
+   Exact 1:1 match with Surge Solutions Enterprise Window UI
    ========================================================================= */
 @keyframes surge-skeleton-shimmer {
   0% { background-position: -200% 0; }
@@ -468,17 +468,19 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(90deg, #E6E8EC 25%, #F4F5F7 37%, #E6E8EC 63%) !important;
+  background: linear-gradient(90deg, #DFE3E8 25%, #EEF2F6 37%, #DFE3E8 63%) !important;
   background-size: 200% 100% !important;
-  animation: surge-skeleton-shimmer 1.5s ease-in-out infinite !important;
-  border-radius: 4px;
+  animation: surge-skeleton-shimmer 1.4s ease-in-out infinite !important;
+  border-radius: 2px !important;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 #portal-auth-status {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #F0F2F5;
+  background: #DCDCDC;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -489,112 +491,22 @@ body.auth-ready #portal-auth-status {
   display: none !important;
 }
 
-.portal-skeleton {
-  width: 100%;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: #F0F2F5;
-  user-select: none;
+#portal-auth-status .switcher {
+  position: relative !important;
+  top: 0 !important;
+  z-index: 1;
 }
 
-.portal-skeleton-header {
-  height: 48px;
-  background: #0B3C75;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid rgba(0,0,0,0.1);
-}
-
-.portal-skeleton-nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.portal-skeleton-pill {
-  height: 28px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.18) !important;
-}
-
-.portal-skeleton-body {
+#portal-auth-status .viewport {
+  position: relative !important;
+  top: 0 !important;
   flex: 1;
-  padding: 16px 20px;
-  max-width: 1400px;
-  width: 100%;
-  margin: 0 auto;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   overflow: hidden;
+  padding: 18px;
+  background: #DCDCDC;
 }
 
-.portal-skeleton-titlebar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-}
-
-.portal-skeleton-kpis {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-}
-
-.portal-skeleton-kpi {
-  background: #FFFFFF;
-  border: 1px solid #D5D9E0;
-  border-radius: 4px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-}
-
-.portal-skeleton-gridwrap {
-  background: #FFFFFF;
-  border: 1px solid #D5D9E0;
-  border-radius: 4px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-  overflow: hidden;
-}
-
-.portal-skeleton-toolbar {
-  height: 44px;
-  border-bottom: 1px solid #E5E7EB;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #F9FAFB;
-}
-
-.portal-skeleton-table {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.portal-skeleton-row {
-  height: 44px;
-  border-bottom: 1px solid #EDF0F4;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.portal-skeleton-row.header {
-  background: #F3F4F6;
-  font-weight: 600;
-  height: 38px;
+#portal-auth-status .window {
+  min-height: calc(100vh - 74px);
+  height: 100%;
 }
