@@ -970,135 +970,31 @@ const Store = {
 // UI UTILITIES
 // ============================================================
 const UI = {
-  renderSkeletonLoader(portal = 'bank') {
+  renderVerificationScreen(portal = 'bank') {
     const isBank = portal === 'bank';
-    return `<nav class="switcher">
-      <span class="brandmark">SURGE <span>&#9632;</span></span>
-      ${isBank ? '<button class="active">Bank Portal</button><span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Surge Admin</span>' : '<span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</span><button class="active">Surge Admin</button>'}
-      <span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</span>
-      <span class="skeleton-shimmer" style="margin-left:auto;width:80px;height:24px;border-radius:4px;background:rgba(224,85,92,0.18) !important"></span>
-    </nav>
-    <div class="viewport">
-      <div class="window">
-        <div class="menubar">
-          <span class="app-title"><span class="sq"></span>Surge Solutions</span>
-          <span class="menu-item"><u>A</u>ssets</span>
-          <span class="menu-item"><u>L</u>egal</span>
-          <span class="menu-item"><u>S</u>ales</span>
-          <span class="menu-item"><u>R</u>eports</span>
-          <span class="menu-spacer"></span>
-          <span class="menu-env">${isBank ? 'BANK PORTAL' : 'SURGE ADMIN'}</span>
+    const envLabel = isBank ? 'BANK PORTAL' : 'SURGE ADMIN';
+    const subtitle = isBank ? 'Authenticating secure banking workspace' : 'Authenticating administrative console';
+    const badgeText = isBank ? 'Encrypted TLS 1.3 · Bank Partner Gateway' : 'Encrypted TLS 1.3 · Surge Platform Operator';
+    return `
+      <div class="auth-dialog-card">
+        <div class="auth-dialog-header">
+          <span class="auth-dialog-brand"><span class="sq"></span>Surge Solutions</span>
+          <span class="auth-dialog-env">${envLabel}</span>
         </div>
-        <div class="toolbar">
-          <span class="skeleton-shimmer" style="width:105px;height:28px"></span>
-          <span class="tsep"></span>
-          <span class="skeleton-shimmer" style="width:120px;height:28px"></span>
-          <span class="tsep"></span>
-          <span class="skeleton-shimmer" style="width:65px;height:28px"></span>
-          <span class="skeleton-shimmer" style="width:75px;height:28px"></span>
-          <span class="skeleton-shimmer" style="margin-left:auto;width:210px;height:26px"></span>
-        </div>
-        <div class="mainrow">
-          <div class="navpane">
-            <div class="navitem active"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:85px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:70px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:110px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:80px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:115px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:65px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:90px;height:13px"></span></div>
+        <div class="auth-dialog-body">
+          <div class="auth-spinner"></div>
+          <div class="auth-title">Verifying session…</div>
+          <div class="auth-subtitle">${subtitle}</div>
+          <div class="auth-badge">
+            <span class="auth-dot"></span>
+            ${badgeText}
           </div>
-          <div class="workspace">
-            <div class="doctabs">
-              <div class="dtab active"><span class="skeleton-shimmer" style="width:70px;height:12px"></span></div>
-            </div>
-            <div class="work">
-              <div class="page-head">
-                <span class="skeleton-shimmer" style="width:130px;height:20px"></span>
-                <span class="skeleton-shimmer" style="width:200px;height:13px"></span>
-                <span class="spacer"></span>
-                <span class="skeleton-shimmer" style="width:105px;height:28px"></span>
-              </div>
-              <div class="kpis">
-                <div class="kpi"><div class="skeleton-shimmer" style="width:70px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:35px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:110px;height:11px"></div></div>
-                <div class="kpi ok"><div class="skeleton-shimmer" style="width:75px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:40px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:95px;height:11px"></div></div>
-                <div class="kpi warn"><div class="skeleton-shimmer" style="width:85px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:30px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:115px;height:11px"></div></div>
-                <div class="kpi alert"><div class="skeleton-shimmer" style="width:70px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:30px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:125px;height:11px"></div></div>
-                <div class="kpi"><div class="skeleton-shimmer" style="width:80px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:40px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:105px;height:11px"></div></div>
-              </div>
-              <div class="gridwrap">
-                <div class="gridtoolbar">
-                  <div class="skeleton-shimmer" style="width:250px;height:26px"></div>
-                  <span class="skeleton-shimmer" style="margin-left:auto;width:180px;height:12px"></span>
-                </div>
-                <table class="grid">
-                  <thead>
-                    <tr>
-                      <th><span class="skeleton-shimmer" style="width:90px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:120px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:80px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:110px;height:12px"></span></th>
-                      <th class="num"><span class="skeleton-shimmer" style="width:85px;height:12px;margin-left:auto"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:65px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:75px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:70px;height:12px"></span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:135px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:70px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:130px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:85px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:155px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:85px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:120px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:90px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:125px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:140px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:80px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:140px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:80px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:110px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:95px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="statusbar">
-          <span class="cell">Platform: <b>Surge Enterprise</b></span>
-          <span class="cell">Tenant: <b>${isBank ? 'Surge Partner Bank' : 'Platform Oversight'}</b></span>
-          <span class="cell">Status: <b>Active</b></span>
-          <span class="cell grow">Encrypted TLS 1.3</span>
         </div>
       </div>
-    </div>`;
+    `;
+  },
+  renderSkeletonLoader(portal = 'bank') {
+    return this.renderVerificationScreen(portal);
   },
 
   toast(msg, type = 'success', duration = 3500) {
@@ -1171,25 +1067,125 @@ const UI = {
   auditActor(entry) {
     if (!entry) return 'System';
     const who = this.escapeHtml(entry.who || 'Staff Member');
-    const role = this.escapeHtml(entry.actorRole || 'Staff');
+    const roleCodes = {
+      'SA': 'Surge Admin',
+      'AP': 'Surge Partner',
+      'LRO': 'Loan Recovery Officer',
+      'AO': 'Asset Officer',
+      'SO': 'Settlements Officer',
+      'RA': 'Risk & Compliance',
+      'ED': 'Executive Director',
+      'Staff': 'Staff Officer'
+    };
+    const role = this.escapeHtml(roleCodes[entry.actorRole] || entry.actorRole || 'Staff');
     const org = this.escapeHtml(entry.organization || '');
     if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') {
       return `${who} · Buyer`;
     }
-    // Do not show hash codes of logs: display only verified names, roles and organizations
     const parts = [who, role, org].filter(Boolean);
     return parts.join(' · ') || 'Verified Staff';
   },
+
+  auditActionLabel(action) {
+    if (!action) return 'Activity Recorded';
+    const map = {
+      'UPDATE': 'Asset Details Updated',
+      'CREATE': 'Draft Asset Created',
+      'DELETE': 'Asset Deleted',
+      'SUBMIT': 'Submitted for Review',
+      'START_REVIEW': 'Review Commenced',
+      'APPROVE': 'Approved for Disposition',
+      'REQUEST_CHANGES': 'Changes Requested',
+      'REJECT': 'Disposition Declined',
+      'PUBLISH': 'Published to Marketplace',
+      'UNPUBLISH': 'Withdrawn from Marketplace',
+      'LEGAL_HOLD': 'Placed on Legal Hold',
+      'RELEASE_HOLD': 'Legal Hold Released',
+      'OFFER_VERIFY': 'Offer Verified',
+      'OFFER_DECISION': 'Offer Decision Recorded',
+      'OFFER_REJECT': 'Offer Rejected',
+      'OFFER_RESCIND': 'Offer Acceptance Rescinded',
+      'INVOICE_GENERATED': 'Commission Invoice Issued',
+      'DELETION_REQUEST': 'Asset Removal Requested',
+      'REJECT_DELETION_REQUEST': 'Deletion Request Dismissed',
+      'VERIFY_TITLE': 'Title Deed Cleared',
+      'REJECT_TITLE': 'Title Deed Flagged',
+      'VERIFY_VALUATION': 'Valuation Cleared',
+      'REJECT_VALUATION': 'Valuation Flagged',
+      'ADD_BANK': 'Partner Bank Enrolled',
+      'DELETE_BANK': 'Partner Bank Removed',
+      'CREATE_USER': 'Staff Enrolled',
+      'RESET_PASSWORD': 'Password Reset',
+      'SESSION_ROTATED': 'Secure Session Refreshed',
+      'CREATE_BRANCH': 'Branch Enrolled',
+      'UPDATE_BRANCH': 'Branch Updated',
+      'DELETE_BRANCH': 'Branch Removed'
+    };
+    if (map[action]) return map[action];
+    return action.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  },
+
   cleanAuditDetail(detail, entry) {
-    if (!detail) return entry?.action || 'Activity recorded';
-    // Remove any hex hash codes, UUIDs, or raw database ID hashes
-    let clean = String(detail)
+    if (!detail) return this.auditActionLabel(entry?.action) || 'Activity recorded';
+    let text = String(detail)
       .replace(/\b[0-9a-fA-F]{24,64}\b/g, '')
       .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '')
       .replace(/\b(u|doc|val|li|img|sess|asset|bank|branch)-[a-zA-Z0-9_-]{8,}\b/g, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
-    return this.escapeHtml(clean || entry?.action || 'Activity recorded');
+
+    // Translate raw technical camelCase lists:
+    if (text.startsWith('Asset updated:')) {
+      const rawFields = text.replace('Asset updated:', '').split(',').map(s => s.trim()).filter(Boolean);
+      const dict = {
+        internalBankRef: 'Internal Reference',
+        categoryCode: 'Category',
+        assetType: 'Property Type',
+        title: 'Title',
+        description: 'Description',
+        region: 'Region',
+        district: 'District',
+        town: 'Town',
+        publicLocation: 'Location',
+        exactAddress: 'Exact Address',
+        reservePrice: 'Reserve Price',
+        minimumOffer: 'Minimum Offer',
+        showReservePublicly: 'Public Pricing',
+        occupancyStatus: 'Occupancy Status',
+        landGuardRisk: 'Land Guard Risk',
+        beds: 'Bedrooms',
+        baths: 'Bathrooms',
+        branchId: 'Branch Allocation',
+        ownerBankId: 'Owning Bank',
+        ownerName: 'Asset Owner'
+      };
+      const cleanFields = rawFields.map(f => dict[f] || f);
+      if (cleanFields.length >= 4) {
+        if (rawFields.includes('reservePrice') || rawFields.includes('minimumOffer')) {
+          text = 'Updated property details, location, and reserve pricing';
+        } else {
+          text = 'Updated property details and location';
+        }
+      } else if (cleanFields.length > 0) {
+        text = 'Updated ' + cleanFields.join(', ');
+      } else {
+        text = 'Updated asset details';
+      }
+    } else if (text.includes('deleted by Surge Admin')) {
+      text = 'Asset deleted from platform by Surge Administrator';
+    } else if (text.includes('Offer verified by Surge Admin — released to Recovery Bank for review')) {
+      text = 'Offer verified by Surge and released to Recovery Bank committee';
+    } else if (text.startsWith('Draft asset created:')) {
+      text = 'Draft asset record initialized';
+    } else if (text.startsWith('Bank requested deletion:')) {
+      text = 'Bank requested asset removal: ' + text.replace('Bank requested deletion:', '').trim();
+    } else if (text.startsWith('Legal hold imposed:')) {
+      text = 'Legal hold placed: ' + text.replace('Legal hold imposed:', '').trim();
+    } else if (text === 'Legal hold released') {
+      text = 'Legal hold released; asset approved for disposition';
+    }
+
+    return this.escapeHtml(text || this.auditActionLabel(entry?.action) || 'Activity recorded');
   },
   cleanAuditRef(ref, entityType) {
     if (!ref) return '';
