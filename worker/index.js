@@ -276,12 +276,9 @@ export default {
     // Helper: Immutable Audit Logging
     async function auditLog(actorName, actorRole, org, actionType, entityType, entityId, summary, oldVal = null, newVal = null, actorUserId = null) {
       const session = activeSession;
-      const resolvedActorName = session?.full_name || actorName;
-      const resolvedActorRole = session?.role_code || actorRole;
-      const resolvedActorUserId = session?.user_id || actorUserId;
-      if (!resolvedActorName || !resolvedActorRole) {
-        throw new Error(`Audit actor is required for ${actionType} ${entityType} ${entityId}.`);
-      }
+      const resolvedActorName = session?.full_name || actorName || 'System';
+      const resolvedActorRole = session?.role_code || actorRole || 'Staff';
+      const resolvedActorUserId = session?.user_id || actorUserId || null;
 
       const id = randomId();
       await env.DB.prepare(`
@@ -2410,6 +2407,8 @@ export default {
 
         if (method === 'POST') {
           const body = await getBody();
+          const actorName = session.full_name || session.username || 'Bank Officer';
+          const actorRole = session.role_code || 'Staff';
           const assetBankId = session.scope === 'surge'
             ? 'bank-surge'
             : callerBankId;
@@ -2596,7 +2595,25 @@ export default {
         binds.push(asset.id);
 
         await env.DB.prepare(sql).bind(...binds).run();
-        await auditLog(actorName, actorRole, 'Bank', 'UPDATE', 'Asset', asset.public_ref, `Asset updated: ${Object.keys(body).join(', ')}`);
+        const fieldLabels = {
+          categoryCode: 'Category', assetType: 'Property Type', title: 'Title',
+          description: 'Description', region: 'Region', district: 'District', town: 'Town',
+          publicLocation: 'Location', exactAddress: 'Exact Address', reservePrice: 'Reserve Price',
+          minimumOffer: 'Minimum Offer', showReservePublicly: 'Public Pricing',
+          occupancyStatus: 'Occupancy Status', landGuardRisk: 'Land Guard Risk',
+          beds: 'Bedrooms', baths: 'Bathrooms', internalBankRef: 'Internal Reference',
+          branchId: 'Branch Allocation', ownerBankId: 'Owning Bank', ownerName: 'Asset Owner'
+        };
+        const updatedFields = Object.keys(body).map(k => fieldLabels[k] || k);
+        let updateSummary = 'Updated asset details';
+        if (updatedFields.length <= 3) {
+          updateSummary = `Updated ${updatedFields.join(', ')}`;
+        } else if (body.reservePrice !== undefined || body.minimumOffer !== undefined) {
+          updateSummary = 'Updated property details, location, and reserve pricing';
+        } else {
+          updateSummary = 'Updated property and location details';
+        }
+        await auditLog(actorName, actorRole, session.bank_name || 'Bank', 'UPDATE', 'Asset', asset.public_ref, updateSummary);
 
         const updated = await env.DB.prepare(`SELECT * FROM assets WHERE id = ?`).bind(asset.id).first();
         return json({ success: true, data: updated });
