@@ -45,9 +45,11 @@ body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibil
   <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>
   <button data-app="admin" class="active">Surge Admin</button>
   <a href="marketplace.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</a>
-  
-  
-        </nav>
+  <button class="switcher-signout" type="button" onclick="Auth.logout()" aria-label="Sign out">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+    <span>Sign out</span>
+  </button>
+</nav>
 
 <div class="viewport">
   <!-- SURGE ADMIN -->
@@ -63,10 +65,6 @@ body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibil
         <span class="menu-item" onclick="AdminPortal.nav('banks')"><u>B</u>anks &amp; Staff</span>
         <span class="menu-item" onclick="AdminPortal.nav('audit')"><u>A</u>udit</span>
         <span class="menu-spacer"></span>
-        <button class="menu-signout" type="button" onclick="Auth.logout()" aria-label="Sign out of admin portal">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
-          <span>Sign out</span>
-        </button>
         <span class="menu-env">ADMINISTRATION</span>
       </div>
       <div class="toolbar">
