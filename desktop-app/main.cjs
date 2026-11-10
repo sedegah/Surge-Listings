@@ -105,14 +105,53 @@ function createWindow() {
     }
   });
 
-  // Security: Block unexpected new windows/popups & route external links to system browser
+  // Window opening handler: allow document review, reports, and internal popups
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedUrl(url)) {
-      // Allow internal dialogs/routes within the app window
-      mainWindow.loadURL(url);
-      return { action: 'deny' };
+    // 1. Allow blank / document review windows (window.open('', '_blank') and blob/data URLs)
+    if (!url || url === 'about:blank' || url.startsWith('blob:') || url.startsWith('data:')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 1200,
+          height: 850,
+          minWidth: 800,
+          minHeight: 600,
+          title: 'Surge Listings — Document Preview',
+          icon: path.join(__dirname, 'assets', 'icon.ico'),
+          backgroundColor: '#FFFFFF',
+          autoHideMenuBar: true,
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
+          }
+        }
+      };
     }
-    // External link: open in user's default browser
+
+    // 2. Internal / Allowed URLs: open in a secondary in-app window
+    if (isAllowedUrl(url)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 1280,
+          height: 860,
+          minWidth: 900,
+          minHeight: 600,
+          title: 'Surge Listings',
+          icon: path.join(__dirname, 'assets', 'icon.ico'),
+          backgroundColor: '#0B3C75',
+          autoHideMenuBar: true,
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
+          }
+        }
+      };
+    }
+
+    // 3. External link: route to user's system default browser
     shell.openExternal(url).catch(err => {
       console.error('[Surge Desktop] Failed to open external link:', err);
     });

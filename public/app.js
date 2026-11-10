@@ -4477,11 +4477,11 @@ const AdminPortal = {
   },
 
   async openReviewDocument(documentId) {
-    const reviewWindow = window.open('', '_blank');
-    if (!reviewWindow) {
-      UI.toast('Allow pop-ups to open the supporting document for review.', 'error');
-      return false;
-    }
+    let reviewWindow = null;
+    try {
+      reviewWindow = window.open('', '_blank');
+    } catch (_) {}
+
     try {
       const response = await fetch(
         `${Store.API_BASE}/api/admin/documents/${encodeURIComponent(documentId)}/download?view=1`,
@@ -4495,7 +4495,17 @@ const AdminPortal = {
       const objectUrl = URL.createObjectURL(blob);
       const contentType = response.headers.get('Content-Type') || '';
       if (['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(contentType.toLowerCase())) {
-        reviewWindow.location.href = objectUrl;
+        if (reviewWindow && !reviewWindow.closed) {
+          reviewWindow.location.href = objectUrl;
+        } else {
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
       } else {
         const disposition = response.headers.get('Content-Disposition') || '';
         const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
@@ -4505,11 +4515,11 @@ const AdminPortal = {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        reviewWindow.close();
+        if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
       }
       return true;
     } catch (error) {
-      reviewWindow.close();
+      if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
       UI.toast(error.message || 'Supporting document could not be opened.', 'error');
       return false;
     }
