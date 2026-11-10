@@ -193,10 +193,10 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
 @media (max-width:1000px){.two{grid-template-columns:1fr}.feat{grid-template-columns:repeat(2,1fr)}.strip div.in{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:700px){.phero{padding:32px 16px 28px}.phero h1{font-size:27px}.sec{padding:24px 16px 0}.row2,.feat{grid-template-columns:1fr}.step{grid-template-columns:36px 1fr;gap:12px}.step .n{width:36px;height:36px;font-size:15px}.step:not(:last-child)::before{left:17px;top:36px}.strip div.in{padding:14px 16px}}
 
-.logo{display:flex;align-items:center;gap:14px;text-decoration:none;white-space:nowrap;font:inherit}
-.logo .lg{height:52px;width:auto;display:block;mix-blend-mode:multiply}
-.logo .mk{font-size:13px;color:var(--text-2);padding-left:14px;border-left:1px solid #D5DCE4;line-height:1.2}
-.hdr{height:72px}
+.logo{display:flex;align-items:center;gap:16px;text-decoration:none;white-space:nowrap;font:inherit}
+.logo .lg{height:64px;width:auto;display:block;mix-blend-mode:multiply}
+.logo .mk{font-size:15px;font-weight:500;color:var(--text-2);padding-left:16px;border-left:1px solid #D5DCE4;line-height:1.2;letter-spacing:0.01em}
+.hdr{height:84px}
 .ft{margin-top:48px;background:#F3F6FA;border-top:4px solid var(--red);max-width:none;padding:0;display:block;font-size:14px;color:#33475B}
 .ft .in{max-width:1200px;margin:0 auto;padding:40px 24px 28px;display:grid;grid-template-columns:1.5fr 1fr 1.3fr 1.1fr;gap:32px}
 .ft .lg{height:84px;width:auto;display:block;mix-blend-mode:multiply;margin:0 0 12px -2px}
@@ -211,7 +211,7 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
 .ft .bar div{max-width:1200px;margin:0 auto;padding:16px 24px;display:flex;gap:8px 24px;flex-wrap:wrap;font-size:12.5px;color:var(--text-2)}
 .ft .bar div span:first-child{flex:1;min-width:260px}
 @media (max-width:1000px){.ft .in{grid-template-columns:1fr 1fr}}
-@media (max-width:700px){.hdr{height:64px}.logo .lg{height:42px}.logo .mk{display:none}.ft .in{grid-template-columns:1fr;padding:32px 16px 20px;gap:26px}.ft .bar div{padding:14px 16px}}
+@media (max-width:700px){.hdr{height:70px}.logo .lg{height:52px}.logo .mk{display:none}.ft .in{grid-template-columns:1fr;padding:32px 16px 20px;gap:26px}.ft .bar div{padding:14px 16px}}
 
 
 /* Top Switcher Bar Integration */
