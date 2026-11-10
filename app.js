@@ -5313,32 +5313,32 @@ const AdminPortal = {
   renderBanksAndStaffView() {
     const isBanks = this.activeBankTab === 'banks';
     return `
-      <div class="page-head" style="flex-wrap:wrap;gap:10px">
+      <div class="page-head">
         <div>
-          <h1>
-            Bank Partners &amp; Staff Administration
-          </h1>
-          <span class="crumb">Multi-tenant institutional onboarding, staff user accounts, and credential provisioning</span>
+          <h1>Bank Partners &amp; Staff Administration</h1>
+          <span class="crumb">Surge Solutions · Institutional Onboarding &amp; Staff Credentialing</span>
         </div>
         <span class="spacer"></span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
           <button class="btn primary" onclick="AdminPortal.modalAddBank()">
-            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Onboard New Bank
+            <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Onboard Bank
           </button>
-          <button class="btn" onclick="AdminPortal.modalAddStaff()" style="background:#28a745;color:#fff;border-color:#28a745">
-            <svg class="ico" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>Add Staff &amp; Password
+          <button class="btn" onclick="AdminPortal.modalAddStaff()">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>Add Staff Member
           </button>
         </div>
       </div>
 
-      <div class="tabs-inner" style="margin:14px 0 16px">
-        <div class="tab-inner ${isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('banks')" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+      <div class="tabs-inner">
+        <div class="tab-inner ${isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('banks')">
+          <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
           <span>Partner Banks</span>
-          <span class="pill ${Store.banks.length ? 'ok' : ''}">${Store.banks.length}</span>
+          <span class="pill">${Store.banks.length}</span>
         </div>
-        <div class="tab-inner ${!isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('staff')" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <div class="tab-inner ${!isBanks ? 'active' : ''}" onclick="AdminPortal.setBankTab('staff')">
+          <svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
           <span>Bank Staff &amp; Credentials</span>
-          <span class="pill ${Store.users.length ? 'ok' : ''}">${Store.users.length}</span>
+          <span class="pill">${Store.users.length}</span>
         </div>
       </div>
 
@@ -5351,14 +5351,16 @@ const AdminPortal = {
     const totalAssets = banks.reduce((sum, b) => sum + (b.assetCount || 0), 0);
     const totalStaff = banks.reduce((sum, b) => sum + (b.staffCount || 0), 0);
     const activeCount = banks.filter(b => b.status === 'Active').length;
-    const commissionRange = banks.length ? (Math.min(...banks.map(b => Number(b.commissionRate) || 4)).toFixed(1) + '% — ' + Math.max(...banks.map(b => Number(b.commissionRate) || 5)).toFixed(1) + '%') : '4.0% — 5.0%';
+        const minComm = banks.length ? Math.min(...banks.map(b => Number(b.commissionRate) || 4)).toFixed(1) : '4.0';
+    const maxComm = banks.length ? Math.max(...banks.map(b => Number(b.commissionRate) || 5)).toFixed(1) : '5.0';
+    const commissionRange = minComm === maxComm ? (minComm + '%') : (minComm + '% to ' + maxComm + '%');
 
     return `
-      <div class="kpis" style="margin-bottom:18px">
+      <div class="kpis" style="grid-template-columns:repeat(4, 1fr);margin-bottom:18px">
         <div class="kpi"><div class="k">Institutional Partners</div><div class="v">${banks.length}</div><div class="d">${activeCount} active</div></div>
         <div class="kpi ok"><div class="k">Active Bank Staff</div><div class="v">${totalStaff}</div><div class="d">Across all institutions</div></div>
-        <div class="kpi info"><div class="k">Assets in Portfolio</div><div class="v">${totalAssets}</div><div class="d">Total managed assets</div></div>
-        <div class="kpi alert"><div class="k">Commission Range</div><div class="v">${commissionRange}</div><div class="d">Standard fee structure</div></div>
+        <div class="kpi"><div class="k">Assets in Portfolio</div><div class="v">${totalAssets}</div><div class="d">Total managed assets</div></div>
+        <div class="kpi"><div class="k">Commission Schedule</div><div class="v">${commissionRange}</div><div class="d">Standard fee structure</div></div>
       </div>
 
       ${banks.length === 0 ? `
@@ -5474,24 +5476,23 @@ const AdminPortal = {
 
     return `
       <!-- Filter Toolbar -->
-      <div class="searchpanel" style="margin-bottom:14px;padding:12px 14px">
-        <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end">
+      <div class="searchpanel" style="margin-bottom:14px">
+        <div class="row" style="grid-template-columns: 2fr 1.2fr 1.2fr auto; align-items:flex-end">
           <div>
-            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Search Staff by Name / Username / Email</label>
-            <input type="text" placeholder="Search by name, username, or email..." value="${this.staffSearchQuery || ''}"
-              oninput="AdminPortal.staffSearchQuery = this.value; AdminPortal.render();" 
-              style="width:100%;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
+            <label>Search Staff Member</label>
+            <input type="text" placeholder="Search by name, username, or email..." value="${UI.escapeHtml(this.staffSearchQuery || '')}"
+              oninput="AdminPortal.staffSearchQuery = this.value; AdminPortal.render();">
           </div>
           <div>
-            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Filter by Partner Bank</label>
-            <select onchange="AdminPortal.selectedBankFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
-              <option value="">All Banks &amp; Platforms (${Store.users.length})</option>
-              ${banks.map(b => `<option value="${b.id}" ${this.selectedBankFilter === b.id ? 'selected' : ''}>${b.name} (${b.code})</option>`).join('')}
+            <label>Partner Bank</label>
+            <select onchange="AdminPortal.selectedBankFilter = this.value; AdminPortal.render();">
+              <option value="">All Institutions (${Store.users.length})</option>
+              ${banks.map(b => `<option value="${b.id}" ${this.selectedBankFilter === b.id ? 'selected' : ''}>${UI.escapeHtml(b.name)} (${UI.escapeHtml(b.code)})</option>`).join('')}
             </select>
           </div>
           <div>
-            <label style="font-size:11.5px;color:var(--text-2);margin-bottom:4px;display:block">Filter by Role</label>
-            <select onchange="AdminPortal.staffRoleFilter = this.value; AdminPortal.render();" style="width:100%;height:32px;padding:0 8px;border:1px solid var(--border);border-radius:2px;font-size:12.5px">
+            <label>Role</label>
+            <select onchange="AdminPortal.staffRoleFilter = this.value; AdminPortal.render();">
               <option value="">All Roles</option>
               <option value="BA" ${this.staffRoleFilter === 'BA' ? 'selected' : ''}>Bank Administrator (BA)</option>
               <option value="LRO" ${this.staffRoleFilter === 'LRO' ? 'selected' : ''}>Legal / Recovery Officer (LRO)</option>
@@ -5502,7 +5503,7 @@ const AdminPortal = {
             </select>
           </div>
           <div>
-            <button class="btn" onclick="AdminPortal.staffSearchQuery=''; AdminPortal.selectedBankFilter=''; AdminPortal.staffRoleFilter=''; AdminPortal.render();" style="height:32px">Reset</button>
+            <button class="btn" onclick="AdminPortal.staffSearchQuery=''; AdminPortal.selectedBankFilter=''; AdminPortal.staffRoleFilter=''; AdminPortal.render();">Reset</button>
           </div>
         </div>
       </div>
