@@ -139,6 +139,53 @@ ipcMain.handle('surge:retry-connection', async () => {
   return { success: false };
 });
 
+// Open marketplace in a separate child window so the portal nav stays intact
+ipcMain.handle('surge:open-marketplace', async () => {
+  const marketplaceUrl = 'https://surge-listings.vercel.app/marketplace';
+
+  // Reuse existing marketplace window if already open
+  const existing = BrowserWindow.getAllWindows().find(w => w._isSurgeMarketplace);
+  if (existing && !existing.isDestroyed()) {
+    existing.focus();
+    return { success: true };
+  }
+
+  const marketWin = new BrowserWindow({
+    width: 1360,
+    height: 900,
+    minWidth: 900,
+    minHeight: 600,
+    title: 'Surge Listings — Marketplace',
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    backgroundColor: '#0B3C75',
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  marketWin._isSurgeMarketplace = true;
+  Menu.setApplicationMenu(null);
+
+  marketWin.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+
+  marketWin.once('ready-to-show', () => marketWin.show());
+
+  try {
+    await marketWin.loadURL(marketplaceUrl);
+    return { success: true };
+  } catch (err) {
+    console.warn('[Surge Desktop] Failed to load marketplace:', err.message);
+    marketWin.close();
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('surge:get-app-info', () => {
   return {
     name: app.getName(),
