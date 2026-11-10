@@ -970,11 +970,56 @@ const Store = {
 // UI UTILITIES
 // ============================================================
 const UI = {
+  getTabIcon(tab) {
+    if (!tab) return '';
+    const id = tab.id || '';
+    const view = tab.view || '';
+    if (id === 'dashboard' || view === 'dashboard') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
+    }
+    if (id.startsWith('asset-') || tab.assetId) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
+    }
+    if (id === 'assets' || view === 'assets') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
+    }
+    if (id === 'legal' || view === 'legal' || id.startsWith('legal-')) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>`;
+    }
+    if (id === 'documents' || view === 'documents') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l7-2 9-9-5-5-9 9z"/><path d="M14 4l5 5"/></svg>`;
+    }
+    if (id.startsWith('offer-') || id === 'offers' || view === 'offers') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>`;
+    }
+    if (id === 'reports' || view === 'reports') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V9M12 20V4M19 20v-7"/></svg>`;
+    }
+    if (id === 'notifications' || view === 'notifications') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V9a6 6 0 0112 0v7"/><path d="M4 16h16v4H4z"/></svg>`;
+    }
+    if (id === 'review' || view === 'review') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`;
+    }
+    if (id === 'title' || view === 'title' || id.startsWith('title-')) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    }
+    if (id === 'banks' || view === 'banks') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M15 10v11M12 3l9 7H3z"/></svg>`;
+    }
+    if (id === 'audit' || view === 'audit') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`;
+    }
+    if (id.startsWith('val-')) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+    }
+    return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  },
+
   renderVerificationScreen(portal = 'bank') {
     const isBank = portal === 'bank';
     const envLabel = isBank ? 'BANK PORTAL' : 'SURGE ADMIN';
     const subtitle = isBank ? 'Authenticating secure banking workspace' : 'Authenticating administrative console';
-    const badgeText = isBank ? 'Encrypted TLS 1.3 · Bank Partner Gateway' : 'Encrypted TLS 1.3 · Surge Platform Operator';
     return `
       <div class="auth-dialog-card">
         <div class="auth-dialog-header">
@@ -985,10 +1030,6 @@ const UI = {
           <div class="auth-spinner"></div>
           <div class="auth-title">Verifying session…</div>
           <div class="auth-subtitle">${subtitle}</div>
-          <div class="auth-badge">
-            <span class="auth-dot"></span>
-            ${badgeText}
-          </div>
         </div>
       </div>
     `;
