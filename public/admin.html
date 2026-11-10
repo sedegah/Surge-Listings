@@ -4,12 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surge Solutions - Administration Portal</title>
-<meta name="description" content="Surge Solutions Super Administrator Portal - Platform oversight, 5-gate publish readiness verification, legal holds, bank partner management, and audit records.">
+<meta name="description" content="Surge Solutions Super Administrator Portal · Platform oversight, 5-gate publish readiness verification, legal holds, bank partner management, and audit records.">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="notifications.css">
 <style>
 body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
 </style>
+<!-- Progressive Web App Metadata & Icons -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B3C75">
+<meta name="application-name" content="Surge Listings">
+<meta name="apple-mobile-web-app-title" content="Surge Listings">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="msapplication-TileColor" content="#0B3C75">
+<meta name="msapplication-TileImage" content="icons/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 </head>
 <body data-portal="admin">
 <div id="portal-auth-status" role="status" aria-live="polite" aria-label="Verifying session">
@@ -102,5 +115,6 @@ body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibil
 
 <script src="notifications.js"></script>
 <script src="app.js"></script>
+<script src="pwa.js"></script>
 </body>
 </html>
