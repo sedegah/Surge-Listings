@@ -1461,7 +1461,7 @@ const UI = {
 // BANK PORTAL
 // ============================================================
 const BankPortal = {
-  currentView: 'assets', selectedAssetId: null, detailTab: 'overview',
+  currentView: 'dashboard', selectedAssetId: null, detailTab: 'overview',
   subPage: null,
   branches: [],
   branchStats: null,
@@ -1469,6 +1469,14 @@ const BankPortal = {
     { id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }
   ],
   activeTabId: 'dashboard',
+
+  updateCurrentTab(updates) {
+    if (!Array.isArray(this.tabs)) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && updates && typeof updates === 'object') {
+      Object.assign(tab, updates);
+    }
+  },
 
   getViewTitle(view) {
     const titleMap = {
@@ -1537,6 +1545,17 @@ const BankPortal = {
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('bank');
     if (!authed) return;
+
+    const tabsEl = document.getElementById('bank-doctabs');
+    if (tabsEl && !tabsEl._wheelBound) {
+      tabsEl._wheelBound = true;
+      tabsEl.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+          tabsEl.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+    }
 
     document.querySelectorAll('#bank-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
