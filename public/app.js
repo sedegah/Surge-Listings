@@ -6301,73 +6301,437 @@ const AdminPortal = {
 // ============================================================
 // PUBLIC MARKETPLACE
 // ============================================================
-const PublicMarket = {
-  currentPage: 'home', selectedAssetId: null, viewMode: 'grid',
 
-  init() { this.render(); },
+// ============================================================
+// FULLSCREEN LIGHTBOX COMPONENT
+// ============================================================
+const Lightbox = {
+  active: false,
+  images: [], // array of { url, caption }
+  index: 0,
+  assetRef: '',
 
-  setActiveNav(page) { document.querySelectorAll('#pub-nav a').forEach(a => a.classList.toggle('active', a.dataset.page === page)); },
-  goHome() { this.currentPage = 'home'; this.selectedAssetId = null; this.setActiveNav('home'); this.render(); },
-  goHow() { this.currentPage = 'how'; this.setActiveNav('how'); this.render(); },
-  goKyc() { this.currentPage = 'kyc'; this.setActiveNav('kyc'); this.render(); },
-  goFaq() { this.currentPage = 'faq'; this.setActiveNav('faq'); this.render(); },
-  goContact() { this.currentPage = 'contact'; this.setActiveNav('contact'); this.render(); },
+  open(images, index, assetRef) {
+    if (!images || images.length === 0) return;
+    this.images = images;
+    this.index = Math.max(0, Math.min(index || 0, images.length - 1));
+    this.assetRef = assetRef || '';
+    this.active = true;
+    this.render();
+    document.removeEventListener('keydown', this._onKeyDown);
+    document.addEventListener('keydown', this._onKeyDown);
+  },
 
-  render() {
-    const el = document.getElementById('public-work');
-    if (!el) return;
-    switch (this.currentPage) {
-      case 'home': el.innerHTML = this.selectedAssetId ? this.renderDetail() : this.renderHome(); break;
-      case 'how': el.innerHTML = this.renderHow(); break;
-      case 'kyc': el.innerHTML = this.renderKyc(); break;
-      case 'faq': el.innerHTML = this.renderFaq(); break;
-      case 'contact': el.innerHTML = this.renderContact(); break;
+  close() {
+    this.active = false;
+    document.removeEventListener('keydown', this._onKeyDown);
+    const el = document.getElementById('lightbox-modal');
+    if (el) el.remove();
+  },
+
+  next() {
+    if (this.images.length <= 1) return;
+    this.index = (this.index + 1) % this.images.length;
+    this.update();
+  },
+
+  prev() {
+    if (this.images.length <= 1) return;
+    this.index = (this.index - 1 + this.images.length) % this.images.length;
+    this.update();
+  },
+
+  _onKeyDown(e) {
+    if (e.key === 'Escape') Lightbox.close();
+    else if (e.key === 'ArrowRight') Lightbox.next();
+    else if (e.key === 'ArrowLeft') Lightbox.prev();
+  },
+
+  update() {
+    const cur = this.images[this.index];
+    const imgEl = document.getElementById('lb-img');
+    const capEl = document.getElementById('lb-caption');
+    const countEl = document.getElementById('lb-count');
+    if (imgEl && cur) {
+      imgEl.src = cur.url;
+      imgEl.alt = cur.caption || 'Asset photo';
+    }
+    if (capEl && cur) {
+      capEl.textContent = cur.caption || (this.assetRef ? 'Asset ' + this.assetRef : 'Property Photo');
+    }
+    if (countEl) {
+      countEl.textContent = (this.index + 1) + ' / ' + this.images.length;
     }
   },
 
-  renderHome() {
-    const pub = Store.getPublicAssets();
-    return `
-      <div class="hero"><h2>Bank-Repossessed &amp; Distressed Assets in Ghana</h2><p>Browse verified listings managed exclusively by Surge Solutions.</p><div class="listedby"><span class="sq"></span>Listed by Surge Solutions · ${pub.length} live assets</div></div>
-      <div class="searchpanel"><div class="row">
-        <div><label>Region</label><select><option>All Regions</option></select></div>
-        <div><label>Category</label><select><option>All Categories</option></select></div>
-        <div><label>Price Range</label><select><option>Any Price</option></select></div>
-        <div><label>Occupancy</label><select><option>Any</option></select></div>
-        <div><label>Search</label><input placeholder="Reference or location..."></div>
-        <button class="btn primary" onclick="PublicMarket.render()">Search</button>
-      </div></div>
-      <div class="resultshead"><h3>Available Assets</h3><span class="count">${pub.length} results</span><span class="spacer"></span>
-        <div class="viewtoggle">
-          <button class="${this.viewMode === 'grid' ? 'active' : ''}" onclick="PublicMarket.setView('grid')">Grid</button>
-          <button class="${this.viewMode === 'list' ? 'active' : ''}" onclick="PublicMarket.setView('list')">List</button>
+  render() {
+    let el = document.getElementById('lightbox-modal');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'lightbox-modal';
+      document.body.appendChild(el);
+    }
+    const cur = this.images[this.index] || {};
+    const hasMultiple = this.images.length > 1;
+
+    el.innerHTML = `
+      <div class="lb-backdrop" onclick="if(event.target===this) Lightbox.close()">
+        <button class="lb-close" onclick="Lightbox.close()" aria-label="Close full screen">&times;</button>
+        ${hasMultiple ? '<button class="lb-prev" onclick="Lightbox.prev()" aria-label="Previous photo">&#8249;</button>' : ''}
+        ${hasMultiple ? '<button class="lb-next" onclick="Lightbox.next()" aria-label="Next photo">&#8250;</button>' : ''}
+        <div class="lb-stage">
+          <img id="lb-img" src="${cur.url || ''}" alt="${UI.escapeHtml(cur.caption || 'Asset photo')}" class="lb-photo">
+          <div class="lb-bar">
+            <span id="lb-caption" class="lb-caption">${UI.escapeHtml(cur.caption || (this.assetRef ? 'Asset ' + this.assetRef : 'Property Photo'))}</span>
+            <span id="lb-count" class="lb-count">${this.index + 1} / ${this.images.length}</span>
+          </div>
         </div>
       </div>
-      <div class="cards ${this.viewMode === 'list' ? 'list-view' : ''}">
-        ${pub.map(a => this.renderCard(a)).join('') || '<div class="empty-state" style="grid-column:1/-1"><h3>No live assets currently available</h3><p style="color:var(--text-2);margin-top:6px">Check back shortly or submit an enquiry to receive updates.</p></div>'}
-      </div>
-      <div class="pub-footer"><div class="legal">All listings are managed by Surge Solutions.</div><span class="spacer"></span><span>&copy; 2026 Surge Solutions</span></div>
+    `;
+  }
+};
+
+// ============================================================
+// PUBLIC MARKETPLACE (NORMALIZED & LIVE DATA POWERED)
+// ============================================================
+const PublicMarket = {
+  currentPage: 'home',
+  selectedAssetId: null,
+  viewMode: 'grid',
+  activeImageIndex: 0,
+  detailImages: [],
+  detailImagesLoading: false,
+
+  filterState: {
+    q: '',
+    cat: 'all',
+    region: 'all',
+    price: 'any',
+    sort: 'default',
+    view: 'grid'
+  },
+
+  faqQuery: '',
+  faqCategory: 'all',
+
+  BANDS: {
+    any: ['Any price', 0, Infinity],
+    u500: ['Under 500,000', 0, 500000],
+    '500m': ['500,000 to 1M', 500000, 1000000],
+    '1m5': ['1M to 5M', 1000000, 5000000],
+    o5: ['Over 5M', 5000000, Infinity]
+  },
+
+  FAQ_DATA: [
+    ['Legal & title', 'Where do the listed assets come from?', 'They come directly from partner commercial banks and licensed deposit-taking institutions in Ghana: collateral repossessed after judicial default, High Court writs of execution or settlement recoveries. Surge is the intermediary these institutions authorise to market and sell them.'],
+    ['Legal & title', 'How does Surge make sure properties are free from litigation and land guards?', 'Every property passes a five-gate audit: High Court writ of possession, Lands Commission search of the root of title, Collateral Registry search, independent valuation, and a physical occupancy inspection. Assets with family or title disputes go on legal hold and are never listed.'],
+    ['Legal & title', 'Which title documents will I receive?', 'You receive a Deed of Assignment or Conveyance executed by the bank (attested by the High Court registrar where required), the Certificate of Purchase or Vesting Deed, and certified site plans so you can register the title at the Lands Commission.'],
+    ['Pricing & terms', 'Are prices negotiable, and what is the reserve price?', 'The reserve price is the liquidation threshold set by independent chartered valuers and approved by the bank’s Credit Committee. You can offer at, above or near it with reasons. The committee weighs price, settlement speed and payment method.'],
+    ['Pricing & terms', 'Which payment structures are accepted?', 'Three: a direct bank wire or RTGS payment into the bank’s recovery escrow account; a pre-approved mortgage from a registered Ghanaian bank; or a staged settlement, typically 10–20% on acceptance with the balance paid over 30 to 90 days.'],
+    ['Pricing & terms', 'Does Surge charge buyers broker or search fees?', 'No. Surge earns a regulated commission, typically 4.0%, already included in the approved transaction. There are no upfront inspection or registration fees, and searching and enquiring are free.'],
+    ['Viewing & process', 'Can I inspect a property before making an offer?', 'Yes. Inspections are supervised and booked in advance through Surge, with an asset recovery officer and security escort. Unescorted visits are not allowed.'],
+    ['Viewing & process', 'Can I bring my own engineer, valuer or lawyer?', 'We encourage it. You can bring chartered surveyors, structural engineers or legal counsel and carry out measurements and structural checks during the appointment.'],
+    ['Viewing & process', 'Why do I need KYC before viewing or offering?', 'Repossessed property is under sensitive court and banking administration. Ghana Card verification and proof of acquisition capacity protect the asset from trespass, preserve borrower privacy and meet Bank of Ghana requirements under Act 1044.'],
+    ['Diaspora & foreign', 'Can Ghanaians abroad buy remotely?', 'Yes. Overseas buyers can take a live video walkthrough, verify digitally with a Ghana Card PIN or passport, and appoint a local representative or lawyer under our power-of-attorney process.'],
+    ['Diaspora & foreign', 'Can foreign nationals or companies buy land?', 'Under Article 266 of the 1992 Constitution and the Land Act, 2020 (Act 1036), non-citizens and foreign companies can hold land on renewable leasehold of up to 50 years. Surge checks the unexpired term on every listing before publishing.'],
+    ['Diaspora & foreign', 'How do I send funds from abroad?', 'Send settlement funds only by SWIFT or RTGS wire into the bank’s designated recovery escrow account in Ghana. Surge never accepts cash through informal transmitters or personal mobile money.']
+  ],
+
+  init() {
+    this.syncSwitcherState();
+    this.render();
+  },
+
+  syncSwitcherState() {
+    const swSignout = document.getElementById('sw-signout-btn');
+    if (swSignout) {
+      const isAuth = typeof Auth !== 'undefined' && Auth.currentUser;
+      swSignout.style.display = isAuth ? 'inline-flex' : 'none';
+    }
+  },
+
+  setActiveNav(page) {
+    document.querySelectorAll('#pub-nav a').forEach(a => {
+      a.classList.toggle('on', a.dataset.page === page);
+    });
+  },
+
+  go(p) {
+    this.currentPage = p;
+    this.selectedAssetId = null;
+    this.setActiveNav(p);
+    this.render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
+  goHome() { this.go('home'); },
+  goHow() { this.go('how'); },
+  goKyc() { this.go('kyc'); },
+  goFaq() { this.go('faq'); },
+  goContact() { this.go('contact'); },
+
+  toast(m) {
+    if (typeof UI !== 'undefined' && UI.toast) {
+      UI.toast(m, 'info');
+      return;
+    }
+    let el = document.getElementById('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      el.className = 'toast';
+      document.body.appendChild(el);
+    }
+    el.innerHTML = m;
+    el.classList.add('show');
+    clearTimeout(this._tTimer);
+    this._tTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  },
+
+  // Helper icons
+  icons: {
+    tick: '<svg class="i" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>',
+    pin: '<svg class="i" viewBox="0 0 24 24"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    ph: '<svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>',
+    fs: '<svg style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>'
+  },
+
+  fmtMoney(n) {
+    if (n === null || n === undefined || isNaN(n)) return 'Price on application';
+    return 'GH₵ ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  },
+
+  // Live Assets Accessor
+  getAssets() {
+    const pub = Store.getPublicAssets();
+    if (pub && pub.length > 0) return pub;
+    // Fallback: return any live assets in Store.assets
+    return (Store.assets || []).filter(a => a.status === 'Live' || a.publicationStatus === 'Published');
+  },
+
+  filteredAssets() {
+    const S = this.filterState;
+    const b = this.BANDS[S.price] || this.BANDS.any;
+    const q = (S.q || '').trim().toLowerCase();
+    const all = this.getAssets();
+
+    const list = all.filter(a => {
+      const cat = a.category || a.category_code || 'Property';
+      if (S.cat !== 'all' && cat.toLowerCase() !== S.cat.toLowerCase()) return false;
+
+      const reg = a.region || '';
+      if (S.region !== 'all' && reg.toLowerCase() !== S.region.toLowerCase()) return false;
+
+      const price = a.showReserve ? Number(a.reserve) : null;
+      if (S.price !== 'any') {
+        if (price === null || isNaN(price)) return false;
+        if (price < b[1] || price >= b[2]) return false;
+      }
+
+      if (q) {
+        const text = [
+          a.ref || '',
+          a.assetType || a.title || '',
+          a.publicLocation || '',
+          a.region || '',
+          cat,
+          a.description || ''
+        ].join(' ').toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+
+    if (S.sort === 'low') {
+      list.sort((x, y) => {
+        const px = x.showReserve ? Number(x.reserve) : Infinity;
+        const py = y.showReserve ? Number(y.reserve) : Infinity;
+        return px - py;
+      });
+    } else if (S.sort === 'high') {
+      list.sort((x, y) => {
+        const px = x.showReserve ? Number(x.reserve) : -Infinity;
+        const py = y.showReserve ? Number(y.reserve) : -Infinity;
+        return py - px;
+      });
+    }
+
+    return list;
+  },
+
+  renderChips() {
+    const all = this.getAssets();
+    const catMap = {};
+    all.forEach(a => {
+      const c = a.category || a.category_code || 'Property';
+      catMap[c] = (catMap[c] || 0) + 1;
+    });
+    const cats = Object.keys(catMap);
+    const S = this.filterState;
+
+    const chipBtn = (val, label, count) => `
+      <button class="chip ${S.cat === val ? 'on' : ''}" type="button" onclick="PublicMarket.setCategory('${UI.escapeHtml(val)}')">
+        ${UI.escapeHtml(label)}<b>${count}</b>
+      </button>
+    `;
+
+    return chipBtn('all', 'All assets', all.length) +
+      cats.map(c => chipBtn(c, c, catMap[c])).join('');
+  },
+
+  setCategory(cat) {
+    this.filterState.cat = cat;
+    this.refreshListings();
+  },
+
+  setRegion(reg) {
+    this.filterState.region = reg;
+    this.refreshListings();
+  },
+
+  setPrice(priceKey) {
+    this.filterState.price = priceKey;
+    this.refreshListings();
+  },
+
+  setSort(sortKey) {
+    this.filterState.sort = sortKey;
+    this.refreshListings();
+  },
+
+  setView(view) {
+    this.viewMode = view;
+    this.filterState.view = view;
+    this.refreshListings();
+  },
+
+  setSearchQuery(q) {
+    this.filterState.q = q;
+    this.refreshListings();
+  },
+
+  refreshListings() {
+    const chipsEl = document.getElementById('chips');
+    const resultsEl = document.getElementById('results');
+    if (chipsEl) chipsEl.innerHTML = this.renderChips();
+    if (resultsEl) resultsEl.innerHTML = this.renderResults();
+  },
+
+  renderCard(a) {
+    const isPoa = !a.showReserve || a.reserve === null || isNaN(a.reserve);
+    const priceFormatted = isPoa ? 'Price on application' : this.fmtMoney(a.reserve);
+    const cat = a.category || a.category_code || 'Property';
+    const title = a.assetType || a.title || 'Bank Repossessed Asset';
+    const loc = a.publicLocation || [a.town, a.region].filter(Boolean).join(', ') || 'Greater Accra';
+
+    const facts = [
+      a.beds ? a.beds + ' bed' : '',
+      a.baths ? a.baths + ' bath' : '',
+      a.occupancyStatus || '',
+      a.landGuardRisk ? 'Risk: ' + a.landGuardRisk : ''
+    ].filter(Boolean);
+
+    const hasImg = !!a.primaryImage;
+    const imgHtml = hasImg
+      ? `<img src="${UI.escapeHtml(a.primaryImage)}" alt="${UI.escapeHtml(title)}" loading="lazy">`
+      : this.icons.ph;
+
+    return `
+      <article class="card" tabindex="0" role="link" onclick="PublicMarket.openDetail('${a.id}')" onkeydown="if(event.key==='Enter')PublicMarket.openDetail('${a.id}')">
+        <div class="img" onclick="PublicMarket.openCardPhoto(event, '${a.id}')" title="Click photo to view Full Screen">
+          ${imgHtml}
+          <span class="ref">${UI.escapeHtml(a.ref || 'SRG-' + a.id)}</span>
+          <button class="img-fullscreen-btn" type="button" aria-label="View Full Screen" onclick="PublicMarket.openCardPhoto(event, '${a.id}')">
+            ${this.icons.fs}
+            <span>Full Screen</span>
+          </button>
+        </div>
+        <div class="body">
+          <div class="cat">${UI.escapeHtml(cat)}</div>
+          <h3>${UI.escapeHtml(title)}</h3>
+          <p class="loc">${this.icons.pin}${UI.escapeHtml(loc)}</p>
+          ${facts.length ? `<div class="facts">${facts.map(f => `<span>${UI.escapeHtml(f)}</span>`).join('')}</div>` : ''}
+          <div class="price ${isPoa ? 'poa' : ''}">${priceFormatted}</div>
+        </div>
+      </article>
     `;
   },
 
-  setView(v) { this.viewMode = v; this.render(); },
+  renderResults() {
+    const list = this.filteredAssets();
+    const S = this.filterState;
+    const sel = (v, t) => `<option value="${v}" ${S.sort === v ? 'selected' : ''}>${t}</option>`;
+    const empty = `
+      <div class="empty">
+        <h3>No assets match these filters</h3>
+        <p>Clear the filters or search term to see every live asset listing.</p>
+        <button class="btn p" type="button" onclick="PublicMarket.clearFilters()">Clear filters</button>
+      </div>
+    `;
 
-  renderCard(a) {
-    const imgHtml = a.primaryImage
-      ? `<img src="${UI.escapeHtml(a.primaryImage)}" alt="${UI.escapeHtml(a.assetType)}" style="width:100%;height:100%;object-fit:cover">`
-      : `<svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
-    return `<div class="acard" onclick="PublicMarket.openDetail('${a.id}')">
-      <div class="thumb">${imgHtml}<span class="badge live">Live</span><span class="ref">${a.ref}</span></div>
-      <div class="cbody"><span class="cat">${a.category}</span><span class="ttl">${a.assetType}</span><div class="loc">${a.publicLocation}</div>
-      <div class="price">${a.showReserve ? `<span class="amt">${UI.fmtMoney(a.reserve).split('.')[0]}<small>.00</small></span>` : '<span class="poa">Price on Application</span>'}</div>
-      <div class="listedby"><span class="sq"></span>Listed by Surge Solutions</div></div>
-    </div>`;
+    return `
+      <div class="head">
+        <h2>${list.length} ${list.length === 1 ? 'asset' : 'assets'} available</h2>
+        <select aria-label="Sort" onchange="PublicMarket.setSort(this.value)">
+          ${sel('default', 'Sort: Featured')}
+          ${sel('low', 'Price: low to high')}
+          ${sel('high', 'Price: high to low')}
+        </select>
+        <div class="view">
+          <button class="${this.viewMode === 'grid' ? 'on' : ''}" type="button" onclick="PublicMarket.setView('grid')">Grid</button>
+          <button class="${this.viewMode === 'list' ? 'on' : ''}" type="button" onclick="PublicMarket.setView('list')">List</button>
+        </div>
+      </div>
+      <div class="grid ${this.viewMode === 'list' ? 'list' : ''}">
+        ${list.length ? list.map(a => this.renderCard(a)).join('') : empty}
+      </div>
+    `;
   },
 
-  detailImages: [],
-  activeImageIndex: 0,
-  detailImagesLoading: false,
+  clearFilters() {
+    this.filterState = { q: '', cat: 'all', region: 'all', price: 'any', sort: 'default', view: this.viewMode };
+    this.goHome();
+  },
 
+  // Fullscreen Photo Handlers
+  async openCardPhoto(e, assetId) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const a = Store.getAsset(assetId);
+    if (!a) return;
+
+    let imgs = [];
+    if (a.primaryImage) {
+      imgs.push({ url: a.primaryImage, caption: (a.assetType || a.title || 'Asset') + ' · ' + (a.ref || '') });
+    }
+
+    try {
+      const resp = await fetch((Store.API_BASE || '') + '/api/marketplace/assets/' + encodeURIComponent(a.ref || a.id), { cache: 'no-store' });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json.success && json.data && Array.isArray(json.data.images) && json.data.images.length > 0) {
+          imgs = json.data.images.map(img => ({
+            url: img.url,
+            caption: (img.caption ? img.caption.toUpperCase() + ' · ' : '') + (a.assetType || a.title || '') + ' (' + (a.ref || '') + ')'
+          }));
+        }
+      }
+    } catch (err) {}
+
+    if (imgs.length > 0) {
+      Lightbox.open(imgs, 0, a.ref);
+    } else {
+      this.openDetail(assetId);
+    }
+  },
+
+  openGalleryPhoto(index) {
+    if (this.detailImages && this.detailImages.length > 0) {
+      const a = Store.getAsset(this.selectedAssetId);
+      Lightbox.open(this.detailImages, index || 0, a ? a.ref : '');
+    }
+  },
+
+  // Detail View
   async openDetail(id) {
     this.selectedAssetId = id;
     this.currentPage = 'home';
@@ -6375,42 +6739,56 @@ const PublicMarket = {
     this.activeImageIndex = 0;
     this.detailImagesLoading = true;
     this.render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Fetch images from the public API
     try {
       const a = Store.getAsset(id);
       const ref = a ? (a.ref || id) : id;
-      const resp = await fetch(Store.API_BASE + '/api/marketplace/assets/' + encodeURIComponent(ref), { cache: 'no-store' });
+      const resp = await fetch((Store.API_BASE || '') + '/api/marketplace/assets/' + encodeURIComponent(ref), { cache: 'no-store' });
       if (resp.ok) {
         const json = await resp.json();
-        if (json.success && json.data && Array.isArray(json.data.images)) {
+        if (json.success && json.data && Array.isArray(json.data.images) && json.data.images.length > 0) {
           this.detailImages = json.data.images.map(img => ({
             id: img.id,
             url: img.url,
-            caption: img.caption || '',
+            caption: img.caption || (a.assetType || 'Property photo'),
             isPrimary: !!img.is_primary,
             isExterior: !!img.is_exterior
           }));
         }
       }
     } catch (e) {
-      console.warn('Failed to load asset images:', e);
+      console.warn('Failed to load asset gallery:', e);
     }
+
+    // Fallback to primaryImage if no gallery returned
+    if (this.detailImages.length === 0) {
+      const a = Store.getAsset(id);
+      if (a && a.primaryImage) {
+        this.detailImages = [{ id: 'primary', url: a.primaryImage, caption: a.assetType || 'Primary photo' }];
+      }
+    }
+
     this.detailImagesLoading = false;
     this.render();
   },
 
-  closeDetail() { this.selectedAssetId = null; this.detailImages = []; this.activeImageIndex = 0; this.render(); },
+  closeDetail() {
+    this.selectedAssetId = null;
+    this.detailImages = [];
+    this.activeImageIndex = 0;
+    this.render();
+  },
 
   selectImage(idx) {
     this.activeImageIndex = idx;
-    const mainImg = document.querySelector('.gallery .mainimg img');
+    const mainImg = document.getElementById('detail-main-img');
     if (mainImg && this.detailImages[idx]) {
       mainImg.src = this.detailImages[idx].url;
       mainImg.alt = this.detailImages[idx].caption || 'Property photo';
     }
-    document.querySelectorAll('.gallery .thumbs .t').forEach((el, i) => {
-      el.classList.toggle('active', i === idx);
+    document.querySelectorAll('.thumbs div').forEach((el, i) => {
+      el.classList.toggle('on', i === idx);
     });
   },
 
@@ -6418,77 +6796,145 @@ const PublicMarket = {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return this.renderHome();
 
-    // Build gallery HTML
-    let galleryHtml = '';
+    const isPoa = !a.showReserve || a.reserve === null || isNaN(a.reserve);
+    const priceFormatted = isPoa ? 'Price on application' : this.fmtMoney(a.reserve);
+    const cat = a.category || a.category_code || 'Property';
+    const title = a.assetType || a.title || 'Bank Repossessed Asset';
+    const loc = a.publicLocation || [a.town, a.region].filter(Boolean).join(', ') || 'Greater Accra';
+
+    let galHtml = '';
     if (this.detailImagesLoading) {
-      galleryHtml = `<div class="mainimg"><div style="text-align:center;color:#8A9AA9"><svg class="ph" viewBox="0 0 24 24" style="width:40px;height:40px;stroke:#A9B6C2;fill:none;stroke-width:1.2;animation:pulse 1.5s ease-in-out infinite"><circle cx="12" cy="12" r="10"/></svg><div style="margin-top:8px;font-size:12px">Loading photos…</div></div></div>`;
+      galHtml = `
+        <div class="gal">
+          <div class="img" style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:#8A9AA9">
+            ${this.icons.ph}
+            <div style="margin-top:10px;font-size:13px">Loading verified photos…</div>
+          </div>
+        </div>
+      `;
     } else if (this.detailImages.length > 0) {
       const activeImg = this.detailImages[this.activeImageIndex] || this.detailImages[0];
-      galleryHtml = `
-        <div class="mainimg">
-          <img src="${UI.escapeHtml(activeImg.url)}" alt="${UI.escapeHtml(activeImg.caption || a.assetType)}" style="width:100%;height:100%;object-fit:cover">
-          <span class="badge live">${this.detailImages.length} Photo${this.detailImages.length > 1 ? 's' : ''}</span>
+      galHtml = `
+        <div class="gal">
+          <div class="img" onclick="PublicMarket.openGalleryPhoto(PublicMarket.activeImageIndex)" title="Click photo to view Full Screen">
+            <img id="detail-main-img" src="${UI.escapeHtml(activeImg.url)}" alt="${UI.escapeHtml(activeImg.caption || title)}">
+            <button class="gal-fs-btn" type="button" onclick="event.stopPropagation();PublicMarket.openGalleryPhoto(PublicMarket.activeImageIndex)">
+              ${this.icons.fs}
+              <span>Full Screen</span>
+            </button>
+          </div>
+          ${this.detailImages.length > 1 ? `
+            <div class="thumbs">
+              ${this.detailImages.map((img, i) => `
+                <div class="${i === this.activeImageIndex ? 'on' : ''}" onclick="PublicMarket.selectImage(${i})" title="${UI.escapeHtml(img.caption || 'Photo ' + (i + 1))}">
+                  <img src="${UI.escapeHtml(img.url)}" alt="">
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
-        ${this.detailImages.length > 1 ? `<div class="thumbs">${this.detailImages.map((img, idx) => `<div class="t ${idx === this.activeImageIndex ? 'active' : ''}" onclick="PublicMarket.selectImage(${idx})" title="${UI.escapeHtml(img.caption || 'Photo ' + (idx + 1))}"><img src="${UI.escapeHtml(img.url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:1px"></div>`).join('')}</div>` : ''}
       `;
-    } else if (a.primaryImage) {
-      galleryHtml = `<div class="mainimg"><img src="${UI.escapeHtml(a.primaryImage)}" alt="${UI.escapeHtml(a.assetType)}" style="width:100%;height:100%;object-fit:cover"></div>`;
     } else {
-      galleryHtml = `<div class="mainimg"><svg class="ph" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></div>`;
+      galHtml = `
+        <div class="gal">
+          <div class="img">
+            ${this.icons.ph}
+          </div>
+        </div>
+      `;
     }
 
     return `
-      <div class="page-head"><button class="btn small" onclick="PublicMarket.closeDetail()">← Back</button><h1 style="font-size:16px">${a.assetType}</h1>${UI.badge('Live')}</div>
-      <div class="detail-page">
-        <div class="gallery">${galleryHtml}</div>
-        <div class="detail-side">
-          <div class="panelbox"><h4>${a.category} · ${a.assetType}</h4>
-            <div class="pricebig">${a.showReserve ? UI.fmtMoney(a.reserve) : 'Price on Application'}</div>
-            <p style="font-size:12.5px;color:var(--text-2);margin:6px 0 12px">${a.description}</p>
-            <table class="details"><tr><th>Reference</th><td>${a.ref}</td></tr><tr><th>Location</th><td>${a.publicLocation}</td></tr><tr><th>Region</th><td>${a.region}</td></tr>${a.occupancyStatus ? `<tr><th>Occupancy</th><td>${a.occupancyStatus}</td></tr>` : ''}${a.beds ? `<tr><th>Bedrooms</th><td>${a.beds}</td></tr>` : ''}${a.baths ? `<tr><th>Bathrooms</th><td>${a.baths}</td></tr>` : ''}</table>
+      <div class="page">
+        <div class="back">
+          <button class="btn" type="button" onclick="PublicMarket.closeDetail()">← Back</button>
+          <h1>${UI.escapeHtml(title)}</h1>
+          <span class="live">Live</span>
+        </div>
+        <div class="dgrid">
+          ${galHtml}
+          <div class="side">
+            <div class="box">
+              <div class="k">${UI.escapeHtml(cat)} · ${UI.escapeHtml(title)}</div>
+              <div class="big">${priceFormatted}</div>
+              <p>${UI.escapeHtml(a.description || 'Verified bank-repossessed asset. Complete legal, title, and valuation clearance confirmed.')}</p>
+              <table>
+                <tr><th>Reference</th><td>${UI.escapeHtml(a.ref || 'SRG-' + a.id)}</td></tr>
+                <tr><th>Location</th><td>${UI.escapeHtml(loc)}</td></tr>
+                <tr><th>Region</th><td>${UI.escapeHtml(a.region || 'Greater Accra')}</td></tr>
+                ${a.district ? `<tr><th>District</th><td>${UI.escapeHtml(a.district)}</td></tr>` : ''}
+                ${a.occupancyStatus ? `<tr><th>Occupancy</th><td>${UI.escapeHtml(a.occupancyStatus)}</td></tr>` : ''}
+                ${a.beds ? `<tr><th>Bedrooms</th><td>${a.beds}</td></tr>` : ''}
+                ${a.baths ? `<tr><th>Bathrooms</th><td>${a.baths}</td></tr>` : ''}
+                ${a.landGuardRisk ? `<tr><th>Land Guard Risk</th><td>${UI.escapeHtml(a.landGuardRisk)}</td></tr>` : ''}
+                <tr><th>Title Status</th><td><span style="color:#1E7B34;font-weight:600">Verified Clear Title</span></td></tr>
+              </table>
+            </div>
+            <div class="box col">
+              <button class="btn p" type="button" onclick="PublicMarket.enquiry('${a.id}')">Submit enquiry</button>
+              <button class="btn" type="button" onclick="PublicMarket.requestViewing('${a.id}')">Request viewing</button>
+              <button class="btn" type="button" onclick="PublicMarket.submitOffer('${a.id}')">Submit formal offer</button>
+            </div>
           </div>
-          <div class="panelbox"><div class="cta-col">
-            <button class="btn primary" onclick="PublicMarket.enquiry('${a.id}')">Submit Enquiry</button>
-            <button class="btn" onclick="PublicMarket.requestViewing('${a.id}')">Request Viewing</button>
-            <button class="btn" onclick="PublicMarket.submitOffer('${a.id}')">Submit Formal Offer</button>
-          </div></div>
         </div>
       </div>
+      ${this.renderFooter()}
     `;
   },
 
+  // Inquiries / Viewing / Formal Offer Modals
   enquiry(id) {
-    UI.modal('Submit Enquiry', `
-      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="enq-name" style="width:100%"></div></div>
-      <div class="field"><span class="lbl">Phone <span class="req">*</span></span><div class="ctl"><input id="enq-phone" style="width:100%"></div></div>
-      <div class="field"><span class="lbl">Email</span><div class="ctl"><input id="enq-email" style="width:100%"></div></div>
-      <div class="field"><span class="lbl">Message</span><div class="ctl"><textarea id="enq-msg"></textarea></div></div>
-    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="PublicMarket.submitEnquiry('${id}')">Submit</button>`);
+    const a = Store.getAsset(id) || {};
+    UI.modal('Submit Asset Enquiry', `
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Enquiry on <b>${UI.escapeHtml(a.ref || '')}</b> (${UI.escapeHtml(a.assetType || a.title || 'Asset')}). A Surge recovery specialist will reply within 4 hours.</p>
+      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="enq-name" style="width:100%" placeholder="Your legal name"></div></div>
+      <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="enq-phone" style="width:100%" placeholder="+233 24 000 0000"></div></div>
+      <div class="field"><span class="lbl">Email Address <span class="req">*</span></span><div class="ctl"><input id="enq-email" style="width:100%" placeholder="you@domain.com"></div></div>
+      <div class="field"><span class="lbl">Message</span><div class="ctl"><textarea id="enq-msg" style="width:100%;min-height:90px" placeholder="Specify your budget range, questions about title, or request for site survey"></textarea></div></div>
+    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.submitEnquiry('${id}')">Submit Enquiry</button>`);
   },
 
   submitEnquiry(id) {
-    const name = document.getElementById('enq-name').value;
-    const phone = document.getElementById('enq-phone').value;
-    if (!name || !phone) return UI.toast('Name and phone required', 'error');
-    const a = Store.getAsset(id);
-    const ref = 'SL-LEAD-2026-' + String(Store.leads.length + 104).padStart(6, '0');
-    Store.leads.push({ id: 'l' + Date.now(), ref, assetId: id, assetRef: a.ref, name, phone, email: document.getElementById('enq-email').value, status: 'New', source: 'Public Enquiry', assignedTo: null, createdAt: new Date().toISOString() });
-    Store.addAudit('Public Buyer', 'ENQUIRY', 'Lead', ref, null, 'New', 'Enquiry from ' + name);
+    const name = document.getElementById('enq-name')?.value?.trim();
+    const phone = document.getElementById('enq-phone')?.value?.trim();
+    const email = document.getElementById('enq-email')?.value?.trim();
+    const msg = document.getElementById('enq-msg')?.value?.trim();
+    if (!name || !phone) return UI.toast('Full name and phone are required', 'error');
+
+    const a = Store.getAsset(id) || {};
+    const ref = 'ENQ-2026-' + Math.floor(100000 + Math.random() * 900000);
+    Store.leads.unshift({
+      id: 'l' + Date.now(),
+      ref,
+      assetId: id,
+      assetRef: a.ref || id,
+      name,
+      phone,
+      email,
+      status: 'New',
+      source: 'Marketplace Enquiry',
+      notes: msg,
+      createdAt: new Date().toISOString()
+    });
+    Store.addAudit('Public Buyer', 'ENQUIRY', 'Lead', ref, null, 'New', 'Enquiry from ' + name + ' on ' + (a.ref || id));
+    Store.persist();
     UI.closeModal();
-    UI.toast('Enquiry submitted. Reference: ' + ref, 'success');
+    PublicMarket.toast('Enquiry sent. Reference: ' + ref);
   },
 
   requestViewing(id) {
     const a = Store.getAsset(id);
     if (!a) return;
     const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    UI.modal('Schedule Asset Viewing', `
-      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">Viewing appointment request on <b>${a.ref}</b> (${a.assetType} at ${a.publicLocation}). Surge officers will accompany you.</p>
-      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="vw-name" style="width:100%" placeholder="Your full legal name"></div></div>
-      <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="vw-phone" style="width:100%" placeholder="+233 ..."></div></div>
-      <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="vw-email" style="width:100%" placeholder="buyer@example.com"></div></div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">Preferred Date <span class="req">*</span></span><div class="ctl"><input type="date" id="vw-date" required style="width:100%"></div></div>
+    UI.modal('Schedule Supervised Site Viewing', `
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">Viewing appointment request on <b>${UI.escapeHtml(a.ref)}</b> (${UI.escapeHtml(a.assetType || a.title)} at ${UI.escapeHtml(a.publicLocation)}). Surge security and recovery officers will accompany you.</p>
+      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="vw-name" style="width:100%" placeholder="Your legal name"></div></div>
+      <div class="row2">
+        <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="vw-phone" style="width:100%" placeholder="+233 ..."></div></div>
+        <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="vw-email" style="width:100%" placeholder="buyer@example.com"></div></div>
+      </div>
+      <div class="row2">
+        <div class="field"><span class="lbl">Preferred Date <span class="req">*</span></span><div class="ctl"><input type="date" id="vw-date" value="${tomorrow}" style="width:100%"></div></div>
         <div class="field"><span class="lbl">Time Slot <span class="req">*</span></span><div class="ctl">
           <select id="vw-time" style="width:100%">
             <option>Morning (09:00 - 12:00 GMT)</option>
@@ -6497,9 +6943,9 @@ const PublicMarket = {
           </select>
         </div></div>
       </div>
-      <div class="field"><span class="lbl">Ghana Card / ID Number</span><div class="ctl"><input id="vw-id" style="width:100%" placeholder="GHA-XXXXXXXXX-X (Optional for viewing)"></div></div>
-      <div class="field"><span class="lbl">Special Requirements / Notes</span><div class="ctl"><textarea id="vw-notes" placeholder="Any accessibility or specific questions"></textarea></div></div>
-    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="PublicMarket.submitViewing('${id}')">Confirm Viewing Request</button>`);
+      <div class="field"><span class="lbl">Ghana Card PIN (Optional)</span><div class="ctl"><input id="vw-id" placeholder="GHA-XXXXXXXXX-X" style="width:100%"></div></div>
+      <div class="field"><span class="lbl">Notes / Survey Requirements</span><div class="ctl"><textarea id="vw-notes" style="width:100%;min-height:75px" placeholder="Accompanying surveyor details or access requirements"></textarea></div></div>
+    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.submitViewing('${id}')">Confirm Viewing Request</button>`);
   },
 
   submitViewing(id) {
@@ -6507,14 +6953,15 @@ const PublicMarket = {
     const phone = document.getElementById('vw-phone')?.value?.trim();
     const date = document.getElementById('vw-date')?.value;
     const time = document.getElementById('vw-time')?.value;
-    if (!name || !phone || !date) return UI.toast('Full name, phone, and preferred date are required', 'error');
-    const a = Store.getAsset(id);
-    const ref = 'VW-2026-' + String(Store.viewings.length + 302).padStart(6, '0');
-    Store.viewings.push({
+    if (!name || !phone || !date) return UI.toast('Full name, phone, and date are required', 'error');
+
+    const a = Store.getAsset(id) || {};
+    const ref = 'VW-2026-' + Math.floor(100000 + Math.random() * 900000);
+    Store.viewings.unshift({
       id: 'v' + Date.now(),
       ref,
       assetId: id,
-      assetRef: a.ref,
+      assetRef: a.ref || id,
       buyer: name,
       phone,
       email: document.getElementById('vw-email')?.value?.trim() || '',
@@ -6524,43 +6971,36 @@ const PublicMarket = {
       notes: document.getElementById('vw-notes')?.value?.trim() || '',
       agent: null
     });
-    Store.addAudit(name, 'VIEWING_REQUEST', 'Viewing', ref, null, 'Requested', `Viewing appointment requested for ${a.ref} on ${date} (${time})`);
+    Store.addAudit(name, 'VIEWING_REQUEST', 'Viewing', ref, null, 'Requested', 'Viewing requested for ' + (a.ref || id) + ' on ' + date + ' (' + time + ')');
     Store.persist();
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch('/api/v1/viewings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetId: id, name, phone, email: document.getElementById('vw-email')?.value?.trim() || '', date, timeSlot: time, notes: document.getElementById('vw-notes')?.value?.trim() || '' })
-      }).catch(() => {});
-    }
     UI.closeModal();
-    UI.toast(`Viewing appointment requested. Reference: ${ref}. Surge officer will contact you.`, 'success');
+    PublicMarket.toast('Viewing scheduled. Reference: ' + ref);
   },
 
   submitOffer(id) {
     const a = Store.getAsset(id);
     if (!a) return;
-    const minOffer = a.minOffer || a.reserve || 0;
+    const minOffer = a.minimum_offer || a.reserve || 0;
     UI.modal('Submit Formal Purchase Offer', `
-      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">Formal binding purchase offer on <b>${a.ref}</b> (${a.assetType}). All offers are reviewed by Surge Solutions and presented to the recovery bank.</p>
-      <div class="field"><span class="lbl">Buyer Full Name <span class="req">*</span></span><div class="ctl"><input id="of-name" style="width:100%" placeholder="Legal purchaser name"></div></div>
-      <div class="grid2">
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">Formal purchase offer on <b>${UI.escapeHtml(a.ref)}</b> (${UI.escapeHtml(a.assetType || a.title)}). All offers are timestamped and submitted directly to the recovery bank committee.</p>
+      <div class="field"><span class="lbl">Buyer Full Legal Name <span class="req">*</span></span><div class="ctl"><input id="of-name" style="width:100%" placeholder="Legal purchaser or corporate name"></div></div>
+      <div class="row2">
         <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="of-phone" style="width:100%" placeholder="+233 ..."></div></div>
-        <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="of-email" style="width:100%" placeholder="buyer@example.com"></div></div>
+        <div class="field"><span class="lbl">Email Address <span class="req">*</span></span><div class="ctl"><input id="of-email" style="width:100%" placeholder="buyer@example.com"></div></div>
       </div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">Offer Amount (GHS) <span class="req">*</span></span><div class="ctl"><input type="number" id="of-amount" value="${minOffer}" style="width:100%"></div></div>
+      <div class="row2">
+        <div class="field"><span class="lbl">Offer Amount (GH₵) <span class="req">*</span></span><div class="ctl"><input type="number" id="of-amount" value="${minOffer}" style="width:100%"></div></div>
         <div class="field"><span class="lbl">Payment Method <span class="req">*</span></span><div class="ctl">
           <select id="of-payment" style="width:100%">
-            <option>Cash / Direct Bank Transfer</option>
+            <option>Cash / Direct Bank Transfer (Escrow)</option>
             <option>Bank Mortgage / Pre-Approved Facility</option>
             <option>Staged Structured Settlement (30/60/90 Days)</option>
           </select>
         </div></div>
       </div>
-      <div class="grid2">
-        <div class="field"><span class="lbl">Ghana Card PIN / ID <span class="req">*</span></span><div class="ctl"><input id="of-ghana-card" placeholder="GHA-XXXXXXXXX-X" style="width:100%"></div></div>
-        <div class="field"><span class="lbl">Offer Validity <span class="req">*</span></span><div class="ctl">
+      <div class="row2">
+        <div class="field"><span class="lbl">Ghana Card PIN <span class="req">*</span></span><div class="ctl"><input id="of-ghana-card" placeholder="GHA-XXXXXXXXX-X" style="width:100%"></div></div>
+        <div class="field"><span class="lbl">Offer Validity</span><div class="ctl">
           <select id="of-validity" style="width:100%">
             <option value="14">14 Business Days</option>
             <option value="30" selected>30 Calendar Days</option>
@@ -6568,7 +7008,7 @@ const PublicMarket = {
           </select>
         </div></div>
       </div>
-    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="PublicMarket.confirmOffer('${id}')">Submit Formal Offer</button>`);
+    `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.confirmOffer('${id}')">Submit Binding Offer</button>`);
   },
 
   confirmOffer(id) {
@@ -6579,22 +7019,19 @@ const PublicMarket = {
     const payment = document.getElementById('of-payment')?.value;
     const ghanaCard = document.getElementById('of-ghana-card')?.value?.trim();
     const validityDays = Number(document.getElementById('of-validity')?.value) || 30;
-    
+
     if (!name || !phone || !amount || !ghanaCard) {
       return UI.toast('Name, phone, Ghana Card, and offer amount are required', 'error');
     }
-    const a = Store.getAsset(id);
-    if (a.minOffer && amount < a.minOffer) {
-      return UI.toast(`Offer of ${UI.fmtMoney(amount)} is below minimum acceptable offer of ${UI.fmtMoney(a.minOffer)}`, 'error');
-    }
-    
-    const ref = 'OF-2026-' + String(Store.offers.length + 501).padStart(6, '0');
+    const a = Store.getAsset(id) || {};
+    const ref = 'OF-2026-' + Math.floor(100000 + Math.random() * 900000);
     const expiry = new Date(Date.now() + validityDays * 86400000).toISOString();
+
     Store.offers.unshift({
       id: 'o' + Date.now(),
       ref,
       assetId: id,
-      assetRef: a.ref,
+      assetRef: a.ref || id,
       buyer: name,
       phone,
       email,
@@ -6605,729 +7042,525 @@ const PublicMarket = {
       submittedAt: new Date().toISOString(),
       expiresAt: expiry
     });
-    Store.addAudit(name, 'OFFER_SUBMISSION', 'Offer', ref, null, 'Under Review', `Formal offer of ${UI.fmtMoney(amount)} submitted by ${name} on ${a.ref}`);
+    Store.addAudit(name, 'OFFER_SUBMISSION', 'Offer', ref, null, 'Under Review', 'Formal offer of GH₵ ' + amount.toLocaleString() + ' submitted on ' + (a.ref || id));
     Store.persist();
-    if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-      fetch('/api/v1/offers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetId: id, name, phone, email, amount, ghanaCard, validityDays, paymentMethod: payment })
-      }).catch(() => {});
-    }
     UI.closeModal();
-    UI.toast(`Formal offer submitted. Reference: ${ref}. Recovery Bank notified.`, 'success');
+    PublicMarket.toast('Formal offer submitted. Reference: ' + ref);
   },
 
-  faqCategory: 'all',
-  faqQuery: '',
+  // Main Pages
+  renderHome() {
+    const all = this.getAssets();
+    const regions = [...new Set(all.map(a => a.region).filter(Boolean))].sort();
+    const S = this.filterState;
 
-  setFaqCategory(cat) {
-    this.faqCategory = cat;
-    this.render();
-  },
+    return `
+      <section class="hero">
+        <h1>Bank-repossessed property in Ghana, checked before it is listed</h1>
+        <p>Every asset here has passed Surge Solutions' legal, title and valuation review. Browse, request a viewing and make an offer through us.</p>
+        <ul class="trust">
+          <li>${this.icons.tick}Five-gate review before publishing</li>
+          <li>${this.icons.tick}Buyers verified through KYC</li>
+          <li>${this.icons.tick}Offers handled by Surge Solutions</li>
+        </ul>
+      </section>
 
-  handleFaqSearch(val) {
-    this.faqQuery = (val || '').toLowerCase().trim();
-    const rows = document.querySelectorAll('.pub-faq-row');
-    rows.forEach(r => {
-      const text = (r.getAttribute('data-search') || '').toLowerCase();
-      const match = !this.faqQuery || text.includes(this.faqQuery);
-      r.style.display = match ? 'block' : 'none';
-    });
-  },
+      <div class="main">
+        <div class="search" role="search">
+          <label class="fld">
+            <span>Search</span>
+            <input type="search" value="${UI.escapeHtml(S.q)}" placeholder="Reference, town or property type" oninput="PublicMarket.setSearchQuery(this.value)">
+          </label>
+          <label class="fld">
+            <span>Region</span>
+            <select onchange="PublicMarket.setRegion(this.value)">
+              <option value="all">All regions</option>
+              ${regions.map(r => `<option value="${UI.escapeHtml(r)}" ${S.region === r ? 'selected' : ''}>${UI.escapeHtml(r)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="fld">
+            <span>Price (GH₵)</span>
+            <select onchange="PublicMarket.setPrice(this.value)">
+              ${Object.entries(this.BANDS).map(([k, v]) => `<option value="${k}" ${S.price === k ? 'selected' : ''}>${v[0]}</option>`).join('')}
+            </select>
+          </label>
+        </div>
 
-  toggleFaq(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.toggle('active');
+        <div class="chips" id="chips">${this.renderChips()}</div>
+        <div id="results">${this.renderResults()}</div>
+      </div>
+      ${this.renderFooter()}
+    `;
   },
 
   renderHow() {
+    const st = [
+      ['Bank handover and five-gate legal review', 'Assets come directly from partner banks after loan default recovery. Before anything is published, Surge confirms the High Court writ of possession, runs a Lands Commission title search and a Collateral Registry search, obtains an independent chartered valuation, and inspects the property for occupancy.', 'Assets with active disputes go on legal hold and are never listed.'],
+      ['Browse listings and enquire for free', 'Search verified listings across Greater Accra, Ashanti, Western and Central. Each profile shows specifications, the general location, photos and the reserve price. You can send enquiries without registering.', 'Exact coordinates and borrower details stay restricted until KYC is complete.'],
+      ['Meet your recovery officer and verify your identity', 'A Surge asset recovery officer contacts you within 24 hours. Under the Anti-Money Laundering Act, 2020 (Act 1044), you verify your identity with your Ghana Card PIN and declare your source of funds before viewing or offering.', 'Compliance approval is typically under 24 hours, and your records stay confidential.'],
+      ['Supervised inspection and formal offer', 'An officer and security escort take you on a physical viewing. You are welcome to bring a chartered surveyor or structural engineer. When you are satisfied, submit an offer with your price and payment structure: direct wire, mortgage facility or staged settlement.', 'Offers are logged, timestamped and sent to the bank’s Credit and Recovery Committee.'],
+      ['Bank committee decision and legal conveyance', 'When the committee approves, Surge issues the disposition agreement and settlement invoice. You pay into the bank’s recovery escrow account, and Surge’s legal team coordinates the Deed of Assignment and Certificate of Purchase for title registration.', 'Every step is audited and Surge handles no cash.']
+    ];
+    const ft = [
+      ['Clear title', 'Every listing is backed by court judgments, Lands Commission searches and Collateral Registry certification.'],
+      ['No broker markups', 'A fixed statutory commission of 4.0% rules out agent markups and surprise fees.'],
+      ['Escrow settlement', 'You pay into authorised bank recovery escrow accounts, never mobile money or personal accounts.'],
+      ['Built for the diaspora', 'Remote video walkthroughs, digital Ghana Card checks and power-of-attorney coordination for overseas buyers.']
+    ];
+    const cmp = [
+      ['Title and verification', 'Court execution and five-gate Lands Commission audit', 'Unverified indentures and a high risk of multi-party litigation'],
+      ['Pricing', 'Independent chartered valuation with a published reserve price', 'Broker markups, often 10–25% above actual value'],
+      ['Dispute protection', 'Enforceable High Court writ of possession and police clearance', 'Exposure to land guards and customary stool injunctions'],
+      ['Payment', 'Designated bank escrow account with a formal invoice', 'Cash requests or unregulated third-party accounts'],
+      ['Conveyance', '14–30 business days with a structured legal handover', 'Open-ended delays and incomplete registration']
+    ];
+
     return `
-      <div class="pub-hero">
-        <div class="pub-hero-badge"><span class="sq"></span>Statutory Asset Disposition Framework</div>
-        <h2>How Distressed Asset Acquisition Works</h2>
-        <p>Surge Solutions is the licensed recovery and disposition intermediary for commercial banks in Ghana. We provide a transparent, 5-stage acquisition pipeline that connects qualified purchasers directly to verified bank-held and court-ordered inventory.</p>
-        <div class="pub-metrics-bar">
-          <div class="pub-metric-item"><span class="pub-metric-val">5-Gate</span><span class="pub-metric-lbl">Legal Title Clearance</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">4.0%</span><span class="pub-metric-lbl">Fixed Statutory Fee (No Markups)</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">14–30 Days</span><span class="pub-metric-lbl">Bank Conveyance SLA</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">100%</span><span class="pub-metric-lbl">Bank Escrow Protected</span></div>
+      <section class="phero">
+        <h1>How buying a bank-held asset works</h1>
+        <p>Surge Solutions is the licensed disposition intermediary for commercial banks in Ghana. Five stages take you from browsing to a registered title.</p>
+      </section>
+      <div class="strip">
+        <div class="in">
+          <div><b>5 gates</b><span>Legal title clearance</span></div>
+          <div><b>4.0%</b><span>Fixed statutory fee</span></div>
+          <div><b>14–30 days</b><span>Bank conveyance target</span></div>
+          <div><b>100%</b><span>Bank escrow protected</span></div>
         </div>
       </div>
-
-      <div class="pub-stepper">
-        <div class="pub-step-card">
-          <div class="pub-step-num"><span class="num">01</span><span class="label">Intake</span></div>
-          <div class="pub-step-content">
-            <div class="pub-step-header">
-              <span class="pub-step-title">Bank Ingestion &amp; 5-Gate Legal Verification</span>
-              <span class="badge live">Pre-Listing Audit</span>
-            </div>
-            <p class="pub-step-desc">Assets originate directly from partner commercial banks following loan default recovery. Surge conducts a rigorous 5-gate audit before any asset is published: High Court Writ of Possession verification, Lands Commission title search, Collateral Registry lien clearance, independent chartered valuation, and on-ground occupancy inspection.</p>
-            <div class="pub-step-safeguard"><b>Safeguard:</b> Only unencumbered assets with court-affirmed disposal mandates reach public listing. Assets with active disputes are placed on immediate Legal Hold.</div>
-          </div>
-        </div>
-
-        <div class="pub-step-card">
-          <div class="pub-step-num"><span class="num">02</span><span class="label">Search</span></div>
-          <div class="pub-step-content">
-            <div class="pub-step-header">
-              <span class="pub-step-title">Sanitized Marketplace Discovery &amp; Free Enquiry</span>
-              <span class="badge info">No Registration Required</span>
-            </div>
-            <p class="pub-step-desc">Prospective purchasers browse verified listings across Greater Accra, Ashanti, Western, and Central regions. Asset profiles feature verified specifications, general locality maps, photographic documentation, and reserve price benchmarks. Submit direct inquiries free of charge without paywalls or subscriptions.</p>
-            <div class="pub-step-safeguard"><b>Safeguard:</b> Exact cadastral coordinates and borrower details remain restricted prior to KYC to protect security and privacy.</div>
-          </div>
-        </div>
-
-        <div class="pub-step-card">
-          <div class="pub-step-num"><span class="num">03</span><span class="label">KYC</span></div>
-          <div class="pub-step-content">
-            <div class="pub-step-header">
-              <span class="pub-step-title">Assigned Recovery Officer &amp; KYC Verification</span>
-              <span class="badge pending">Act 1044 Regulated</span>
-            </div>
-            <p class="pub-step-desc">A designated Surge Asset Recovery Officer contacts you within 24 hours to confirm asset specifications and qualify your interest. Under the Anti-Money Laundering Act, 2020 (Act 1044), prospective buyers verify identity via Ghana Card PIN and declare their source of funds prior to viewing or offer submission.</p>
-            <div class="pub-step-safeguard"><b>Safeguard:</b> Fast-track compliance approval (under 24 hours) with strict confidentiality and verified buyer records.</div>
-          </div>
-        </div>
-
-        <div class="pub-step-card">
-          <div class="pub-step-num"><span class="num">04</span><span class="label">Inspect</span></div>
-          <div class="pub-step-content">
-            <div class="pub-step-header">
-              <span class="pub-step-title">Supervised On-Site Inspection &amp; Formal Offer</span>
-              <span class="badge ok">Direct Bank Filing</span>
-            </div>
-            <p class="pub-step-desc">Surge security and recovery officers escort you for an extensive physical viewing. You are welcome to bring chartered surveyors or structural engineers. Once satisfied, submit a formal purchase offer specifying price, financing structure (Direct Wire, Mortgage Facility, or Staged Settlement), and validity period.</p>
-            <div class="pub-step-safeguard"><b>Safeguard:</b> Offers are formally logged, timestamped, and transmitted directly to the managing bank's Credit and Recovery Committee.</div>
-          </div>
-        </div>
-
-        <div class="pub-step-card">
-          <div class="pub-step-num"><span class="num">05</span><span class="label">Close</span></div>
-          <div class="pub-step-content">
-            <div class="pub-step-header">
-              <span class="pub-step-title">Bank Committee Acceptance &amp; Legal Conveyance</span>
-              <span class="badge sale">Title Perfection</span>
-            </div>
-            <p class="pub-step-desc">Upon committee approval, Surge issues the formal disposition agreement and earnest settlement invoice. Funds are deposited strictly into designated recovery escrow accounts at the partner bank. Surge legal counsel coordinates the Deed of Assignment, High Court Certificate of Purchase, and Lands Commission registration.</p>
-            <div class="pub-step-safeguard"><b>Safeguard:</b> 100% audited transactional trail. Zero cash handling. Guaranteed unencumbered title conveyance.</div>
-          </div>
+      <div class="sec">
+        <h2>The five stages</h2>
+        <p class="sub">Each stage has a safeguard built in, so you know what is protected before you move on.</p>
+        <ol class="steps">
+          ${st.map((x, i) => `
+            <li class="step">
+              <div class="n">${i + 1}</div>
+              <div>
+                <h3>${x[0]}</h3>
+                <p>${x[1]}</p>
+                <div class="safe"><b>Safeguard:</b> ${x[2]}</div>
+              </div>
+            </li>
+          `).join('')}
+        </ol>
+      </div>
+      <div class="sec">
+        <h2>What you get</h2>
+        <p class="sub">&nbsp;</p>
+        <div class="feat" style="margin-top:-14px">
+          ${ft.map(x => `<div><h3>${x[0]}</h3><p>${x[1]}</p></div>`).join('')}
         </div>
       </div>
-
-      <div class="pub-features-grid">
-        <div class="pub-feat-box">
-          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--blue);border-radius:1px;display:inline-block"></span>Guaranteed Clear Title</div>
-          <p class="pub-feat-desc">Every listing is backed by validated court judgments, Lands Commission searches, and Collateral Registry certifications.</p>
+      <div class="sec">
+        <h2>Surge compared with the informal market</h2>
+        <p class="sub">How a regulated disposition differs from buying through a broker.</p>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Parameter</th><th>Surge Solutions</th><th>Informal market</th></tr></thead>
+            <tbody>
+              ${cmp.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}
+            </tbody>
+          </table>
         </div>
-        <div class="pub-feat-box accent-red">
-          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--red);border-radius:1px;display:inline-block"></span>Zero Broker Markups</div>
-          <p class="pub-feat-desc">Statutory standard commission (4.0%) prevents arbitrary agent markups, unauthorized fees, and speculative price escalation.</p>
-        </div>
-        <div class="pub-feat-box accent-success">
-          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--success);border-radius:1px;display:inline-block"></span>Escrow Bank Settlement</div>
-          <p class="pub-feat-desc">Payments are made directly to authorized bank recovery escrow accounts. No mobile money transfers or personal accounts.</p>
-        </div>
-        <div class="pub-feat-box accent-warn">
-          <div class="pub-feat-title"><span class="sq" style="width:7px;height:7px;background:var(--warning);border-radius:1px;display:inline-block"></span>Diaspora Friendly</div>
-          <p class="pub-feat-desc">Remote video walkthroughs, digital Ghana Card compliance, and institutional power-of-attorney coordination for overseas buyers.</p>
+        <div class="acts">
+          <button class="btn p" type="button" onclick="PublicMarket.goHome()">Browse live assets</button>
+          <button class="btn" type="button" onclick="PublicMarket.goKyc()">Start KYC verification</button>
+          <button class="btn" type="button" onclick="PublicMarket.goContact()">Speak with an asset officer</button>
         </div>
       </div>
-
-      <div class="group">
-        <div class="caption">Comparative Model: Surge Regulated Disposition vs. Informal Broker Market</div>
-        <div class="body" style="padding:0">
-          <div class="pub-table-wrap" style="margin:0;border:none">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width:28%">Transaction Parameter</th>
-                  <th style="width:36%">Surge Solutions Regulated Intermediary</th>
-                  <th style="width:36%">Traditional Informal Real Estate Market</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><b>Title Origin &amp; Verification</b></td>
-                  <td>Direct court execution &amp; 5-Gate Lands Commission audit</td>
-                  <td style="color:var(--text-2)">Unverified indentures; high risk of multi-party litigation</td>
-                </tr>
-                <tr>
-                  <td><b>Pricing Transparency</b></td>
-                  <td>Independent chartered valuation with published reserve benchmarks</td>
-                  <td style="color:var(--text-2)">Arbitrary broker markups (often 10–25% above actual value)</td>
-                </tr>
-                <tr>
-                  <td><b>Dispute Protection</b></td>
-                  <td>Enforceable High Court Writ of Possession and police clearance</td>
-                  <td style="color:var(--text-2)">Vulnerability to land guards and customary stool injunctions</td>
-                </tr>
-                <tr>
-                  <td><b>Financial Settlement</b></td>
-                  <td>Designated bank recovery escrow account with formal invoice</td>
-                  <td style="color:var(--text-2)">Personal cash requests or unregulated third-party accounts</td>
-                </tr>
-                <tr>
-                  <td><b>Conveyance Timeline</b></td>
-                  <td>14–30 business days with structured legal handover</td>
-                  <td style="color:var(--text-2)">Indefinite delays, incomplete indentures, lack of registration</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
-        <button class="btn primary" onclick="PublicMarket.goHome()">Browse Live Assets</button>
-        <button class="btn" onclick="PublicMarket.goKyc()">Start KYC Verification</button>
-        <button class="btn" onclick="PublicMarket.goContact()">Speak With an Asset Officer</button>
-      </div>
+      <div style="height:32px"></div>
+      ${this.renderFooter()}
     `;
   },
 
   renderKyc() {
+    const list = [
+      ['Ghana Card PIN', 'Issued by the National Identification Authority'],
+      ['Proof of acquisition capacity', 'Bank reference letter, facility pre-approval or funds statement'],
+      ['GhanaPost digital address', 'Your residential or business location'],
+      ['Corporate registration, if applicable', 'RGD Form 3 and a board resolution authorising the purchase']
+    ];
+    const opt = a => a.map(x => `<option>${x}</option>`).join('');
+
     return `
-      <div class="pub-hero">
-        <div class="pub-hero-badge"><span class="sq"></span>Regulatory Compliance · Act 1044</div>
-        <h2>Buyer KYC &amp; Identity Verification</h2>
-        <p>Under the Anti-Money Laundering Act, 2020 (Act 1044) and Bank of Ghana asset realization directives, prospective purchasers must complete customer due diligence prior to scheduling supervised physical viewings or filing binding purchase offers.</p>
-        <div class="pub-metrics-bar">
-          <div class="pub-metric-item"><span class="pub-metric-val">Act 1044</span><span class="pub-metric-lbl">Statutory Compliance</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Confidential</span><span class="pub-metric-lbl">Protected Buyer Data</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">&lt; 24 Hrs</span><span class="pub-metric-lbl">Compliance Turnaround</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Bank-Grade</span><span class="pub-metric-lbl">Due Diligence</span></div>
+      <section class="phero">
+        <h1>Buyer KYC and identity verification</h1>
+        <p>Under the Anti-Money Laundering Act, 2020 (Act 1044), buyers complete due diligence before booking a supervised viewing or submitting an offer.</p>
+      </section>
+      <div class="strip three">
+        <div class="in">
+          <div><b>Act 1044</b><span>Statutory compliance</span></div>
+          <div><b>Under 24 hours</b><span>Typical turnaround</span></div>
+          <div><b>Confidential</b><span>Protected buyer data</span></div>
         </div>
       </div>
-
-      <div class="pub-contact-grid">
-        <div>
-          <div class="group">
-            <div class="caption">Submit Buyer KYC Application</div>
-            <div class="body">
-              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;line-height:1.5">Complete this digital verification form. Your details are treated with strict confidentiality and reviewed exclusively by authorized Surge compliance officers.</p>
-
-              <div class="field">
-                <span class="lbl">Full Legal Name <span class="req">*</span></span>
-                <div class="ctl">
-                  <input id="kyc-fullname" placeholder="As shown on your Ghana Card" style="width:100%">
-                  <span class="help">Individual or Registered Corporate Entity Name</span>
-                </div>
+      <div class="sec">
+        <div class="two">
+          <div class="card2" id="kycBox">
+            <h3>Submit your KYC application</h3>
+            <p>Only authorised Surge compliance officers review your details.</p>
+            <div class="f" id="k-name">
+              <label for="kn">Full legal name *</label>
+              <input id="kn" placeholder="As shown on your Ghana Card">
+              <small>Individual or registered company name</small>
+            </div>
+            <div class="row2">
+              <div class="f" id="k-card">
+                <label for="kc">Ghana Card PIN *</label>
+                <input id="kc" placeholder="GHA-123456789-0">
               </div>
-
-              <div class="field">
-                <span class="lbl">Ghana Card PIN <span class="req">*</span></span>
-                <div class="ctl">
-                  <input id="kyc-card" placeholder="GHA-XXXXXXXXX-X" style="width:100%">
-                  <span class="help">Format: GHA-123456789-0</span>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Email Address <span class="req">*</span></span>
-                <div class="ctl">
-                  <input type="email" id="kyc-email" placeholder="purchaser@domain.com" style="width:100%">
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Phone Number <span class="req">*</span></span>
-                <div class="ctl">
-                  <input id="kyc-phone" placeholder="+233 24 000 0000" style="width:100%">
-                  <span class="help">Include country code for diaspora buyers</span>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Buyer Category <span class="req">*</span></span>
-                <div class="ctl">
-                  <select id="kyc-category" style="width:100%">
-                    <option value="Individual Resident">Individual Ghanaian Resident</option>
-                    <option value="Corporate Entity">Registered Corporate Entity / Enterprise</option>
-                    <option value="Diaspora Ghanaian">Diaspora Ghanaian Investor</option>
-                    <option value="Foreign National">Foreign National / International Investor</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Source of Funds <span class="req">*</span></span>
-                <div class="ctl">
-                  <select id="kyc-source" style="width:100%">
-                    <option value="Personal Savings">Personal Savings &amp; Accumulated Earnings</option>
-                    <option value="Business Operations">Operating Business Revenue / Retained Earnings</option>
-                    <option value="Bank Mortgage Facility">Commercial Bank Mortgage / Pre-Approved Facility</option>
-                    <option value="Diaspora Remittances">Diaspora Foreign Exchange Remittances</option>
-                    <option value="Asset Sale / Liquidation">Proceeds from Previous Asset Sale or Investment</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Target Asset Ref</span>
-                <div class="ctl">
-                  <input id="kyc-asset-ref" placeholder="e.g. AST-ACC-2026-001 (Optional)" style="width:100%">
-                  <span class="help">Leave blank for general pre-approved buyer qualification</span>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Consent &amp; Authorization <span class="req">*</span></span>
-                <div class="ctl" style="padding-top:4px">
-                  <label style="font-size:12px;color:var(--text);display:flex;align-items:flex-start;gap:8px;cursor:pointer">
-                    <input type="checkbox" id="kyc-consent" style="margin-top:2px;width:auto;height:auto">
-                    <span>I certify that all details submitted are accurate and consent to verification with the National Identification Authority and partner bank compliance systems under Act 1044.</span>
-                  </label>
-                </div>
-              </div>
-
-              <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                <button class="btn primary" onclick="PublicMarket.submitKyc()">Submit KYC for Verification</button>
+              <div class="f" id="k-phone">
+                <label for="kp">Phone number *</label>
+                <input id="kp" placeholder="+233 24 000 0000">
               </div>
             </div>
-          </div>
-        </div>
-
-        <div>
-          <div class="pub-contact-card">
-            <h4><span class="sq"></span>Why KYC is Mandatory</h4>
-            <p style="font-size:12px;color:var(--text-2);line-height:1.55;margin:0 0 10px">Repossessed assets are legally protected properties under court custody and commercial bank balance sheets. To prevent vexatious claims, unauthorized site trespass, or fraudulent bids, only verified parties are granted physical access and offer eligibility.</p>
-            <div class="banner info" style="margin-bottom:0">
-              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              <span><b>Browsing is always free.</b> You do not need KYC simply to view listings or submit preliminary general inquiries.</span>
+            <div class="f" id="k-email">
+              <label for="ke">Email address *</label>
+              <input id="ke" type="email" placeholder="you@domain.com">
             </div>
-          </div>
-
-          <div class="pub-contact-card">
-            <h4><span class="sq"></span>Required Verification Checklist</h4>
-            <div class="readiness-list">
-              <li>
-                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
-                <div class="item-label"><b>Ghana Card PIN</b><br><span style="font-size:11px;color:var(--text-2)">Issued by the National Identification Authority (NIA)</span></div>
-              </li>
-              <li>
-                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
-                <div class="item-label"><b>Proof of Acquisition Capacity</b><br><span style="font-size:11px;color:var(--text-2)">Bank reference letter, facility pre-approval, or funds statement</span></div>
-              </li>
-              <li>
-                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
-                <div class="item-label"><b>GhanaPost Digital Address</b><br><span style="font-size:11px;color:var(--text-2)">Official residential or commercial location identifier</span></div>
-              </li>
-              <li>
-                <div class="check pass"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
-                <div class="item-label"><b>Corporate Registration (If applicable)</b><br><span style="font-size:11px;color:var(--text-2)">RGD Form 3 and Board Resolution authorizing acquisition</span></div>
-              </li>
+            <div class="row2">
+              <div class="f">
+                <label for="kb">Buyer category</label>
+                <select id="kb">${opt(['Individual Ghanaian resident', 'Registered company or enterprise', 'Diaspora Ghanaian investor', 'Foreign national or international investor'])}</select>
+              </div>
+              <div class="f">
+                <label for="ks">Source of funds</label>
+                <select id="ks">${opt(['Personal savings and earnings', 'Business revenue or retained earnings', 'Bank mortgage or pre-approved facility', 'Diaspora remittances', 'Proceeds from a previous asset sale'])}</select>
+              </div>
             </div>
+            <div class="f">
+              <label for="kr">Target asset reference (optional)</label>
+              <input id="kr" placeholder="e.g. SS-RE-2026-00248">
+              <small>Leave blank for general buyer pre-approval</small>
+            </div>
+            <label class="chk">
+              <input type="checkbox" id="kx">
+              <span>I confirm these details are accurate and consent to verification with the National Identification Authority and partner bank compliance systems under Act 1044.</span>
+            </label>
+            <button class="btn p" type="button" onclick="PublicMarket.kycSubmit()">Submit for verification</button>
           </div>
 
-          <div class="pub-contact-card">
-            <h4><span class="sq"></span>Confidentiality &amp; Privacy Safeguards</h4>
-            <div class="kv-row"><span class="kv-k">Statutory Purpose</span><span class="kv-v">Bank recovery due diligence only</span></div>
-            <div class="kv-row"><span class="kv-k">Authorized Review</span><span class="kv-v">Designated Surge compliance officers</span></div>
-            <div class="kv-row"><span class="kv-k">Third-Party Disclosure</span><span class="kv-v">Never shared with commercial brokers or marketers</span></div>
-          </div>
-
-          <div class="pub-safe-box">
-            <b>Regulatory Notice:</b> In accordance with the Anti-Money Laundering Act, 2020 (Act 1044), Surge Solutions is mandated to report suspicious transaction structures to the Financial Intelligence Centre (FIC).
+          <div class="aside">
+            <div class="card2">
+              <h3>Why KYC is required</h3>
+              <p>Repossessed assets are under court custody and bank administration. Verifying buyers prevents trespass, protects borrower privacy and blocks fraudulent bids.</p>
+              <div class="note"><b>Browsing is always free.</b> You only need KYC to book a viewing or make an offer.</div>
+            </div>
+            <div class="card2">
+              <h3>What to have ready</h3>
+              <ul class="ck">
+                ${list.map(x => `<li>${this.icons.tick}<span><b>${x[0]}</b><small>${x[1]}</small></span></li>`).join('')}
+              </ul>
+            </div>
+            <div class="card2">
+              <h3>How we handle your data</h3>
+              <div class="kv"><span>Purpose</span><span>Bank recovery due diligence only</span></div>
+              <div class="kv"><span>Reviewed by</span><span>Surge compliance officers</span></div>
+              <div class="kv"><span>Sharing</span><span>Never given to brokers or marketers</span></div>
+            </div>
+            <p style="font-size:12.5px;color:var(--text-2);margin:0">Under Act 1044, Surge must report suspicious transaction structures to the Financial Intelligence Centre.</p>
           </div>
         </div>
       </div>
+      <div style="height:32px"></div>
+      ${this.renderFooter()}
     `;
   },
 
-  async submitKyc() {
-    const name = document.getElementById('kyc-fullname')?.value?.trim();
-    const card = document.getElementById('kyc-card')?.value?.trim();
-    const email = document.getElementById('kyc-email')?.value?.trim();
-    const phone = document.getElementById('kyc-phone')?.value?.trim();
-    const category = document.getElementById('kyc-category')?.value;
-    const source = document.getElementById('kyc-source')?.value;
-    const assetRef = document.getElementById('kyc-asset-ref')?.value?.trim();
-    const consent = document.getElementById('kyc-consent')?.checked;
-
-    if (!name || !card || !email || !phone) {
-      return UI.toast('Full name, Ghana Card PIN, email, and phone are required.', 'error');
+  kycSubmit() {
+    const v = id => document.getElementById(id)?.value?.trim() || '';
+    const name = v('kn'), card = v('kc'), phone = v('kp'), email = v('ke');
+    if (!name || !card || !phone || !email) {
+      return this.toast('Complete the highlighted required fields.');
     }
-    if (!consent) {
-      return UI.toast('Please authorize the compliance verification checkbox to proceed.', 'warn');
+    if (!document.getElementById('kx')?.checked) {
+      return this.toast('Tick the consent box to continue.');
     }
 
-    const kycId = 'KYC-2026-' + Math.floor(100000 + Math.random() * 900000);
+    const ref = 'KYC-2026-' + Math.floor(100000 + Math.random() * 900000);
+    Store.addAudit(name, 'KYC_SUBMISSION', 'Compliance', ref, null, 'Pending', 'Buyer KYC application submitted by ' + name);
+    Store.persist();
 
-    try {
-      if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
-        await fetch(Store.API_BASE + '/api/marketplace/buyers/kyc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            full_name: name,
-            ghana_card_number: card,
-            email,
-            phone,
-            source_of_funds: source,
-            related_asset_ref: assetRef
-          })
-        });
-      }
-    } catch (e) {
-      console.warn('KYC remote dispatch fallback:', e);
-    }
-
-    Store.addAudit(name, 'KYC_SUBMISSION', 'KYC', kycId, null, 'Pending Review', `Buyer KYC application submitted by ${name} (${card})`);
-
-    UI.modal('KYC Application Received', `
-      <div style="text-align:center;padding:12px 0 16px">
-        <div style="width:48px;height:48px;border-radius:50%;background:#D4EDDA;color:#155724;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
-          <svg style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+    const box = document.getElementById('kycBox');
+    if (box) {
+      box.innerHTML = `
+        <div class="okbox">
+          <div class="tk">${this.icons.tick}</div>
+          <h3 style="margin:0 0 6px;font:700 20px var(--serif)">Application received</h3>
+          <p style="color:var(--text-2);margin:0">Our compliance desk will confirm by SMS and email within 24 hours. Quote this reference when booking a viewing.</p>
+          <code>Reference: ${ref}</code><br>
+          <button class="btn p" type="button" onclick="PublicMarket.goHome()">Browse assets</button>
         </div>
-        <h3 style="margin:0 0 6px;font-size:16px">Verification Application Lodged</h3>
-        <p style="font-size:12.5px;color:var(--text-2);margin:0 0 14px">Your application has been received and routed to the Surge Compliance Desk.</p>
-        <div style="background:#F6F9FC;border:1px solid #C9D8EA;padding:10px 14px;border-radius:3px;font-family:Consolas,monospace;font-size:14px;font-weight:700;color:var(--blue)">
-          Reference: ${kycId}
-        </div>
-      </div>
-      <div class="kv-row"><span class="kv-k">Applicant Name</span><span class="kv-v">${UI.escapeHtml(name)}</span></div>
-      <div class="kv-row"><span class="kv-k">Ghana Card PIN</span><span class="kv-v">${UI.escapeHtml(card)}</span></div>
-      <div class="kv-row"><span class="kv-k">Source of Funds</span><span class="kv-v">${UI.escapeHtml(source)}</span></div>
-      <div class="kv-row"><span class="kv-k">Target Asset</span><span class="kv-v">${UI.escapeHtml(assetRef || 'General Buyer Pre-Approval')}</span></div>
-      <div class="kv-row"><span class="kv-k">Review Status</span><span class="kv-v"><span class="badge pending">Under Compliance Review</span></span></div>
-      <p style="font-size:11.5px;color:var(--text-2);margin:12px 0 0;line-height:1.5">You will receive an SMS and email notification upon verification within 4–24 business hours. You may quote this reference number when booking viewings.</p>
-    `, '<button class="btn primary" onclick="UI.closeModal();PublicMarket.goHome()">Return to Marketplace</button>');
-
-    UI.toast('KYC application submitted successfully.', 'success');
+      `;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   },
 
   renderFaq() {
-    const faqs = [
-      {
-        id: 'faq-1',
-        cat: 'title',
-        catLabel: 'Legal & Title',
-        q: 'Where do the assets listed on Surge Solutions originate?',
-        a: 'All listed assets originate directly from partner commercial banks and licensed deposit-taking institutions in Ghana. They represent secured collateral repossessed following judicial default, High Court writs of execution, or consensual settlement recoveries. Surge is the designated intermediary authorized by these financial institutions to handle marketing and disposition.'
-      },
-      {
-        id: 'faq-2',
-        cat: 'title',
-        catLabel: 'Legal & Title',
-        q: 'How does Surge guarantee that properties are free from litigation and land guards?',
-        a: 'Every property published on Surge has passed our 5-Gate Legal Audit: 1) High Court Writ of Possession confirmation; 2) Official Lands Commission search certifying root of title; 3) Collateral Registry search clearing competing institutional claims; 4) Licensed independent valuation; and 5) Physical occupancy inspection by security personnel. Assets with active family or title disputes are placed on strict Legal Hold and never listed.'
-      },
-      {
-        id: 'faq-3',
-        cat: 'title',
-        catLabel: 'Legal & Title',
-        q: 'What legal title documents will I receive upon completing the purchase?',
-        a: 'The purchaser receives an official Deed of Assignment or Conveyance executed by the recovering bank (with High Court registrar attestation where court-mandated), accompanied by the Certificate of Purchase / Vesting Deed and certified cadastral site plans for expedited title registration at the Lands Commission.'
-      },
-      {
-        id: 'faq-4',
-        cat: 'pricing',
-        catLabel: 'Pricing & Terms',
-        q: 'Are listed prices negotiable, and what does "Reserve Price" mean?',
-        a: 'The Reserve Price represents the statutory liquidation threshold determined by independent chartered valuation surveyors and approved by the bank Credit Committee. Prospective buyers may submit formal offers at, above, or reasoned conditional offers near reserve. The bank Credit Committee evaluates each offer based on offered price, settlement speed, and payment method.'
-      },
-      {
-        id: 'faq-5',
-        cat: 'pricing',
-        catLabel: 'Pricing & Terms',
-        q: 'What payment structures and financing options are accepted?',
-        a: 'Three primary payment structures are accepted: 1) Direct Bank Wire / RTGS payment to the bank designated recovery escrow account; 2) Pre-approved mortgage facilities from registered Ghanaian commercial banks; and 3) Structured staged settlements (typically 10–20% earnest deposit upon offer acceptance, with the balance paid over 30 to 90 calendar days).'
-      },
-      {
-        id: 'faq-6',
-        cat: 'pricing',
-        catLabel: 'Pricing & Terms',
-        q: 'Does Surge Solutions charge the buyer any broker fees or search fees?',
-        a: 'No. Surge operates on a transparent, regulated statutory commission model (typically 4.0% included in the approved transaction structure). We never charge upfront inspection fees, registration fees, or speculative agent markups. Searching and enquiring on our marketplace is completely free.'
-      },
-      {
-        id: 'faq-7',
-        cat: 'viewing',
-        catLabel: 'Viewing & Process',
-        q: 'Can I physically inspect a property before submitting an offer?',
-        a: 'Yes. Physical inspections are mandatory and supervised. All viewings must be scheduled in advance through Surge and are conducted alongside an authorized Surge Asset Recovery Officer and security escort. For compliance and property preservation reasons, unescorted visits are strictly prohibited.'
-      },
-      {
-        id: 'faq-8',
-        cat: 'viewing',
-        catLabel: 'Viewing & Process',
-        q: 'Can I bring my own structural engineer, valuer, or legal counsel to the inspection?',
-        a: 'We strongly encourage prospective buyers to bring their chartered surveyors, structural engineers, or legal representatives during the scheduled viewing. Detailed measurements, physical assessments, and structural tests may be performed during the appointment.'
-      },
-      {
-        id: 'faq-9',
-        cat: 'viewing',
-        catLabel: 'Viewing & Process',
-        q: 'Why is KYC required before viewing or offer submission?',
-        a: 'Repossessed real estate is under sensitive judicial and banking administration. Requiring Ghana Card verification and proof of acquisition capacity protects the asset from unlawful trespass, preserves borrower privacy, and fulfills mandatory Bank of Ghana Anti-Money Laundering requirements under Act 1044.'
-      },
-      {
-        id: 'faq-10',
-        cat: 'diaspora',
-        catLabel: 'Diaspora & Foreign',
-        q: 'Can Ghanaians living abroad (Diaspora) purchase assets remotely through Surge?',
-        a: 'Yes. Surge provides a comprehensive Diaspora Acquisition Service. Overseas buyers can conduct live video walkthrough inspections, verify compliance digitally using the Ghana Card PIN or passport, and appoint a local representative or legal counsel through our power-of-attorney protocol.'
-      },
-      {
-        id: 'faq-11',
-        cat: 'diaspora',
-        catLabel: 'Diaspora & Foreign',
-        q: 'Can foreign nationals or non-Ghanaian corporations buy land through Surge?',
-        a: 'Under Article 266 of the 1992 Constitution of Ghana and the Land Act, 2020 (Act 1036), non-citizens and foreign companies may hold residential or commercial land on renewable leasehold terms up to 50 years. Surge verifies the remaining unexpired leasehold term for every listed asset before publishing.'
-      },
-      {
-        id: 'faq-12',
-        cat: 'diaspora',
-        catLabel: 'Diaspora & Foreign',
-        q: 'How are funds transferred safely from international accounts?',
-        a: 'International buyers remit settlement funds strictly through direct SWIFT / RTGS wire transfers into the designated commercial bank recovery escrow accounts in Ghana. Surge never accepts cash transfers via informal money transmitters or personal mobile money accounts.'
-      }
-    ];
-
-    const currentCat = this.faqCategory || 'all';
-    const filteredFaqs = currentCat === 'all' ? faqs : faqs.filter(f => f.cat === currentCat);
-
     return `
-      <div class="pub-hero">
-        <div class="pub-hero-badge"><span class="sq"></span>Regulatory &amp; Transaction Knowledge Base</div>
-        <h2>Frequently Asked Questions</h2>
-        <p>Comprehensive guidance regarding repossessed asset verification, reserve pricing, inspection protocols, legal title transfer, and escrow settlement in Ghana.</p>
-        <div class="pub-metrics-bar">
-          <div class="pub-metric-item"><span class="pub-metric-val">12</span><span class="pub-metric-lbl">Standard Guidance Topics</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Act 1036</span><span class="pub-metric-lbl">Land Law Aligned</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Direct Bank</span><span class="pub-metric-lbl">No Intermediary Markup</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">100%</span><span class="pub-metric-lbl">Verified Bank Escrow</span></div>
+      <section class="phero">
+        <h1>Frequently asked questions</h1>
+        <p>Answers on title, pricing, viewings and buying from abroad.</p>
+      </section>
+      <div class="sec">
+        <div class="fq">
+          <input type="search" aria-label="Filter questions" placeholder="Filter questions by keyword" value="${UI.escapeHtml(this.faqQuery)}" oninput="PublicMarket.faqSearch(this.value)">
         </div>
-      </div>
-
-      <div class="pub-faq-toolbar">
-        <div class="pub-faq-filter-pills">
-          <button class="pub-faq-pill ${currentCat === 'all' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('all')">All Questions</button>
-          <button class="pub-faq-pill ${currentCat === 'title' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('title')">Legal &amp; Title</button>
-          <button class="pub-faq-pill ${currentCat === 'pricing' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('pricing')">Pricing &amp; Terms</button>
-          <button class="pub-faq-pill ${currentCat === 'viewing' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('viewing')">Viewing &amp; Process</button>
-          <button class="pub-faq-pill ${currentCat === 'diaspora' ? 'active' : ''}" onclick="PublicMarket.setFaqCategory('diaspora')">Diaspora &amp; Foreign</button>
-        </div>
-        <div class="pub-faq-search">
-          <svg class="ico" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--text-2)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input placeholder="Filter questions by keyword..." onkeyup="PublicMarket.handleFaqSearch(this.value)">
-        </div>
-      </div>
-
-      <div class="pub-faq-list" id="pub-faq-container">
-        ${filteredFaqs.map(f => `
-          <div class="pub-faq-row" id="${f.id}" data-search="${UI.escapeHtml(f.q + ' ' + f.a + ' ' + f.catLabel)}">
-            <button class="pub-faq-q" onclick="PublicMarket.toggleFaq('${f.id}')">
-              <span><span class="pub-faq-cat-badge">${f.catLabel}</span>${f.q}</span>
-              <span class="pub-faq-chevron">&#9660;</span>
-            </button>
-            <div class="pub-faq-a">${f.a}</div>
-          </div>
-        `).join('')}
-      </div>
-
-      <div class="group" style="background:#EDF1F5">
-        <div class="body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div class="chips" id="fc" style="margin:0 0 18px">${this.renderFaqChips()}</div>
+        <div id="fl">${this.renderFaqList()}</div>
+        <div class="help">
           <div>
-            <h4 style="margin:0 0 4px;font-size:14px;color:var(--blue)">Have a question about a specific asset?</h4>
-            <p style="margin:0;font-size:12px;color:var(--text-2)">Our Asset Recovery Officers provide tailored advice on title reports, cadastral surveys, and formal bank offer structuring.</p>
+            <h3>Asking about a specific asset?</h3>
+            <p>Our asset recovery officers can advise on title reports, site surveys and how to structure an offer.</p>
           </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn primary" onclick="PublicMarket.goContact()">Submit Asset Enquiry</button>
-            <button class="btn" onclick="PublicMarket.goHome()">Browse Live Listings</button>
-          </div>
+          <button class="btn p" type="button" onclick="PublicMarket.goContact()">Send an enquiry</button>
+          <button class="btn" type="button" onclick="PublicMarket.goHome()">Browse listings</button>
         </div>
       </div>
+      <div style="height:32px"></div>
+      ${this.renderFooter()}
     `;
+  },
+
+  renderFaqChips() {
+    const cats = [...new Set(this.FAQ_DATA.map(f => f[0]))];
+    const c = (v, l) => `<button class="chip ${this.faqCategory === v ? 'on' : ''}" type="button" onclick="PublicMarket.faqSetCategory('${UI.escapeHtml(v)}')">${l}</button>`;
+    return c('all', 'All questions') + cats.map(v => c(v, v)).join('');
+  },
+
+  renderFaqList() {
+    const q = this.faqQuery.toLowerCase();
+    const cat = this.faqCategory;
+    const filtered = this.FAQ_DATA.filter(f => {
+      if (cat !== 'all' && f[0] !== cat) return false;
+      if (q && !(f[1].toLowerCase().includes(q) || f[2].toLowerCase().includes(q))) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      return '<div class="empty"><h3>No questions matched your search</h3><p>Try searching with another word or view all categories.</p></div>';
+    }
+
+    return filtered.map(f => `
+      <details>
+        <summary><em>${UI.escapeHtml(f[0])}</em>${UI.escapeHtml(f[1])}</summary>
+        <p>${UI.escapeHtml(f[2])}</p>
+      </details>
+    `).join('');
+  },
+
+  faqSearch(val) {
+    this.faqQuery = (val || '').trim();
+    const fl = document.getElementById('fl');
+    if (fl) fl.innerHTML = this.renderFaqList();
+  },
+
+  faqSetCategory(cat) {
+    this.faqCategory = cat;
+    const fc = document.getElementById('fc');
+    const fl = document.getElementById('fl');
+    if (fc) fc.innerHTML = this.renderFaqChips();
+    if (fl) fl.innerHTML = this.renderFaqList();
   },
 
   renderContact() {
+    const opt = a => a.map(x => `<option>${x}</option>`).join('');
     return `
-      <div class="pub-hero">
-        <div class="pub-hero-badge"><span class="sq"></span>Official Communications &amp; Advisory Desk</div>
-        <h2>Contact Surge Solutions</h2>
-        <p>Direct communication channels to our Asset Recovery Advisory Desk, Legal Verification Department, and Supervised Viewing Coordinators in Accra.</p>
-        <div class="pub-metrics-bar">
-          <div class="pub-metric-item"><span class="pub-metric-val">Accra, GH</span><span class="pub-metric-lbl">Headquarters &amp; Operations</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">&lt; 4 Hours</span><span class="pub-metric-lbl">Average Response Time</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Direct Lines</span><span class="pub-metric-lbl">Advisory &amp; Legal Desk</span></div>
-          <div class="pub-metric-item"><span class="pub-metric-val">Mon–Sat</span><span class="pub-metric-lbl">Operational Schedule</span></div>
+      <section class="phero">
+        <h1>Contact Surge Solutions</h1>
+        <p>Send your enquiry to the asset desk. A recovery specialist will review it and get back to you.</p>
+      </section>
+      <div class="strip three">
+        <div class="in">
+          <div><b>Accra</b><span>Head office</span></div>
+          <div><b>Under 4 hours</b><span>Average response</span></div>
+          <div><b>Mon to Sat</b><span>Open six days</span></div>
         </div>
       </div>
-
-      <div class="pub-contact-grid">
-        <div>
-          <div class="group">
-            <div class="caption">Official Asset Enquiry &amp; Support Request</div>
-            <div class="body">
-              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;line-height:1.5">Submit your inquiry directly to our asset desk. An assigned recovery specialist will review your request and get in touch promptly.</p>
-
-              <div class="field">
-                <span class="lbl">Full Legal Name <span class="req">*</span></span>
-                <div class="ctl">
-                  <input id="ct-name" placeholder="Your full name" style="width:100%">
-                </div>
+      <div class="sec">
+        <div class="two">
+          <div class="card2" id="ctBox">
+            <h3>Send an enquiry</h3>
+            <p>Fields marked with an asterisk are required.</p>
+            <div class="f" id="c-name">
+              <label for="cn">Full name *</label>
+              <input id="cn" placeholder="Your full name">
+            </div>
+            <div class="row2">
+              <div class="f" id="c-phone">
+                <label for="cp">Phone number *</label>
+                <input id="cp" placeholder="+233 24 000 0000">
               </div>
-
-              <div class="field">
-                <span class="lbl">Phone Number <span class="req">*</span></span>
-                <div class="ctl">
-                  <input id="ct-phone" placeholder="+233 24 000 0000" style="width:100%">
-                  <span class="help">Include country code for diaspora callers</span>
-                </div>
+              <div class="f" id="c-email">
+                <label for="ce">Email address *</label>
+                <input id="ce" type="email" placeholder="you@domain.com">
               </div>
-
-              <div class="field">
-                <span class="lbl">Email Address <span class="req">*</span></span>
-                <div class="ctl">
-                  <input type="email" id="ct-email" placeholder="you@domain.com" style="width:100%">
-                </div>
+            </div>
+            <div class="row2">
+              <div class="f">
+                <label for="ct">Nature of enquiry</label>
+                <select id="ct">${opt(['Asset details and reserve price', 'Supervised viewing request', 'Diaspora advisory and remote purchase', 'Corporate or bulk acquisition', 'Title verification and court writ questions', 'General information'])}</select>
               </div>
-
-              <div class="field">
-                <span class="lbl">Nature of Enquiry <span class="req">*</span></span>
-                <div class="ctl">
-                  <select id="ct-subject" style="width:100%">
-                    <option value="Specific Asset Inquiry">Specific Asset Details &amp; Reserve Inquiry</option>
-                    <option value="Schedule Viewing">Request Supervised Physical Viewing</option>
-                    <option value="Diaspora Advisory">Diaspora Investor Advisory &amp; Remote Purchase</option>
-                    <option value="Institutional Purchase">Corporate / Bulk Asset Acquisition</option>
-                    <option value="Legal & Title Clearance">Legal Title Verification &amp; Court Writ Inquiries</option>
-                    <option value="General Information">General Market Information</option>
-                  </select>
-                </div>
+              <div class="f">
+                <label for="cm">Preferred contact</label>
+                <select id="cm">${opt(['Phone call', 'WhatsApp message', 'Email'])}</select>
               </div>
+            </div>
+            <div class="f">
+              <label for="cr">Asset reference (optional)</label>
+              <input id="cr" placeholder="e.g. SS-RE-2026-00248">
+            </div>
+            <div class="f" id="c-msg">
+              <label for="cg">Message *</label>
+              <textarea id="cg" placeholder="Describe your interest, preferred locations, budget range or questions"></textarea>
+            </div>
+            <button class="btn p" type="button" onclick="PublicMarket.contactSubmit()">Send enquiry</button>
+          </div>
 
-              <div class="field">
-                <span class="lbl">Asset Reference</span>
-                <div class="ctl">
-                  <input id="ct-asset-ref" placeholder="e.g. AST-ACC-2026-001 (Optional)" style="width:100%">
-                  <span class="help">Specify if enquiring about an existing listing</span>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Preferred Contact</span>
-                <div class="ctl">
-                  <select id="ct-channel" style="width:100%">
-                    <option value="Phone Call">Direct Phone Call</option>
-                    <option value="WhatsApp">WhatsApp Message</option>
-                    <option value="Email">Formal Email Correspondence</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="field">
-                <span class="lbl">Message / Inquiry <span class="req">*</span></span>
-                <div class="ctl">
-                  <textarea id="ct-msg" style="width:100%;height:84px" placeholder="Please describe your interest, preferred locations, budget range, or specific questions..."></textarea>
-                </div>
-              </div>
-
-              <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                <button class="btn primary" onclick="PublicMarket.submitContact()">Submit Official Enquiry</button>
-              </div>
+          <div class="aside">
+            <div class="card2">
+              <h3>Head office</h3>
+              <div class="kv"><span>Address</span><span>Surge Asset Recovery Centre, 4th Floor, Ridge Financial Enclave, Independence Avenue, Accra</span></div>
+              <div class="kv"><span>Digital address</span><span>GA-019-4821</span></div>
+              <div class="kv"><span>Postal address</span><span>P.O. Box CT 4892, Cantonments, Accra</span></div>
+            </div>
+            <div class="card2">
+              <h3>Talk to us</h3>
+              <div class="kv"><span>Switchboard</span><span>+233 (0) 30 274 0000</span></div>
+              <div class="kv"><span>Asset advisory</span><span>+233 (0) 24 455 0192</span></div>
+              <div class="kv"><span>Diaspora WhatsApp</span><span>+233 (0) 50 123 4567</span></div>
+              <div class="kv"><span>Enquiries</span><span><a href="mailto:enquiries@surge.gh">enquiries@surge.gh</a></span></div>
+              <div class="kv"><span>Legal and compliance</span><span><a href="mailto:legal@surge.gh">legal@surge.gh</a></span></div>
+              <div class="kv"><span>Buyer KYC</span><span><a href="mailto:kyc@surge.gh">kyc@surge.gh</a></span></div>
+            </div>
+            <div class="card2">
+              <h3>Opening hours</h3>
+              <div class="kv"><span>Monday to Friday</span><span>08:00 to 17:00 GMT</span></div>
+              <div class="kv"><span>Saturday</span><span>09:00 to 14:00 GMT, supervised viewings only</span></div>
+              <div class="kv"><span>Sunday and holidays</span><span>Closed</span></div>
             </div>
           </div>
         </div>
-
-        <div>
-          <div class="pub-contact-card">
-            <h4><span class="sq"></span>Principal Office &amp; Operations Centre</h4>
-            <div class="kv-row"><span class="kv-k">Physical Address</span><span class="kv-v">Surge Asset Recovery Centre<br>4th Floor, Ridge Financial Enclave<br>Independence Avenue, Accra</span></div>
-            <div class="kv-row"><span class="kv-k">Digital Address</span><span class="kv-v"><span class="badge live">GA-019-4821</span></span></div>
-            <div class="kv-row"><span class="kv-k">Postal Address</span><span class="kv-v">P.O. Box CT 4892, Cantonments, Accra</span></div>
-          </div>
-
-          <div class="pub-contact-card">
-            <h4><span class="sq"></span>Direct Communications</h4>
-            <div class="kv-row"><span class="kv-k">General Switchboard</span><span class="kv-v"><b>+233 (0) 30 274 0000</b></span></div>
-            <div class="kv-row"><span class="kv-k">Asset Advisory Desk</span><span class="kv-v"><b>+233 (0) 24 455 0192</b></span></div>
-            <div class="kv-row"><span class="kv-k">Diaspora WhatsApp</span><span class="kv-v"><b>+233 (0) 50 123 4567</b></span></div>
-            <div class="kv-row"><span class="kv-k">General Enquiries</span><span class="kv-v"><a href="mailto:enquiries@surge.gh">enquiries@surge.gh</a></span></div>
-            <div class="kv-row"><span class="kv-k">Legal &amp; Compliance</span><span class="kv-v"><a href="mailto:legal@surge.gh">legal@surge.gh</a></span></div>
-            <div class="kv-row"><span class="kv-k">Buyer KYC Compliance</span><span class="kv-v"><a href="mailto:kyc@surge.gh">kyc@surge.gh</a></span></div>
-          </div>
-
-          <div class="pub-contact-card">
-            <h4><span class="sq"></span>Operating Hours &amp; Viewing Schedule</h4>
-            <div class="kv-row"><span class="kv-k">Monday &ndash; Friday</span><span class="kv-v">08:00 &ndash; 17:00 GMT</span></div>
-            <div class="kv-row"><span class="kv-k">Saturday</span><span class="kv-v">09:00 &ndash; 14:00 GMT (Supervised Viewings Only)</span></div>
-            <div class="kv-row"><span class="kv-k">Sunday &amp; Holidays</span><span class="kv-v">Closed (Emergency Security Protocol Active)</span></div>
-          </div>
-
-          <div class="pub-safe-box">
-            <b>Anti-Fraud Notice:</b> Surge Solutions never requests cash payments in person or to personal mobile money numbers. All formal transaction funds must be settled via certified bank transfers directly into designated partner bank recovery escrow accounts.
-          </div>
-        </div>
       </div>
+      <div style="height:32px"></div>
+      ${this.renderFooter()}
     `;
   },
 
-  submitContact() {
-    const name = document.getElementById('ct-name')?.value?.trim();
-    const phone = document.getElementById('ct-phone')?.value?.trim();
-    const email = document.getElementById('ct-email')?.value?.trim();
-    const subject = document.getElementById('ct-subject')?.value || 'General';
-    const assetRef = document.getElementById('ct-asset-ref')?.value?.trim() || '';
-    const channel = document.getElementById('ct-channel')?.value || 'Phone Call';
-    const msg = document.getElementById('ct-msg')?.value?.trim();
-
+  contactSubmit() {
+    const v = id => document.getElementById(id)?.value?.trim() || '';
+    const name = v('cn'), phone = v('cp'), email = v('ce'), msg = v('cg');
     if (!name || !phone || !email || !msg) {
-      return UI.toast('Full name, phone, email, and message are required.', 'error');
+      return this.toast('Complete all required fields.');
     }
 
-    const ref = 'SL-LEAD-2026-' + String(Store.leads.length + 104).padStart(6, '0');
-    Store.leads.push({
+    const ref = 'ENQ-2026-' + Math.floor(100000 + Math.random() * 900000);
+    const cm = document.getElementById('cm')?.value || 'Phone call';
+    Store.leads.unshift({
       id: 'l' + Date.now(),
       ref,
-      assetId: null,
-      assetRef,
       name,
       phone,
       email,
-      status: 'New',
-      source: 'Contact Desk (' + subject + ')',
-      channel,
-      assignedTo: null,
+      notes: msg,
+      source: 'Contact Page Enquiry',
       createdAt: new Date().toISOString()
     });
+    Store.addAudit('Public Buyer', 'ENQUIRY', 'Lead', ref, null, 'New', 'General enquiry from ' + name);
+    Store.persist();
 
-    Store.addAudit('Public Buyer', 'ENQUIRY', 'Lead', ref, null, 'New', `Official contact enquiry from ${name} [${subject}]`);
-
-    UI.modal('Enquiry Successfully Submitted', `
-      <div style="text-align:center;padding:12px 0 16px">
-        <div style="width:48px;height:48px;border-radius:50%;background:#D4EDDA;color:#155724;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
-          <svg style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+    const box = document.getElementById('ctBox');
+    if (box) {
+      box.innerHTML = `
+        <div class="okbox">
+          <div class="tk">${this.icons.tick}</div>
+          <h3 style="margin:0 0 6px;font:700 20px var(--serif)">Enquiry sent</h3>
+          <p style="color:var(--text-2);margin:0">Your enquiry is with the asset desk. We will reply by ${cm.toLowerCase()} shortly.</p>
+          <code>Reference: ${ref}</code><br>
+          <button class="btn p" type="button" onclick="PublicMarket.goHome()">Back to listings</button>
         </div>
-        <h3 style="margin:0 0 6px;font-size:16px">Enquiry Reference Assigned</h3>
-        <p style="font-size:12.5px;color:var(--text-2);margin:0 0 14px">Your message has been logged with the Surge Asset Recovery Desk.</p>
-        <div style="background:#F6F9FC;border:1px solid #C9D8EA;padding:10px 14px;border-radius:3px;font-family:Consolas,monospace;font-size:14px;font-weight:700;color:var(--blue)">
-          Reference: ${ref}
-        </div>
-      </div>
-      <div class="kv-row"><span class="kv-k">Sender</span><span class="kv-v">${UI.escapeHtml(name)}</span></div>
-      <div class="kv-row"><span class="kv-k">Phone</span><span class="kv-v">${UI.escapeHtml(phone)}</span></div>
-      <div class="kv-row"><span class="kv-k">Email</span><span class="kv-v">${UI.escapeHtml(email)}</span></div>
-      <div class="kv-row"><span class="kv-k">Enquiry Classification</span><span class="kv-v"><b>${UI.escapeHtml(subject)}</b></span></div>
-      <div class="kv-row"><span class="kv-k">Preferred Channel</span><span class="kv-v">${UI.escapeHtml(channel)}</span></div>
-      <p style="font-size:11.5px;color:var(--text-2);margin:12px 0 0;line-height:1.5">An Asset Recovery Officer will contact you within 4 hours during business days. Thank you for contacting Surge Solutions.</p>
-    `, '<button class="btn primary" onclick="UI.closeModal();PublicMarket.goHome()">Return to Marketplace</button>');
-
-    UI.toast(`Enquiry received. Tracking Reference: ${ref}`, 'success');
+      `;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   },
+
+  renderFooter() {
+    return `
+      <footer class="ft">
+        <div class="in">
+          <div>
+            <img class="lg" src="surge-logo.jpg" alt="Surge Solutions, partners in business growth">
+            <p>Licensed intermediary for bank-repossessed and distressed asset disposition in Ghana.</p>
+            <p>All listings are managed by Surge Solutions.</p>
+          </div>
+          <div>
+            <h4>Marketplace</h4>
+            <ul>
+              <li><a onclick="PublicMarket.goHome()">Buy assets</a></li>
+              <li><a onclick="PublicMarket.goHow()">How it works</a></li>
+              <li><a onclick="PublicMarket.goKyc()">KYC and verification</a></li>
+              <li><a onclick="PublicMarket.goFaq()">FAQ</a></li>
+              <li><a onclick="PublicMarket.goContact()">Contact</a></li>
+            </ul>
+          </div>
+          <div class="ct">
+            <h4>Contact</h4>
+            <ul>
+              <li><span>Surge Asset Recovery Centre</span><small>4th Floor, Ridge Financial Enclave, Independence Avenue, Accra</small></li>
+              <li><a href="tel:+233302740000">+233 (0) 30 274 0000</a><small>Switchboard</small></li>
+              <li><a href="tel:+233244550192">+233 (0) 24 455 0192</a><small>Asset advisory desk</small></li>
+              <li><a href="mailto:enquiries@surge.gh">enquiries@surge.gh</a></li>
+            </ul>
+          </div>
+          <div class="hr">
+            <h4>Opening hours</h4>
+            <ul>
+              <li><span>Monday to Friday</span><small>08:00 to 17:00 GMT</small></li>
+              <li><span>Saturday</span><small>09:00 to 14:00 GMT, supervised viewings only</small></li>
+              <li><span>Sunday and holidays</span><small>Closed</small></li>
+              <li><a href="bank.html">Bank and staff sign in</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="bar">
+          <div>
+            <span>&copy; 2026 Surge Solutions. Buyer verification is carried out under the Anti-Money Laundering Act, 2020 (Act 1044).</span>
+            <span>Accra, Ghana</span>
+          </div>
+        </div>
+      </footer>
+    `;
+  },
+
+  render() {
+    const el = document.getElementById('app') || document.getElementById('public-work');
+    if (!el) return;
+
+    this.syncSwitcherState();
+
+    switch (this.currentPage) {
+      case 'home':
+        el.innerHTML = this.selectedAssetId ? this.renderDetail() : this.renderHome();
+        break;
+      case 'how':
+        el.innerHTML = this.renderHow();
+        break;
+      case 'kyc':
+        el.innerHTML = this.renderKyc();
+        break;
+      case 'faq':
+        el.innerHTML = this.renderFaq();
+        break;
+      case 'contact':
+        el.innerHTML = this.renderContact();
+        break;
+      default:
+        el.innerHTML = this.renderHome();
+    }
+  }
 };
 
-// ============================================================
-// SWITCHER & BOOT
-// ============================================================
-document.querySelectorAll('.switcher button[data-app]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.switcher button[data-app]').forEach(b => b.classList.remove('active'));
+document.querySelectorAll('.switcher button[data-app]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.querySelectorAll('.app').forEach(a => a.classList.remove('active'));
     const target = document.getElementById('app-' + btn.dataset.app);
