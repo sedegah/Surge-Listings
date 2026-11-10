@@ -2065,6 +2065,7 @@ const BankPortal = {
       case 'legal': el.innerHTML = this.renderLegalView(); break;
       case 'documents': el.innerHTML = this.renderDocumentsView(); break;
       case 'offers': el.innerHTML = this.renderOffersView(); break;
+      case 'enquiries': el.innerHTML = this.renderEnquiriesView(); break;
       case 'reports': el.innerHTML = this.renderReportsView(); break;
       case 'notifications': el.innerHTML = this.renderNotificationsView(); break;
       default: el.innerHTML = this.renderAssetList();
@@ -3724,6 +3725,156 @@ const BankPortal = {
     `;
   },
 
+  renderEnquiriesView() {
+    const leads = Store.leads || [];
+    const viewings = Store.viewings || [];
+    const newLeadsCount = leads.filter(l => l.status === 'New').length;
+    const requestedViewingsCount = viewings.filter(v => v.status === 'Requested').length;
+
+    const leadRows = leads.map(l => {
+      const asset = Store.getAsset(l.assetId) || Store.getAssetByRef(l.assetRef);
+      return `<tr>
+        <td class="ref">${UI.escapeHtml(l.ref || 'ENQ')}</td>
+        <td>
+          <b>${UI.escapeHtml(l.assetRef || 'Asset')}</b>
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
+        </td>
+        <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
+        <td>
+          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}">${UI.escapeHtml(l.phone)}</a>` : '—'}
+          ${l.email ? `<br><a href="mailto:${UI.escapeHtml(l.email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(l.email)}</a>` : ''}
+        </td>
+        <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
+        <td>${UI.fmtDateShort(l.createdAt)}</td>
+        <td>${UI.badge(l.status || 'New')}</td>
+        <td style="text-align:right">
+          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2)">Processed</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    const viewingRows = viewings.map(v => {
+      const asset = Store.getAsset(v.assetId) || Store.getAssetByRef(v.assetRef);
+      return `<tr>
+        <td class="ref">${UI.escapeHtml(v.ref || v.id || 'VW')}</td>
+        <td>
+          <b>${UI.escapeHtml(v.assetRef || 'Asset')}</b>
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
+        </td>
+        <td><b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b></td>
+        <td>${v.phone ? `<a href="tel:${UI.escapeHtml(v.phone)}">${UI.escapeHtml(v.phone)}</a>` : '—'}</td>
+        <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
+        <td style="max-width:280px">${UI.escapeHtml(v.notes || 'None')}</td>
+        <td>${UI.badge(v.status || 'Requested')}</td>
+        <td style="text-align:right">
+          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2)">Scheduled</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="page-head">
+        <h1>Marketplace Enquiries &amp; Viewing Requests</h1>
+        <span class="crumb">${leads.length} total enquiries &middot; ${viewings.length} site viewings</span>
+      </div>
+
+      <div class="kpis" style="margin-bottom:16px">
+        <div class="kpi">
+          <div class="k">Buyer Enquiries</div>
+          <div class="v">${leads.length}</div>
+          <div class="d">Marketplace leads</div>
+        </div>
+        <div class="kpi ${newLeadsCount ? 'warn' : 'ok'}">
+          <div class="k">New / Uncontacted</div>
+          <div class="v">${newLeadsCount}</div>
+          <div class="d">Awaiting officer reply</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Viewing Appointments</div>
+          <div class="v">${viewings.length}</div>
+          <div class="d">Supervised site visits</div>
+        </div>
+        <div class="kpi ${requestedViewingsCount ? 'warn' : 'ok'}">
+          <div class="k">Pending Escort</div>
+          <div class="v">${requestedViewingsCount}</div>
+          <div class="d">Requires security clearance</div>
+        </div>
+      </div>
+
+      <div class="group" style="margin-bottom:18px">
+        <div class="caption">
+          Marketplace Buyer Enquiries
+          <span class="hint">Public buyer requests submitted from asset listings</span>
+        </div>
+        <div class="gridwrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Ref</th>
+                <th>Asset</th>
+                <th>Buyer Name</th>
+                <th>Contact</th>
+                <th>Message / Questions</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th style="text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${leadRows || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-2)">No buyer enquiries received yet.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">
+          Supervised Site Viewing Appointments
+          <span class="hint">Requests from verified buyers requiring recovery officer escort</span>
+        </div>
+        <div class="gridwrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Viewing Ref</th>
+                <th>Asset</th>
+                <th>Buyer Name</th>
+                <th>Phone</th>
+                <th>Scheduled Date / Time</th>
+                <th>Notes / Requirements</th>
+                <th>Status</th>
+                <th style="text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${viewingRows || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-2)">No viewing appointments requested yet.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  },
+
+  markLeadContacted(leadId) {
+    const l = (Store.leads || []).find(x => x.id === leadId);
+    if (l) {
+      l.status = 'Contacted';
+      Store.persist();
+      UI.toast('Lead marked as contacted.', 'success');
+      this.render();
+    }
+  },
+
+  confirmViewingScheduled(viewingId) {
+    const v = (Store.viewings || []).find(x => x.id === viewingId);
+    if (v) {
+      v.status = 'Scheduled';
+      Store.persist();
+      UI.toast('Viewing escort confirmed and scheduled.', 'success');
+      this.render();
+    }
+  },
+
   renderOfferWorkspace(o) {
     const asset = Store.getAsset(o.assetId) || Store.assets.find(a => a.ref === o.assetRef);
     const isUnderReview = ['Under Bank Review', 'Under Review'].includes(o.status);
@@ -4279,6 +4430,7 @@ const AdminPortal = {
       'legal': 'Legal Verification',
       'title': 'Title & Valuation',
       'offers': 'Offers',
+      'enquiries': 'Enquiries & Viewings',
       'banks': 'Banks & Staff',
       'audit': 'Audit Log'
     };
@@ -7026,32 +7178,51 @@ const PublicMarket = {
     `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.submitEnquiry('${id}')">Submit Enquiry</button>`);
   },
 
-  submitEnquiry(id) {
+    async submitEnquiry(id) {
     const name = document.getElementById('enq-name')?.value?.trim();
     const phone = document.getElementById('enq-phone')?.value?.trim();
     const email = document.getElementById('enq-email')?.value?.trim();
     const msg = document.getElementById('enq-msg')?.value?.trim();
     if (!name || !phone) return UI.toast('Full name and phone are required', 'error');
 
-    const a = Store.getAsset(id) || {};
-    const ref = 'ENQ-2026-' + Math.floor(100000 + Math.random() * 900000);
-    Store.leads.unshift({
-      id: 'l' + Date.now(),
-      ref,
-      assetId: id,
-      assetRef: a.ref || id,
-      name,
-      phone,
-      email,
-      status: 'New',
-      source: 'Marketplace Enquiry',
-      notes: msg,
-      createdAt: new Date().toISOString()
-    });
-    Store.addAudit('Public Buyer', 'ENQUIRY', 'Lead', ref, null, 'New', 'Enquiry from ' + name + ' on ' + (a.ref || id));
-    Store.persist();
-    UI.closeModal();
-    PublicMarket.toast('Enquiry sent. Reference: ' + ref);
+    const a = Store.getAsset(id) || Store.getAssetByRef(id) || {};
+    const assetId = a.id || id;
+
+    try {
+      const resp = await fetch((Store.API_BASE || '') + '/api/marketplace/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId,
+          name,
+          phone,
+          email,
+          message: msg
+        })
+      });
+      const json = await resp.json();
+      const ref = json.reference || ('ENQ-2026-' + Math.floor(100000 + Math.random() * 900000));
+      Store.leads.unshift({
+        id: json.id || ('l' + Date.now()),
+        ref,
+        assetId,
+        assetRef: a.ref || assetId,
+        name,
+        phone,
+        email,
+        status: 'New',
+        source: 'Marketplace Enquiry',
+        notes: msg,
+        createdAt: new Date().toISOString()
+      });
+      Store.persist();
+      UI.closeModal();
+      PublicMarket.toast(json.message || ('Enquiry sent. Reference: ' + ref));
+      Store.fetchRemote();
+    } catch (err) {
+      console.error('Submit enquiry error:', err);
+      UI.toast(err.message || 'Could not submit enquiry. Please retry.', 'error');
+    }
   },
 
     requestViewing(id) {
@@ -7101,33 +7272,57 @@ const PublicMarket = {
     `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.submitViewing('${id}')">Confirm Viewing Request</button>`);
   },
 
-  submitViewing(id) {
+    async submitViewing(id) {
     const name = document.getElementById('vw-name')?.value?.trim();
     const phone = document.getElementById('vw-phone')?.value?.trim();
+    const email = document.getElementById('vw-email')?.value?.trim() || '';
     const date = document.getElementById('vw-date')?.value;
     const time = document.getElementById('vw-time')?.value;
+    const idNumber = document.getElementById('vw-id')?.value?.trim() || '';
+    const notes = document.getElementById('vw-notes')?.value?.trim() || '';
     if (!name || !phone || !date) return UI.toast('Full name, phone, and date are required', 'error');
 
-    const a = Store.getAsset(id) || {};
-    const ref = 'VW-2026-' + Math.floor(100000 + Math.random() * 900000);
-    Store.viewings.unshift({
-      id: 'v' + Date.now(),
-      ref,
-      assetId: id,
-      assetRef: a.ref || id,
-      buyer: name,
-      phone,
-      email: document.getElementById('vw-email')?.value?.trim() || '',
-      idNumber: document.getElementById('vw-id')?.value?.trim() || '',
-      scheduledAt: date + ' ' + time,
-      status: 'Requested',
-      notes: document.getElementById('vw-notes')?.value?.trim() || '',
-      agent: null
-    });
-    Store.addAudit(name, 'VIEWING_REQUEST', 'Viewing', ref, null, 'Requested', 'Viewing requested for ' + (a.ref || id) + ' on ' + date + ' (' + time + ')');
-    Store.persist();
-    UI.closeModal();
-    PublicMarket.toast('Viewing scheduled. Reference: ' + ref);
+    const a = Store.getAsset(id) || Store.getAssetByRef(id) || {};
+    const assetId = a.id || id;
+
+    try {
+      const resp = await fetch((Store.API_BASE || '') + '/api/marketplace/viewings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId,
+          name,
+          phone,
+          email,
+          date,
+          timeSlot: time,
+          notes: (idNumber ? `Ghana Card: ${idNumber} · ` : '') + notes
+        })
+      });
+      const json = await resp.json();
+      const ref = json.id || ('VW-2026-' + Math.floor(100000 + Math.random() * 900000));
+      Store.viewings.unshift({
+        id: json.id || ('v' + Date.now()),
+        ref,
+        assetId,
+        assetRef: a.ref || assetId,
+        buyer: name,
+        phone,
+        email,
+        idNumber,
+        scheduledAt: date + ' ' + time,
+        status: 'Requested',
+        notes,
+        agent: null
+      });
+      Store.persist();
+      UI.closeModal();
+      PublicMarket.toast(json.message || ('Viewing scheduled. Reference: ' + ref));
+      Store.fetchRemote();
+    } catch (err) {
+      console.error('Submit viewing error:', err);
+      UI.toast(err.message || 'Could not submit viewing. Please retry.', 'error');
+    }
   },
 
       submitOffer(id) {
@@ -7185,7 +7380,7 @@ const PublicMarket = {
     `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.confirmOffer('${id}')">Submit Binding Offer</button>`);
   },
 
-  confirmOffer(id) {
+    async confirmOffer(id) {
     const name = document.getElementById('of-name')?.value?.trim();
     const phone = document.getElementById('of-phone')?.value?.trim();
     const email = document.getElementById('of-email')?.value?.trim();
@@ -7197,29 +7392,58 @@ const PublicMarket = {
     if (!name || !phone || !amount || !ghanaCard) {
       return UI.toast('Name, phone, Ghana Card, and offer amount are required', 'error');
     }
-    const a = Store.getAsset(id) || {};
-    const ref = 'OF-2026-' + Math.floor(100000 + Math.random() * 900000);
-    const expiry = new Date(Date.now() + validityDays * 86400000).toISOString();
+    const a = Store.getAsset(id) || Store.getAssetByRef(id) || {};
+    const assetId = a.id || id;
 
-    Store.offers.unshift({
-      id: 'o' + Date.now(),
-      ref,
-      assetId: id,
-      assetRef: a.ref || id,
-      buyer: name,
-      phone,
-      email,
-      ghanaCard,
-      amount,
-      financing: payment,
-      status: 'Under Review',
-      submittedAt: new Date().toISOString(),
-      expiresAt: expiry
-    });
-    Store.addAudit(name, 'OFFER_SUBMISSION', 'Offer', ref, null, 'Under Review', 'Formal offer of GH₵ ' + amount.toLocaleString() + ' submitted on ' + (a.ref || id));
-    Store.persist();
-    UI.closeModal();
-    PublicMarket.toast('Formal offer submitted. Reference: ' + ref);
+    try {
+      const resp = await fetch((Store.API_BASE || '') + '/api/marketplace/offers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId,
+          name,
+          phone,
+          email,
+          amount,
+          ghanaCard,
+          validityDays,
+          paymentMethod: payment
+        })
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.success) {
+        throw new Error(json.error || 'Failed to submit offer');
+      }
+
+      const ref = json.reference || ('OF-2026-' + Math.floor(100000 + Math.random() * 900000));
+      Store.offers.unshift({
+        id: json.id || ('of-' + Date.now()),
+        ref,
+        assetId,
+        assetRef: a.ref || assetId,
+        assetTitle: a.title || a.assetType || '',
+        bankName: a.bankName || '',
+        buyer: name,
+        amount,
+        status: 'Pending Surge Verification',
+        belowReserve: amount < (a.reserve || 0),
+        date: new Date().toISOString(),
+        validity: new Date(Date.now() + validityDays * 86400000).toISOString(),
+        notes: `Ghana Card: ${ghanaCard} · Contact: ${phone} (${email || ''})`,
+        conditions: payment,
+        ghanaCard,
+        phone,
+        email,
+        surgeVerified: false
+      });
+      Store.persist();
+      UI.closeModal();
+      PublicMarket.toast(json.message || ('Formal offer submitted. Reference: ' + ref));
+      Store.fetchRemote();
+    } catch (err) {
+      console.error('Submit offer error:', err);
+      UI.toast(err.message || 'Could not submit offer. Please retry.', 'error');
+    }
   },
 
   // Main Pages
