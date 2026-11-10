@@ -2203,9 +2203,9 @@ const BankPortal = {
 
     const totalCount = this.branchStats ? this.branchStats.totalAssets : assets.length;
     const live = this.branchStats ? this.branchStats.liveListings : assets.filter(a => a.status === 'Live').length;
-    const pending = this.branchStats ? this.branchStats.pendingReview : assets.filter(a => ['Submitted', 'Under Review'].includes(a.status)).length;
-    const holds = this.branchStats ? this.branchStats.legalHolds : assets.filter(a => a.legalHold).length;
-    const activeOffers = Store.offers.filter(o => ['Submitted', 'Under Review'].includes(o.status)).length;
+    const pending = this.branchStats ? this.branchStats.pendingReview : assets.filter(a => ['Submitted', 'Submitted by Bank', 'Under Review'].includes(a.status)).length;
+    const holds = this.branchStats ? this.branchStats.legalHolds : assets.filter(a => a.legalHold || a.legal_hold_active || a.legalStatus === 'On Hold' || a.status === 'Legal Hold' || a.injunctionActive).length;
+    const activeOffers = Store.offers.filter(o => !['Accepted', 'Rejected', 'Rejected by Surge', 'Rescinded', 'Cancelled'].includes(o.status)).length;
     return `
       <div class="page-head">
         <h1>Dashboard</h1>
