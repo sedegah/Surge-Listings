@@ -6482,7 +6482,46 @@ const PublicMarket = {
 
   init() {
     this.syncSwitcherState();
+    this.restoreStateFromUrl();
     this.render();
+
+    window.addEventListener('hashchange', () => {
+      this.restoreStateFromUrl();
+    });
+  },
+
+  restoreStateFromUrl() {
+    try {
+      const hash = (window.location.hash || '').replace(/^#/, '').trim();
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryAsset = searchParams.get('asset') || searchParams.get('ref');
+      const savedRef = sessionStorage.getItem('surge_market_selected_ref');
+      const savedAsset = sessionStorage.getItem('surge_market_selected_asset');
+
+      if (['how', 'kyc', 'faq', 'contact'].includes(hash.toLowerCase())) {
+        this.selectedAssetId = null;
+        this.currentPage = hash.toLowerCase();
+        this.setActiveNav(this.currentPage);
+        this.render();
+        return;
+      }
+
+      const target = hash ? decodeURIComponent(hash) : (queryAsset || savedRef || savedAsset);
+      if (target && target !== 'home') {
+        const a = Store.assets.find(x => x.id === target || x.ref === target) || Store.getAsset(target) || Store.getAssetByRef(target);
+        if (a) {
+          this.openDetail(a.id);
+        } else {
+          // If Store.fetchRemote is still in-flight, preserve target so openDetail runs once assets load
+          this._pendingTarget = target;
+          this.selectedAssetId = target;
+          this.detailImagesLoading = true;
+          this.openDetail(target);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore marketplace URL state:', e);
+    }
   },
 
   syncSwitcherState() {
@@ -6502,6 +6541,16 @@ const PublicMarket = {
   go(p) {
     this.currentPage = p;
     this.selectedAssetId = null;
+    this._pendingTarget = null;
+    try {
+      sessionStorage.removeItem('surge_market_selected_asset');
+      sessionStorage.removeItem('surge_market_selected_ref');
+      if (p === 'home') {
+        if (window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search);
+      } else {
+        history.replaceState(null, '', '#' + encodeURIComponent(p));
+      }
+    } catch (e) {}
     this.setActiveNav(p);
     this.render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -6777,11 +6826,21 @@ const PublicMarket = {
     this.detailImages = [];
     this.activeImageIndex = 0;
     this.detailImagesLoading = true;
+
+    // Persist to URL hash and sessionStorage so refreshing stays on this asset page
+    try {
+      const a = Store.getAsset(id) || Store.getAssetByRef(id) || Store.assets.find(x => x.id === id || x.ref === id);
+      const refOrId = a ? (a.ref || a.id) : id;
+      sessionStorage.setItem('surge_market_selected_asset', id);
+      sessionStorage.setItem('surge_market_selected_ref', refOrId);
+      history.replaceState(null, '', '#' + encodeURIComponent(refOrId));
+    } catch (e) {}
+
     this.render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
-      const a = Store.getAsset(id);
+      const a = Store.getAsset(id) || Store.getAssetByRef(id) || Store.assets.find(x => x.id === id || x.ref === id);
       const ref = a ? (a.ref || id) : id;
       const resp = await fetch((Store.API_BASE || '') + '/api/marketplace/assets/' + encodeURIComponent(ref), { cache: 'no-store' });
       if (resp.ok) {
@@ -6814,8 +6873,16 @@ const PublicMarket = {
 
   closeDetail() {
     this.selectedAssetId = null;
+    this._pendingTarget = null;
     this.detailImages = [];
     this.activeImageIndex = 0;
+    try {
+      sessionStorage.removeItem('surge_market_selected_asset');
+      sessionStorage.removeItem('surge_market_selected_ref');
+      if (window.location.hash) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    } catch (e) {}
     this.render();
   },
 
@@ -6832,8 +6899,20 @@ const PublicMarket = {
   },
 
   renderDetail() {
-    const a = Store.getAsset(this.selectedAssetId);
-    if (!a) return this.renderHome();
+    const a = Store.getAsset(this.selectedAssetId) || Store.getAssetByRef(this.selectedAssetId) || Store.assets.find(x => x.id === this.selectedAssetId || x.ref === this.selectedAssetId);
+    if (!a) {
+      if (this.detailImagesLoading || Store.assets.length === 0) {
+        return `
+          <main class="main" style="padding-top:48px;padding-bottom:64px;text-align:center">
+            <div style="font-size:14px;color:var(--text-2);padding:40px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:2px">
+              Loading asset listing ${UI.escapeHtml(this.selectedAssetId || '')}...
+            </div>
+          </main>
+          ${this.renderFooter()}
+        `;
+      }
+      return this.renderHome();
+    }
 
     const isPoa = !a.showReserve || a.reserve === null || isNaN(a.reserve);
     const priceFormatted = isPoa ? 'Price on application' : this.fmtMoney(a.reserve);
@@ -7631,6 +7710,14 @@ const PublicMarket = {
     if (!el) return;
 
     this.syncSwitcherState();
+
+    if (this._pendingTarget && Store.assets.length > 0) {
+      const found = Store.assets.find(x => x.id === this._pendingTarget || x.ref === this._pendingTarget) || Store.getAsset(this._pendingTarget) || Store.getAssetByRef(this._pendingTarget);
+      if (found) {
+        this.selectedAssetId = found.id;
+        this._pendingTarget = null;
+      }
+    }
 
     switch (this.currentPage) {
       case 'home':
