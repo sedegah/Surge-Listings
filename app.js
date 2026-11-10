@@ -1723,12 +1723,27 @@ const BankPortal = {
       this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Dashboard', view: current, closable: false }];
       this.activeTabId = current;
     }
-    el.innerHTML = this.tabs.map(t => `
-      <div class="dtab ${t.id === this.activeTabId ? 'active' : ''}" onclick="BankPortal.switchTab('${UI.escapeHtml(t.id)}')">
-        <span>${UI.escapeHtml(t.title)}</span>
-        ${t.closable ? `<span class="x" title="Close tab" onclick="BankPortal.closeTab('${UI.escapeHtml(t.id)}', event)">×</span>` : ''}
-      </div>
-    `).join('');
+    el.innerHTML = this.tabs.map(t => {
+      const isActive = t.id === this.activeTabId;
+      return `
+        <div class="dtab ${isActive ? 'active' : ''}"
+             role="tab"
+             aria-selected="${isActive ? 'true' : 'false'}"
+             tabindex="0"
+             title="${UI.escapeHtml(t.title)}"
+             onclick="BankPortal.switchTab('${UI.escapeHtml(t.id)}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();BankPortal.switchTab('${UI.escapeHtml(t.id)}');}"
+             onauxclick="if(event.button===1){event.preventDefault();${t.closable ? `BankPortal.closeTab('${UI.escapeHtml(t.id)}',event)` : ''}}">
+          ${UI.getTabIcon(t)}
+          <span class="dtab-title">${UI.escapeHtml(t.title)}</span>
+          ${t.closable ? `
+            <span class="x" role="button" aria-label="Close tab ${UI.escapeHtml(t.title)}" title="Close tab (or middle click)" onclick="BankPortal.closeTab('${UI.escapeHtml(t.id)}', event)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </span>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
   },
 
   getSubPageTitle() {
@@ -1837,22 +1852,32 @@ const BankPortal = {
   openAsset(id) {
     this._stagedFile = null;
     this._stagedPhotos = {};
-    this.selectedAssetId = id;
-    this.currentView = 'assets';
-    this.detailTab = 'overview';
-    this.subPage = null;
-    this.render();
+    const a = Store.getAsset(id);
+    this.openTab({
+      id: 'asset-' + id,
+      title: a ? a.ref : 'Asset ' + id,
+      view: 'assets',
+      assetId: id,
+      subPage: null,
+      detailTab: 'overview',
+      closable: true
+    });
     void this.loadPhotos(id);
   },
   closeAsset() {
     this._stagedFile = null;
     this._stagedPhotos = {};
-    this.selectedAssetId = null;
-    this.subPage = null;
-    this.render();
+    if (this.activeTabId && this.activeTabId.startsWith('asset-')) {
+      this.closeTab(this.activeTabId);
+    } else {
+      this.selectedAssetId = null;
+      this.subPage = null;
+      this.render();
+    }
   },
   setTab(t) {
     this.detailTab = t;
+    this.updateCurrentTab({ detailTab: t });
     this.render();
     if (t === 'media' && this.selectedAssetId) {
       void this.loadPhotos(this.selectedAssetId);
@@ -1860,14 +1885,20 @@ const BankPortal = {
   },
 
   openOffer(offerId) {
-    this.selectedOfferId = offerId;
-    this.currentView = 'offers';
-    this.subPage = 'offer-detail';
-    this.render();
+    const o = Store.offers.find(x => x.id === offerId);
+    this.openTab({
+      id: 'offer-' + offerId,
+      title: o ? 'Offer: ' + o.ref : 'Offer Detail',
+      view: 'offers',
+      selectedOfferId: offerId,
+      subPage: 'offer-detail',
+      closable: true
+    });
   },
   openSubPage(name) {
     this._stagedFile = null;
     this.subPage = name;
+    this.updateCurrentTab({ subPage: name });
     this.render();
     if (name === 'edit-media' && this.selectedAssetId) {
       void this.loadPhotos(this.selectedAssetId);
@@ -1878,6 +1909,7 @@ const BankPortal = {
     this._stagedPhotos = {};
     this.selectedOfferId = null;
     this.subPage = null;
+    this.updateCurrentTab({ subPage: null, selectedOfferId: null });
     this.render();
   },
 
