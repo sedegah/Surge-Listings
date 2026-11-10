@@ -25,18 +25,6 @@
 </head>
 <body data-portal="public">
 
-<!-- Top Switcher Bar (always visible in app and for navigating portals) -->
-<nav class="switcher" id="marketplace-switcher">
-  <span class="brandmark">SURGE <span>&#9632;</span></span>
-  <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>
-  <a href="admin.html" id="sw-admin-link" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Surge Admin</a>
-  <button data-app="public" class="active">Marketplace</button>
-  <button class="switcher-signout" id="sw-signout-btn" type="button" onclick="Auth.logout()" aria-label="Sign out" style="display:none">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
-    <span>Sign out</span>
-  </button>
-</nav>
-
 <!-- Redesigned Marketplace Header -->
 <header class="hdr">
   <a class="logo" href="#" onclick="PublicMarket.goHome();return false" aria-label="Surge Solutions marketplace home">
