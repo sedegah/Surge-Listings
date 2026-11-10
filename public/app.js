@@ -6926,13 +6926,10 @@ const PublicMarket = {
   },
 
   // Inquiries / Viewing / Formal Offer Modals
-  enquiry(id) {
+    enquiry(id) {
     const a = Store.getAsset(id) || {};
     UI.modal('Submit Asset Enquiry', `
-      <div class="modal-asset-strip">
-        <span class="m-tag">${UI.escapeHtml(a.ref || 'ASSET')} &middot; ${UI.escapeHtml(a.assetType || a.category || 'Listing')}</span>
-        <p>Enquiry regarding <b>${UI.escapeHtml(a.title || a.ref || 'Asset')}</b>. A Surge asset recovery specialist will review and reply within 4 hours.</p>
-      </div>
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Enquiry on <b>${UI.escapeHtml(a.ref || '')}</b> (${UI.escapeHtml(a.assetType || a.title || 'Asset')}). A Surge recovery specialist will reply within 4 hours.</p>
       <div class="field">
         <label class="lbl" for="enq-name">Full Name <span class="req">*</span></label>
         <div class="ctl"><input id="enq-name" placeholder="Your full legal name"></div>
@@ -6982,15 +6979,12 @@ const PublicMarket = {
     PublicMarket.toast('Enquiry sent. Reference: ' + ref);
   },
 
-  requestViewing(id) {
+    requestViewing(id) {
     const a = Store.getAsset(id);
     if (!a) return;
     const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
     UI.modal('Schedule Supervised Site Viewing', `
-      <div class="modal-asset-strip">
-        <span class="m-tag">${UI.escapeHtml(a.ref)} &middot; ${UI.escapeHtml(a.assetType || a.title)}</span>
-        <p>Viewing appointment for <b>${UI.escapeHtml(a.ref)}</b> at ${UI.escapeHtml(a.publicLocation || 'Site')}. Surge security and recovery officers will accompany you.</p>
-      </div>
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Viewing appointment request on <b>${UI.escapeHtml(a.ref)}</b> (${UI.escapeHtml(a.assetType || a.title)} at ${UI.escapeHtml(a.publicLocation || 'Site')}). Surge security and recovery officers will accompany you.</p>
       <div class="field">
         <label class="lbl" for="vw-name">Full Legal Name <span class="req">*</span></label>
         <div class="ctl"><input id="vw-name" placeholder="Your full legal name as on Ghana Card"></div>
@@ -7061,15 +7055,12 @@ const PublicMarket = {
     PublicMarket.toast('Viewing scheduled. Reference: ' + ref);
   },
 
-    submitOffer(id) {
+      submitOffer(id) {
     const a = Store.getAsset(id);
     if (!a) return;
     const minOffer = a.minimum_offer || a.reserve || 0;
     UI.modal('Submit Formal Purchase Offer', `
-      <div class="modal-asset-strip">
-        <span class="m-tag">${UI.escapeHtml(a.ref)} &middot; ${UI.escapeHtml(a.assetType || a.title)}</span>
-        <p>Formal purchase offer on <b>${UI.escapeHtml(a.ref)}</b>. All offers are timestamped and submitted directly to the recovery bank committee under Act 1044.</p>
-      </div>
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Formal purchase offer on <b>${UI.escapeHtml(a.ref)}</b> (${UI.escapeHtml(a.assetType || a.title)}). All offers are timestamped and submitted directly to the recovery bank committee under Act 1044.</p>
       <div class="field">
         <label class="lbl" for="of-name">Buyer Full Legal Name <span class="req">*</span></label>
         <div class="ctl"><input id="of-name" placeholder="Legal purchaser or corporate legal name"></div>

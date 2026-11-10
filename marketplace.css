@@ -503,15 +503,13 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
 
 
 /* =====================================================================
-   SURGE ENTERPRISE MODAL & FORM SYSTEM
-   Theme: Surge Navy (#0B3C75), Crimson (#B3262E), Accent (#194DBA)
+   SURGE STANDARD ENTERPRISE MODAL & FORM SYSTEM
+   Strict Enterprise Theme: Crisp 2px radius, No colored edge strips
 ===================================================================== */
 .surge-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(11, 28, 55, 0.72);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background: rgba(0, 0, 0, 0.55);
   z-index: 100000;
   display: none;
   align-items: center;
@@ -524,8 +522,9 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
 }
 .surge-modal-window {
   background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 24px 50px -12px rgba(11, 60, 117, 0.35), 0 0 0 1px rgba(11, 60, 117, 0.08);
+  border: 1px solid #CBD5E1;
+  border-radius: 2px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 580px;
   max-height: 90vh;
@@ -534,40 +533,34 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
   overflow: hidden;
   position: relative;
   box-sizing: border-box;
-  animation: modalPopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-@keyframes modalPopIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .surge-modal-window.wide {
   max-width: 820px;
 }
 .surge-modal-header {
-  background: linear-gradient(135deg, #0B3C75 0%, #082A52 100%);
+  background: #0B3C75;
   color: #ffffff;
-  padding: 16px 22px;
+  padding: 12px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 3px solid #B3262E;
+  border-bottom: 1px solid #082A52;
   flex-shrink: 0;
 }
 .surge-modal-header h3 {
   margin: 0;
-  font-size: 16.5px;
+  font-size: 14px;
   font-weight: 700;
   color: #ffffff;
-  letter-spacing: -0.01em;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: inherit;
   flex: 1;
 }
 .surge-modal-close {
-  background: rgba(255, 255, 255, 0.12);
+  background: transparent;
   border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 2px;
   font-size: 20px;
   line-height: 1;
   color: #ffffff;
@@ -575,91 +568,57 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: background 0.1s;
   flex-shrink: 0;
 }
 .surge-modal-close:hover {
-  background: #B3262E;
+  background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  transform: scale(1.05);
 }
 .surge-modal-body {
-  padding: 22px 24px;
+  padding: 18px 20px;
   overflow-y: auto;
-  font-size: 13.5px;
+  font-size: 13px;
   color: #1F2937;
   background: #ffffff;
-  max-height: calc(90vh - 140px);
+  max-height: calc(90vh - 130px);
   box-sizing: border-box;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: inherit;
 }
 .surge-modal-footer {
-  padding: 14px 24px;
+  padding: 12px 20px;
   background: #F8FAFC;
-  border-top: 1px solid #E2E8F0;
+  border-top: 1px solid #CBD5E1;
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   flex-shrink: 0;
   box-sizing: border-box;
 }
 
-/* Modal Asset Strip */
-.modal-asset-strip {
-  background: #F0F5FA;
-  border: 1px solid #D5E2F0;
-  border-left: 4px solid #0B3C75;
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin-bottom: 18px;
-}
-.modal-asset-strip .m-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #0B3C75;
-  background: #FFFFFF;
-  border: 1px solid #BFD3E6;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-family: Consolas, monospace;
-  margin-bottom: 6px;
-}
-.modal-asset-strip p {
-  margin: 0;
-  font-size: 12.5px;
-  color: #475569;
-  line-height: 1.5;
-}
-.modal-asset-strip p b {
-  color: #0F172A;
-}
-
-/* Modal Form Fields */
+/* Modal Form Fields - Strict 2px corners, No edge borders */
 .surge-modal-body .field,
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 5px;
+  margin-bottom: 14px;
   width: 100%;
   text-align: left;
   box-sizing: border-box;
 }
 .surge-modal-body .field .lbl,
 .field .lbl {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
-  color: #0F172A;
+  color: #1E293B;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 0;
   text-align: left;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: inherit;
 }
 .surge-modal-body .field .lbl .req,
 .field .lbl .req {
@@ -682,16 +641,16 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
 .field .ctl textarea {
   width: 100% !important;
   box-sizing: border-box;
-  padding: 10px 13px;
-  border: 1.5px solid #CBD5E1;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid #CBD5E1;
+  border-radius: 2px;
   background: #FFFFFF;
   color: #0F172A;
-  font-size: 13.5px;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-family: inherit;
   line-height: 1.4;
   height: auto;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .surge-modal-body .field .ctl input:focus,
 .surge-modal-body .field .ctl select:focus,
@@ -701,26 +660,26 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
 .field .ctl textarea:focus {
   outline: none !important;
   border-color: #0B3C75 !important;
-  box-shadow: 0 0 0 3px rgba(11, 60, 117, 0.14) !important;
+  box-shadow: 0 0 0 1px #0B3C75 !important;
 }
 .surge-modal-body .field .ctl textarea,
 .field .ctl textarea {
-  min-height: 90px;
+  min-height: 80px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 .surge-modal-body .field .ctl input::placeholder,
 .surge-modal-body .field .ctl textarea::placeholder,
 .field .ctl input::placeholder,
 .field .ctl textarea::placeholder {
   color: #94A3B8;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 .surge-modal-body .row2,
 .row2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
 }
 @media (max-width: 600px) {
   .surge-modal-body .row2,
@@ -730,22 +689,22 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
   }
 }
 
-/* Modal & Form Buttons */
+/* Modal Buttons - 2px radius */
 .surge-modal-footer .btn {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 13px;
+  font-family: inherit;
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 9px 18px;
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: 2px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.15s ease;
   border: 1px solid #CBD5E1;
   background: #ffffff;
   color: #475569;
+  height: 32px;
 }
 .surge-modal-footer .btn:hover {
   background: #F1F5F9;
@@ -757,12 +716,11 @@ details p{margin:0;padding:0 18px 18px;color:#33475B;line-height:1.65;max-width:
   background: #0B3C75 !important;
   border: 1px solid #0B3C75 !important;
   color: #ffffff !important;
-  box-shadow: 0 1px 2px rgba(11, 60, 117, 0.15);
 }
 .surge-modal-footer .btn.p:hover,
 .surge-modal-footer .btn.primary:hover {
-  background: #194DBA !important;
-  border-color: #194DBA !important;
+  background: #082A52 !important;
+  border-color: #082A52 !important;
 }
 .surge-modal-footer .btn.danger {
   background: #B3262E !important;
