@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surge Solutions - Bank Partner Portal</title>
 <meta name="description" content="Surge Solutions Bank Portal - Multi-tenant loan recovery and asset management platform for Ghanaian financial institutions.">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.0.2">
 <link rel="stylesheet" href="notifications.css">
 <style>
 body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
@@ -43,12 +43,9 @@ body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibili
   <button data-app="bank" class="active">Bank Portal</button>
   <a href="admin.html" id="admin-portal-link" class="switcher-link" hidden style="color:#C8C8C8;padding:5px 12px;font-size:12px">Surge Admin</a>
   <a href="marketplace.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</a>
-  <span class="switcher-sep"></span>
-  <button class="switcher-signout" type="button" onclick="Auth.logout()" aria-label="Sign out of the bank portal">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
-    <span>Sign out</span>
-  </button>
-</nav>
+  
+  
+        </nav>
 
 <div class="viewport">
   <!-- BANK PORTAL -->
@@ -61,6 +58,10 @@ body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibili
         <span class="menu-item" onclick="BankPortal.nav('offers')"><u>S</u>ales</span>
         <span class="menu-item" onclick="BankPortal.nav('reports')"><u>R</u>eports</span>
         <span class="menu-spacer"></span>
+        <button class="menu-signout" type="button" onclick="Auth.logout()" aria-label="Sign out of bank portal">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+          <span>Sign out</span>
+        </button>
         <span class="menu-env">BANK PORTAL</span>
       </div>
       <div class="toolbar">
@@ -89,6 +90,12 @@ body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibili
           <div class="navitem" data-view="offers"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>Offers &amp; Decisions</div>
           <div class="navitem" data-view="reports"><svg class="ico" viewBox="0 0 24 24"><path d="M5 20V9M12 20V4M19 20v-7"/></svg>Reports</div>
           <div class="navitem" data-view="notifications"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V9a6 6 0 0112 0v7"/><path d="M4 16h16v4H4z"/></svg>Notifications</div>
+          <div class="navpane-footer">
+            <button class="navpane-signout" type="button" onclick="Auth.logout()" aria-label="Sign out">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+              <span>Sign out</span>
+            </button>
+          </div>
         </nav>
         <div class="workspace">
           <div class="doctabs" id="bank-doctabs"></div>
