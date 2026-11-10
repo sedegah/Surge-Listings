@@ -5163,9 +5163,15 @@ const AdminPortal = {
       <td>${valuation.document_id ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(valuation.document_id)}">Open report</button>` : UI.badge('No report')}</td>
       <td><button class="btn small primary" onclick="AdminPortal.openValuation('${UI.escapeHtml(valuation.asset_id)}','${UI.escapeHtml(valuation.id)}')">Review</button></td>
     </tr>`).join('');
+    const pendingTitles = Store.titles.filter(item => item.verification_status !== 'Verified').length;
+    const pendingValuations = Store.valuations.filter(item => item.status !== 'Valid').length;
+    const statusNote = (pendingTitles === 0 && pendingValuations === 0)
+      ? 'All records verified'
+      : `${pendingTitles + pendingValuations} pending review`;
+
     return `
       <div class="page-head"><h1>Title &amp; Valuation</h1>
-        <span class="crumb">${Store.titles.filter(item => item.verification_status !== 'Verified').length} title reviews · ${Store.valuations.filter(item => item.status !== 'Valid').length} valuation reviews</span>
+        <span class="crumb">${Store.titles.length} title records · ${Store.valuations.length} valuation records · ${statusNote}</span>
       </div>
       <div class="group"><div class="caption">Title Records · ${Store.titles.length}</div><div class="gridwrap"><table class="grid">
         <thead><tr><th>Asset</th><th>Bank</th><th>Title Number</th><th>Type</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
