@@ -1377,10 +1377,20 @@ const UI = {
     const win = document.getElementById('modal-window');
     if (win) win.className = 'surge-modal-window' + (wide ? ' wide' : '');
     mb.classList.add('open');
+    mb.style.display = 'flex';
+    if (!mb._clickWired) {
+      mb.addEventListener('click', (e) => {
+        if (e.target === mb) UI.closeModal();
+      });
+      mb._clickWired = true;
+    }
   },
   closeModal() {
     const mb = document.getElementById('modal-backdrop');
-    if (mb) mb.classList.remove('open');
+    if (mb) {
+      mb.classList.remove('open');
+      mb.style.display = 'none';
+    }
   },
   escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -6910,11 +6920,28 @@ const PublicMarket = {
   enquiry(id) {
     const a = Store.getAsset(id) || {};
     UI.modal('Submit Asset Enquiry', `
-      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Enquiry on <b>${UI.escapeHtml(a.ref || '')}</b> (${UI.escapeHtml(a.assetType || a.title || 'Asset')}). A Surge recovery specialist will reply within 4 hours.</p>
-      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="enq-name" style="width:100%" placeholder="Your legal name"></div></div>
-      <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="enq-phone" style="width:100%" placeholder="+233 24 000 0000"></div></div>
-      <div class="field"><span class="lbl">Email Address <span class="req">*</span></span><div class="ctl"><input id="enq-email" style="width:100%" placeholder="you@domain.com"></div></div>
-      <div class="field"><span class="lbl">Message</span><div class="ctl"><textarea id="enq-msg" style="width:100%;min-height:90px" placeholder="Specify your budget range, questions about title, or request for site survey"></textarea></div></div>
+      <div class="modal-asset-strip">
+        <span class="m-tag">${UI.escapeHtml(a.ref || 'ASSET')} &middot; ${UI.escapeHtml(a.assetType || a.category || 'Listing')}</span>
+        <p>Enquiry regarding <b>${UI.escapeHtml(a.title || a.ref || 'Asset')}</b>. A Surge asset recovery specialist will review and reply within 4 hours.</p>
+      </div>
+      <div class="field">
+        <label class="lbl" for="enq-name">Full Name <span class="req">*</span></label>
+        <div class="ctl"><input id="enq-name" placeholder="Your full legal name"></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl" for="enq-phone">Phone Number <span class="req">*</span></label>
+          <div class="ctl"><input id="enq-phone" placeholder="+233 24 000 0000"></div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="enq-email">Email Address <span class="req">*</span></label>
+          <div class="ctl"><input id="enq-email" type="email" placeholder="you@domain.com"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="lbl" for="enq-msg">Message / Specific Questions</label>
+        <div class="ctl"><textarea id="enq-msg" placeholder="Specify your budget range, questions about title verification, or request for site survey..."></textarea></div>
+      </div>
     `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.submitEnquiry('${id}')">Submit Enquiry</button>`);
   },
 
@@ -6951,24 +6978,48 @@ const PublicMarket = {
     if (!a) return;
     const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
     UI.modal('Schedule Supervised Site Viewing', `
-      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">Viewing appointment request on <b>${UI.escapeHtml(a.ref)}</b> (${UI.escapeHtml(a.assetType || a.title)} at ${UI.escapeHtml(a.publicLocation)}). Surge security and recovery officers will accompany you.</p>
-      <div class="field"><span class="lbl">Full Name <span class="req">*</span></span><div class="ctl"><input id="vw-name" style="width:100%" placeholder="Your legal name"></div></div>
-      <div class="row2">
-        <div class="field"><span class="lbl">Phone Number <span class="req">*</span></span><div class="ctl"><input id="vw-phone" style="width:100%" placeholder="+233 ..."></div></div>
-        <div class="field"><span class="lbl">Email Address</span><div class="ctl"><input id="vw-email" style="width:100%" placeholder="buyer@example.com"></div></div>
+      <div class="modal-asset-strip">
+        <span class="m-tag">${UI.escapeHtml(a.ref)} &middot; ${UI.escapeHtml(a.assetType || a.title)}</span>
+        <p>Viewing appointment for <b>${UI.escapeHtml(a.ref)}</b> at ${UI.escapeHtml(a.publicLocation || 'Site')}. Surge security and recovery officers will accompany you.</p>
+      </div>
+      <div class="field">
+        <label class="lbl" for="vw-name">Full Legal Name <span class="req">*</span></label>
+        <div class="ctl"><input id="vw-name" placeholder="Your full legal name as on Ghana Card"></div>
       </div>
       <div class="row2">
-        <div class="field"><span class="lbl">Preferred Date <span class="req">*</span></span><div class="ctl"><input type="date" id="vw-date" value="${tomorrow}" style="width:100%"></div></div>
-        <div class="field"><span class="lbl">Time Slot <span class="req">*</span></span><div class="ctl">
-          <select id="vw-time" style="width:100%">
-            <option>Morning (09:00 - 12:00 GMT)</option>
-            <option>Afternoon (13:00 - 16:00 GMT)</option>
-            <option>Late Afternoon (16:00 - 17:30 GMT)</option>
-          </select>
-        </div></div>
+        <div class="field">
+          <label class="lbl" for="vw-phone">Phone Number <span class="req">*</span></label>
+          <div class="ctl"><input id="vw-phone" placeholder="+233 24 000 0000"></div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="vw-email">Email Address</label>
+          <div class="ctl"><input id="vw-email" type="email" placeholder="buyer@example.com"></div>
+        </div>
       </div>
-      <div class="field"><span class="lbl">Ghana Card PIN (Optional)</span><div class="ctl"><input id="vw-id" placeholder="GHA-XXXXXXXXX-X" style="width:100%"></div></div>
-      <div class="field"><span class="lbl">Notes / Survey Requirements</span><div class="ctl"><textarea id="vw-notes" style="width:100%;min-height:75px" placeholder="Accompanying surveyor details or access requirements"></textarea></div></div>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl" for="vw-date">Preferred Date <span class="req">*</span></label>
+          <div class="ctl"><input type="date" id="vw-date" value="${tomorrow}"></div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="vw-time">Time Slot <span class="req">*</span></label>
+          <div class="ctl">
+            <select id="vw-time">
+              <option>Morning (09:00 - 12:00 GMT)</option>
+              <option>Afternoon (13:00 - 16:00 GMT)</option>
+              <option>Late Afternoon (16:00 - 17:30 GMT)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="lbl" for="vw-id">Ghana Card PIN (Optional)</label>
+        <div class="ctl"><input id="vw-id" placeholder="GHA-XXXXXXXXX-X"></div>
+      </div>
+      <div class="field">
+        <label class="lbl" for="vw-notes">Surveyor Details / Access Requirements</label>
+        <div class="ctl"><textarea id="vw-notes" placeholder="Accompanying surveyor details, technical inspection requests, or access notes..."></textarea></div>
+      </div>
     `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn p" onclick="PublicMarket.submitViewing('${id}')">Confirm Viewing Request</button>`);
   },
 

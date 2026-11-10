@@ -924,3 +924,61 @@ html.surge-offline .switcher::after {
   height: 14px;
   stroke: currentColor;
 }
+
+
+/* Modern Surge Modal Polish */
+.surge-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 28, 55, 0.72) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  z-index: 100000 !important;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.surge-modal-backdrop.open {
+  display: flex !important;
+}
+.surge-modal-window {
+  background: #ffffff !important;
+  border-radius: 10px !important;
+  border: none !important;
+  box-shadow: 0 24px 50px -12px rgba(11, 60, 117, 0.35), 0 0 0 1px rgba(11, 60, 117, 0.08) !important;
+  max-width: 620px !important;
+  overflow: hidden !important;
+}
+.surge-modal-header {
+  background: linear-gradient(135deg, #0B3C75 0%, #082A52 100%) !important;
+  border-bottom: 3px solid #B3262E !important;
+  padding: 16px 22px !important;
+  color: #fff !important;
+}
+.surge-modal-header h3 {
+  color: #fff !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 16.5px !important;
+  font-weight: 700 !important;
+}
+.surge-modal-close {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-radius: 6px !important;
+  width: 32px !important;
+  height: 32px !important;
+  color: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.surge-modal-close:hover {
+  background: #B3262E !important;
+  color: #fff !important;
+}
+.surge-modal-footer {
+  background: #F8FAFC !important;
+  border-top: 1px solid #E2E8F0 !important;
+  padding: 14px 24px !important;
+}
