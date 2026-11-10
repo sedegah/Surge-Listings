@@ -458,10 +458,10 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
   .field .lbl { text-align: left }
 }
 
-/* =========================================================================
+/* =====================================================================
    AUTHENTIC SKELETON LOADING SYSTEM
    Exact 1:1 match with Surge Solutions Enterprise Window UI
-   ========================================================================= */
+   ===================================================================== */
 @keyframes surge-skeleton-shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
