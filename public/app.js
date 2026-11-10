@@ -634,6 +634,7 @@ const Store = {
             branchId: u.branch_id,
             branchName: u.branch_name || 'Head Office',
             status: u.status || 'Active',
+            lockedUntil: u.locked_until || null,
             protected: !!u.is_protected,
             hasPassword: !!u.has_password,
             mfaEnabled: !!u.mfa_enabled,
@@ -745,6 +746,25 @@ const Store = {
       await this.fetchRemote();
     } catch (err) {
       UI.toast(err.message, 'error');
+    }
+  },
+
+  async unlockUser(userId) {
+    try {
+      const res = await fetch(this.API_BASE + `/api/admin/users/${encodeURIComponent(userId)}/unlock`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        cache: 'no-store'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to unlock user.');
+      UI.toast(data.message || 'Account unlocked.', 'success');
+      await this.fetchRemote();
+      AdminPortal.render();
+      return true;
+    } catch (err) {
+      UI.toast(err.message, 'error');
+      return false;
     }
   },
 
@@ -1772,6 +1792,9 @@ const BankPortal = {
   render() {
     this.renderDoctabs();
     this.updateBranchSelect();
+    document.querySelectorAll('#bank-nav .navitem').forEach(n => {
+      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
+    });
     const el = document.getElementById('bank-work');
     if (!el) return;
     if (this.subPage) { el.innerHTML = this.renderSubPage(); return; }
@@ -3963,14 +3986,14 @@ const BankPortal = {
 // ADMIN PORTAL
 // ============================================================
 const AdminPortal = {
-  currentView: 'assets', selectedAssetId: null, detailTab: 'overview', subPage: null,
+  currentView: 'dashboard', selectedAssetId: null, detailTab: 'overview', subPage: null,
   activeBankTab: 'banks', selectedBankFilter: '', staffSearchQuery: '', staffRoleFilter: '', selectedValuationId: null,
   openedReviewDocuments: new Set(), gateReadiness: null, gateReadinessAssetId: null,
   gateReadinessLoading: false, gateReadinessError: '',
   tabs: [
-    { id: 'assets', title: 'Assets', view: 'assets', closable: false }
+    { id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }
   ],
-  activeTabId: 'assets',
+  activeTabId: 'dashboard',
 
   getViewTitle(view) {
     const titleMap = {
@@ -4144,6 +4167,9 @@ const AdminPortal = {
 
   render() {
     this.renderDoctabs();
+    document.querySelectorAll('#admin-nav .navitem').forEach(n => {
+      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
+    });
     const el = document.getElementById('admin-work');
     if (!el) return;
     if (this.subPage) {
@@ -5530,9 +5556,14 @@ const AdminPortal = {
                   </div>
                 </td>
                 <td>
-                  <span class="badge ${u.status === 'Active' ? 'ok' : 'hold'}" style="cursor:pointer" onclick="Store.toggleUserStatus('${u.id}')" title="Click to toggle status">
-                    ${u.status || 'Active'}
-                  </span>
+                  ${(u.lockedUntil && new Date(u.lockedUntil.endsWith('Z') ? u.lockedUntil : u.lockedUntil + 'Z') > new Date()) ? `
+                    <span class="badge alert" style="background:#B3262E;color:#fff;font-weight:700" title="Account locked due to repeated failed logins">LOCKED</span>
+                    <button class="btn small ok" onclick="Store.unlockUser('${u.id}')" style="margin-top:4px;font-size:10.5px;padding:2px 6px">Unlock Account</button>
+                  ` : `
+                    <span class="badge ${u.status === 'Active' ? 'ok' : 'hold'}" style="cursor:pointer" onclick="Store.toggleUserStatus('${u.id}')" title="Click to toggle status">
+                      ${u.status || 'Active'}
+                    </span>
+                  `}
                 </td>
                 <td style="text-align:right">
                   <div style="display:inline-flex;gap:4px">
