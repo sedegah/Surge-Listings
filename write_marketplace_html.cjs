@@ -1,0 +1,87 @@
+const fs = require('fs');
+
+const marketplaceHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Surge Solutions — Asset Disposition Marketplace</title>
+<meta name="description" content="Surge Solutions is the licensed intermediary for bank-repossessed and distressed asset disposition in Ghana. Browse verified listings, complete KYC, and submit purchase offers.">
+<link rel="stylesheet" href="marketplace.css">
+<link rel="stylesheet" href="notifications.css">
+<!-- Progressive Web App Metadata & Icons -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B3C75">
+<meta name="application-name" content="Surge Listings">
+<meta name="apple-mobile-web-app-title" content="Surge Listings">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="msapplication-TileColor" content="#0B3C75">
+<meta name="msapplication-TileImage" content="icons/icon-192.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+</head>
+<body data-portal="public">
+
+<!-- Top Switcher Bar (always visible in app and for navigating portals) -->
+<nav class="switcher" id="marketplace-switcher">
+  <span class="brandmark">SURGE <span>&#9632;</span></span>
+  <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>
+  <a href="admin.html" id="sw-admin-link" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Surge Admin</a>
+  <button data-app="public" class="active">Marketplace</button>
+  <button class="switcher-signout" id="sw-signout-btn" type="button" onclick="Auth.logout()" aria-label="Sign out" style="display:none">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+    <span>Sign out</span>
+  </button>
+</nav>
+
+<!-- Redesigned Marketplace Header -->
+<header class="hdr">
+  <a class="logo" href="#" onclick="PublicMarket.goHome();return false" aria-label="Surge Solutions marketplace home">
+    <img class="lg" src="surge-logo.jpg" alt="Surge Solutions, partners in business growth">
+    <span class="mk">Marketplace</span>
+  </a>
+  <nav id="pub-nav">
+    <a data-page="home" class="on" onclick="PublicMarket.goHome()">Buy Assets</a>
+    <a data-page="how" onclick="PublicMarket.goHow()">How It Works</a>
+    <a data-page="kyc" onclick="PublicMarket.goKyc()">KYC &amp; Verification</a>
+    <a data-page="faq" onclick="PublicMarket.goFaq()">FAQ</a>
+    <a data-page="contact" onclick="PublicMarket.goContact()">Contact</a>
+  </nav>
+  <button class="cta" onclick="PublicMarket.goKyc()">Get verified to buy</button>
+</header>
+
+<!-- Main App Container -->
+<div id="app"></div>
+
+<!-- Notifications & Modals -->
+<div id="surge-notification-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+<div class="toast" id="toast" role="status"></div>
+<div class="surge-modal-backdrop" id="modal-backdrop">
+  <div class="surge-modal-window" id="modal-window">
+    <div class="surge-modal-header">
+      <h3 id="modal-title">Dialog</h3>
+      <button class="surge-modal-close" onclick="UI.closeModal()">&times;</button>
+    </div>
+    <div class="surge-modal-body" id="modal-body"></div>
+    <div class="surge-modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<script src="notifications.js"></script>
+<script src="app.js"></script>
+<script src="pwa.js"></script>
+</body>
+</html>
+`;
+
+const targets = ['marketplace.html', 'public/marketplace.html', 'index.html', 'public/index.html'];
+
+for (const f of targets) {
+  fs.writeFileSync(f, marketplaceHtml, 'utf8');
+  console.log('Wrote', f);
+}

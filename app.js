@@ -7560,7 +7560,12 @@ const PublicMarket = {
   }
 };
 
-document.querySelectorAll('.switcher button[data-app]').forEach(b => b.classList.remove('active'));
+// ============================================================
+// SWITCHER & BOOT
+// ============================================================
+document.querySelectorAll('.switcher button[data-app]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.switcher button[data-app]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.querySelectorAll('.app').forEach(a => a.classList.remove('active'));
     const target = document.getElementById('app-' + btn.dataset.app);
