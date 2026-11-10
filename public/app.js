@@ -6681,13 +6681,9 @@ const PublicMarket = {
 
     return `
       <article class="card" tabindex="0" role="link" onclick="PublicMarket.openDetail('${a.id}')" onkeydown="if(event.key==='Enter')PublicMarket.openDetail('${a.id}')">
-        <div class="img" onclick="PublicMarket.openCardPhoto(event, '${a.id}')" title="Click photo to view Full Screen">
+        <div class="img">
           ${imgHtml}
           <span class="ref">${UI.escapeHtml(a.ref || 'SRG-' + a.id)}</span>
-          <button class="img-fullscreen-btn" type="button" aria-label="View Full Screen" onclick="PublicMarket.openCardPhoto(event, '${a.id}')">
-            ${this.icons.fs}
-            <span>Full Screen</span>
-          </button>
         </div>
         <div class="body">
           <div class="cat">${UI.escapeHtml(cat)}</div>
