@@ -89,7 +89,18 @@ a:hover { text-decoration: underline }
 /* =====================================================================
    DOCUMENT TABS BAR — Clean underline theme matching inner tabs
 ===================================================================== */
+.doctabs-wrap {
+  display: flex;
+  align-items: stretch;
+  background: #FFFFFF;
+  border-bottom: 2px solid #CBD5E1;
+  height: 38px;
+  min-height: 38px;
+  position: relative;
+  flex: 0 0 auto;
+}
 .doctabs {
+  flex: 1 1 auto;
   display: flex;
   align-items: flex-end;
   gap: 0;
@@ -97,19 +108,61 @@ a:hover { text-decoration: underline }
   padding: 0 8px;
   min-height: 38px;
   height: 38px;
-  border-bottom: 2px solid #CBD5E1;
+  border-bottom: none;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  scroll-behavior: smooth;
   user-select: none;
-  flex: 0 0 auto;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 .doctabs::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
+}
+.doctabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: #FFFFFF;
+  height: 38px;
+  border-left: 1px solid #E2E8F0;
+  flex: 0 0 auto;
+  z-index: 3;
+}
+.doctabs-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  border-radius: 2px;
+  color: #0B3C75;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.12s ease;
+}
+.doctabs-nav-btn:hover {
+  background: #E2E8F0;
+  border-color: #0B3C75;
+  color: #0B3C75;
+}
+.doctabs-nav-btn:active {
+  background: #CBD5E1;
+}
+.doctabs-nav-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .dtab {
   height: 38px;

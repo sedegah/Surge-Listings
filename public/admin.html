@@ -92,7 +92,17 @@ body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibil
           <div class="navitem" data-view="audit"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Audit Log</div>
         </nav>
         <div class="workspace">
-          <div class="doctabs" id="admin-doctabs"></div>
+          <div class="doctabs-wrap">
+            <div class="doctabs" id="admin-doctabs"></div>
+            <div class="doctabs-nav">
+              <button class="doctabs-nav-btn" type="button" onclick="AdminPortal.scrollTabs(-1)" title="Previous tabs" aria-label="Previous tabs">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button class="doctabs-nav-btn" type="button" onclick="AdminPortal.scrollTabs(1)" title="Next tabs" aria-label="Next tabs">
+                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
           <main class="work" id="admin-work"></main>
           <footer class="statusbar">
             <span class="cell">User: <b id="profile-user-admin">-</b></span>

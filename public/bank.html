@@ -92,7 +92,17 @@ body[data-portal="bank"]:not(.auth-ready) > :not(#portal-auth-status) { visibili
           <div class="navitem" data-view="notifications"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V9a6 6 0 0112 0v7"/><path d="M4 16h16v4H4z"/></svg>Notifications</div>
         </nav>
         <div class="workspace">
-          <div class="doctabs" id="bank-doctabs"></div>
+          <div class="doctabs-wrap">
+            <div class="doctabs" id="bank-doctabs"></div>
+            <div class="doctabs-nav">
+              <button class="doctabs-nav-btn" type="button" onclick="BankPortal.scrollTabs(-1)" title="Previous tabs" aria-label="Previous tabs">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button class="doctabs-nav-btn" type="button" onclick="BankPortal.scrollTabs(1)" title="Next tabs" aria-label="Next tabs">
+                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
           <main class="work" id="bank-work"></main>
           <footer class="statusbar">
             <span class="cell">User: <b id="profile-user-bank">-</b></span>
