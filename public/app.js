@@ -7613,7 +7613,6 @@ const PublicMarket = {
               <li><span>Monday to Friday</span><small>08:00 to 17:00 GMT</small></li>
               <li><span>Saturday</span><small>09:00 to 14:00 GMT, supervised viewings only</small></li>
               <li><span>Sunday and holidays</span><small>Closed</small></li>
-              <li><a href="bank.html">Bank and staff sign in</a></li>
             </ul>
           </div>
         </div>
