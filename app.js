@@ -748,6 +748,25 @@ const Store = {
     }
   },
 
+  async unlockUser(userId) {
+    try {
+      const res = await fetch(this.API_BASE + `/api/admin/users/${encodeURIComponent(userId)}/unlock`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        cache: 'no-store'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to unlock user.');
+      UI.toast(data.message || 'Account unlocked.', 'success');
+      await this.fetchRemote();
+      AdminPortal.render();
+      return true;
+    } catch (err) {
+      UI.toast(err.message, 'error');
+      return false;
+    }
+  },
+
   async deleteUser(userId) {
     const user = this.users.find(u => u.id === userId);
     if (!user) return;
@@ -4264,7 +4283,7 @@ const AdminPortal = {
         <div class="kpi" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Partner Banks</div><div class="v">${Store.banks.length}</div></div>
         <div class="kpi ok" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Active Staff</div><div class="v">${Store.users.length}</div></div>
       </div>
-      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `      <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} — ${UI.cleanAuditDetail(a.detail, a)}</div><div class="tl-who">${UI.auditActor(a)}</div></li>`).join('')}</ul></div></div>
+      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => UI.renderTimelineItem(a)).join('')}</ul></div></div>
     `;
   },
 

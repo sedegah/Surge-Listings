@@ -41,7 +41,8 @@ body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibil
   <section class="app active" id="app-admin">
     <div class="window">
       <div class="menubar">
-        <span class="app-title"><span class="sq"></span>Surge Solutions — Administration</span>
+        <span class="app-title"><span class="sq"></span>Surge Solutions · Administration</span>
+        <span class="menu-item" onclick="AdminPortal.nav('dashboard')"><u>D</u>ashboard</span>
         <span class="menu-item" onclick="AdminPortal.nav('assets')"><u>A</u>ssets</span>
         <span class="menu-item" onclick="AdminPortal.nav('review')"><u>R</u>eview</span>
         <span class="menu-item" onclick="AdminPortal.nav('legal')"><u>L</u>egal</span>
@@ -63,7 +64,7 @@ body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibil
       <div class="mainrow">
         <nav class="navpane" id="admin-nav">
           <div class="navitem" data-view="dashboard"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</div>
-          <div class="navitem active" data-view="assets"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/></svg>Assets</div>
+          <div class="navitem" data-view="assets"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/></svg>Assets</div>
           <div class="navitem" data-view="review"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Review Queue</div>
           <div class="navitem" data-view="legal"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>Legal Verification</div>
           <div class="navitem" data-view="title"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l7-2 9-9-5-5-9 9z"/></svg>Title &amp; Valuation</div>
