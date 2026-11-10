@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0E2A47"/>
+      <stop offset="50%" stop-color="#0B3C75"/>
+      <stop offset="100%" stop-color="#072850"/>
+    </linearGradient>
+    <linearGradient id="surgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D9E7F6"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Base Rounded Container -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGrad)"/>
+  
+  <!-- Subtle inner border highlight -->
+  <rect x="4" y="4" width="504" height="504" rx="104" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="4" fill="none"/>
+
+  <!-- Brand Signature Red Square with subtle shadow -->
+  <g filter="url(#shadow)">
+    <rect x="88" y="88" width="68" height="68" rx="14" fill="#B3262E"/>
+    <!-- Subtle top sheen on red mark -->
+    <rect x="90" y="90" width="64" height="32" rx="12" fill="#FFFFFF" fill-opacity="0.15"/>
+  </g>
+
+  <!-- Architectural Disposition / Institution Crest Geometry -->
+  <!-- Roof / Pediment -->
+  <path d="M140 236L256 160L372 236H140Z" fill="url(#surgeGrad)"/>
+  
+  <!-- Institutional Columns -->
+  <rect x="168" y="254" width="28" height="116" rx="4" fill="url(#surgeGrad)"/>
+  <rect x="242" y="254" width="28" height="116" rx="4" fill="url(#surgeGrad)"/>
+  <rect x="316" y="254" width="28" height="116" rx="4" fill="url(#surgeGrad)"/>
+
+  <!-- Plinth / Base Pedestal -->
+  <rect x="136" y="380" width="240" height="24" rx="4" fill="url(#surgeGrad)"/>
+  <rect x="120" y="408" width="272" height="18" rx="3" fill="url(#surgeGrad)"/>
+
+  <!-- Centered Stylized "S" Emblem in Plinth -->
+  <path d="M256 280C246 280 238 288 238 298C238 316 274 316 274 334C274 344 266 352 256 352C245 352 238 344 238 344" 
+        stroke="#0B3C75" stroke-width="8" stroke-linecap="round" fill="none"/>
+</svg>
