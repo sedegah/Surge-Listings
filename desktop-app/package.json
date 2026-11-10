@@ -45,15 +45,19 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Surge Listings",
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
+      "installerSidebar": "assets/installerSidebar.bmp",
+      "uninstallerSidebar": "assets/uninstallerSidebar.bmp",
+      "installerHeader": "assets/installerHeader.bmp",
+      "installerHeaderIcon": "assets/icon.ico",
+      "include": "installer.nsh",
       "uninstallDisplayName": "Surge Listings",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
     }
   }
 }
-
