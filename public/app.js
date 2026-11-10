@@ -4479,7 +4479,7 @@ const AdminPortal = {
             this.tabs.push({ id: decoded, title: 'Asset', view: 'assets', assetId, closable: true });
           }
           this.activeTabId = decoded; this.currentView = 'assets'; this.selectedAssetId = assetId;
-        } else if (['dashboard','assets','review','legal','title','offers','banks','audit'].includes(decoded)) {
+        } else if (['dashboard','assets','review','legal','title','offers','enquiries','banks','audit'].includes(decoded)) {
           if (!this.tabs.find(t => t.id === decoded)) {
             this.tabs.push({ id: decoded, title: this.getViewTitle(decoded), view: decoded, closable: decoded !== 'assets' });
           }
@@ -4614,6 +4614,7 @@ const AdminPortal = {
       case 'title': el.innerHTML = this.renderTitleQueue(); break;
       case 'valuations': el.innerHTML = this.renderTitleQueue(); break;
       case 'offers': el.innerHTML = this.renderOffersView(); break;
+      case 'enquiries': el.innerHTML = this.renderEnquiriesView(); break;
       case 'audit': el.innerHTML = this.renderAuditView(); break;
       case 'banks': el.innerHTML = this.renderBanksAndStaffView(); break;
       default: el.innerHTML = this.renderAssetList();
@@ -5279,6 +5280,156 @@ const AdminPortal = {
         </table>
       </div>
     `;
+  },
+
+  renderEnquiriesView() {
+    const leads = Store.leads || [];
+    const viewings = Store.viewings || [];
+    const newLeadsCount = leads.filter(l => l.status === 'New').length;
+    const requestedViewingsCount = viewings.filter(v => v.status === 'Requested').length;
+
+    const leadRows = leads.map(l => {
+      const asset = Store.getAsset(l.assetId) || Store.getAssetByRef(l.assetRef);
+      return `<tr>
+        <td class="ref">${UI.escapeHtml(l.ref || 'ENQ')}</td>
+        <td>
+          <b>${UI.escapeHtml(l.assetRef || 'Asset')}</b>
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
+        </td>
+        <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
+        <td>
+          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}">${UI.escapeHtml(l.phone)}</a>` : '—'}
+          ${l.email ? `<br><a href="mailto:${UI.escapeHtml(l.email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(l.email)}</a>` : ''}
+        </td>
+        <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
+        <td>${UI.fmtDateShort(l.createdAt)}</td>
+        <td>${UI.badge(l.status || 'New')}</td>
+        <td style="text-align:right">
+          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2)">Processed</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    const viewingRows = viewings.map(v => {
+      const asset = Store.getAsset(v.assetId) || Store.getAssetByRef(v.assetRef);
+      return `<tr>
+        <td class="ref">${UI.escapeHtml(v.ref || v.id || 'VW')}</td>
+        <td>
+          <b>${UI.escapeHtml(v.assetRef || 'Asset')}</b>
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
+        </td>
+        <td><b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b></td>
+        <td>${v.phone ? `<a href="tel:${UI.escapeHtml(v.phone)}">${UI.escapeHtml(v.phone)}</a>` : '—'}</td>
+        <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
+        <td style="max-width:280px">${UI.escapeHtml(v.notes || 'None')}</td>
+        <td>${UI.badge(v.status || 'Requested')}</td>
+        <td style="text-align:right">
+          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2)">Scheduled</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="page-head">
+        <h1>Marketplace Enquiries &amp; Viewing Requests</h1>
+        <span class="crumb">${leads.length} total enquiries &middot; ${viewings.length} site viewings</span>
+      </div>
+
+      <div class="kpis" style="margin-bottom:16px">
+        <div class="kpi">
+          <div class="k">Buyer Enquiries</div>
+          <div class="v">${leads.length}</div>
+          <div class="d">Marketplace leads</div>
+        </div>
+        <div class="kpi ${newLeadsCount ? 'warn' : 'ok'}">
+          <div class="k">New / Uncontacted</div>
+          <div class="v">${newLeadsCount}</div>
+          <div class="d">Awaiting officer reply</div>
+        </div>
+        <div class="kpi">
+          <div class="k">Viewing Appointments</div>
+          <div class="v">${viewings.length}</div>
+          <div class="d">Supervised site visits</div>
+        </div>
+        <div class="kpi ${requestedViewingsCount ? 'warn' : 'ok'}">
+          <div class="k">Pending Escort</div>
+          <div class="v">${requestedViewingsCount}</div>
+          <div class="d">Requires security clearance</div>
+        </div>
+      </div>
+
+      <div class="group" style="margin-bottom:18px">
+        <div class="caption">
+          Marketplace Buyer Enquiries
+          <span class="hint">Public buyer requests submitted from asset listings</span>
+        </div>
+        <div class="gridwrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Ref</th>
+                <th>Asset</th>
+                <th>Buyer Name</th>
+                <th>Contact</th>
+                <th>Message / Questions</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th style="text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${leadRows || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-2)">No buyer enquiries received yet.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="caption">
+          Supervised Site Viewing Appointments
+          <span class="hint">Requests from verified buyers requiring recovery officer escort</span>
+        </div>
+        <div class="gridwrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Viewing Ref</th>
+                <th>Asset</th>
+                <th>Buyer Name</th>
+                <th>Phone</th>
+                <th>Scheduled Date / Time</th>
+                <th>Notes / Requirements</th>
+                <th>Status</th>
+                <th style="text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${viewingRows || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-2)">No viewing appointments requested yet.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  },
+
+  markLeadContacted(leadId) {
+    const l = (Store.leads || []).find(x => x.id === leadId);
+    if (l) {
+      l.status = 'Contacted';
+      Store.persist();
+      UI.toast('Lead marked as contacted.', 'success');
+      this.render();
+    }
+  },
+
+  confirmViewingScheduled(viewingId) {
+    const v = (Store.viewings || []).find(x => x.id === viewingId);
+    if (v) {
+      v.status = 'Scheduled';
+      Store.persist();
+      UI.toast('Viewing escort confirmed and scheduled.', 'success');
+      this.render();
+    }
   },
 
   renderAuditView() {
