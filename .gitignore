@@ -1,29 +1,123 @@
-# Environment variables
+# ============================================================
+# SURGE SOLUTIONS · INSTITUTIONAL GITIGNORE CONFIGURATION
+# Protects confidential credentials, institutional documents,
+# databases, cloud tokens, and desktop application build binaries.
+# ============================================================
+
+# 1. Environment Variables, Secrets & Credentials
 .env
 .env.*
-.env.example
+!.env.example
+*.env
+*.env.local
+*.env.production
+*.env.development
+*.env.test
+secrets.json
+wrangler.secrets*
+credentials.json
+service-account*.json
+client_secret*.json
 
-# Dependencies
-node_modules/
-package-lock.json
+# 2. Cryptographic Keys, Certificates & Tokens
+*.pem
+*.key
+*.cert
+*.crt
+*.cer
+*.pfx
+*.p12
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.ppk
 
-# Local databases and runtime data
-data/*.db
-data/*.sqlite
-*.sqlite
-*.db
-
-# Wrangler & Cloudflare build artifacts
+# 3. Cloudflare, Vercel & Cloud Provider Artifacts
 .wrangler/
 .mf/
+.cloudflare/
+.vercel/
+.aws/
 
-# Logs
+# 4. Institutional Records, KYC & Document Uploads
+uploads/
+documents/
+kyc/
+downloads/
+temp/
+tmp/
+exports/
+*.pdf
+*.docx
+*.xlsx
+*.csv
+
+# 5. Local Databases, Snapshots & Backups
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.s3db
+*.db-shm
+*.db-wal
+*.db-journal
+*.dump
+*.sql.bak
+*.bak
+
+# 6. Desktop Application Binaries & Packaging (Electron)
+desktop-app/dist/
+desktop-app/build/
+desktop-app/out/
+desktop-app/package-lock.json
+dist/
+build/
+out/
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.AppImage
+*.blockmap
+*.nsis.7z
+win-unpacked/
+
+# 7. Dependencies & Package Management
+node_modules/
+desktop-app/node_modules/
+package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-*.log
+pnpm-debug.log*
 
-# OS generated files
+# 8. Temporary & Diagnostic Scripts
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# 9. Logs & Runtime Diagnostic Dumps
+*.log
+logs/
+
+# 10. OS & IDE Metadata
 .DS_Store
 Thumbs.db
-.env.example
+desktop.ini
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.user
+*.sublime-workspace
+*.sublime-project
