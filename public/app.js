@@ -353,7 +353,250 @@ const Store = {
     // No-op — data comes exclusively from fetchRemote()
   },
 
-  async fetchRemote() {
+  _parseAsset(d, portal = '') {
+    if (!d) return null;
+    if (portal === 'public') {
+      return {
+        id: d.id,
+        ref: d.public_ref,
+        bankId: '',
+        bankName: '',
+        category: d.category_code,
+        assetType: d.asset_type,
+        title: d.title,
+        region: d.region,
+        district: d.district || '',
+        town: d.town || '',
+        publicLocation: d.public_location,
+        description: d.description,
+        reserve: d.reserve_price,
+        showReserve: !!d.show_reserve_publicly,
+        status: d.status,
+        publicationStatus: d.status === 'Live' ? 'Published' : 'Unpublished',
+        legalHold: false,
+        exteriorImage: (d.image_count || 0) > 0,
+        primaryImage: d.primary_image || '',
+        images: d.image_count || 0,
+        beds: d.beds || null,
+        baths: d.baths || null,
+        occupancyStatus: d.occupancy_status || '',
+        landGuardRisk: d.land_guard_risk || '',
+        priceDisplay: d.price_display || 'Price on Application',
+        legalStatus: 'Cleared',
+        titleVerified: true,
+        legalSubstate: { clearanceIssued: true, instrumentsVerified: true }
+      };
+    }
+    return {
+      id: d.id,
+      ref: d.public_ref,
+      bankId: d.bank_id,
+      bankName: d.bank_name || '',
+      ownershipType: d.ownership_type || 'bank',
+      ownerBankId: d.owner_bank_id || '',
+      ownerBankName: d.owner_bank_name || '',
+      ownerName: d.owner_name || '',
+      category: d.category_code,
+      assetType: d.asset_type,
+      region: d.region,
+      district: d.district || '',
+      town: d.town || '',
+      publicLocation: d.public_location,
+      exactAddress: d.exact_address,
+      description: d.description,
+      reserve: d.reserve_price,
+      minOffer: d.minimum_offer,
+      showReserve: !!d.show_reserve_publicly,
+      status: d.status,
+      publicationStatus: d.status === 'Live' ? 'Published' : (d.status === 'Approved' ? 'Pending Approval' : 'Unpublished'),
+      legalStatus: d.legal_hold_active ? 'On Hold' : (d.enforcement_case_status === 'Cleared' ? 'Cleared' : (d.enforcement_case_number ? 'Pending' : 'Not Started')),
+      valuationAmount: d.valuation_market_value || 0,
+      forcedSaleValue: d.valuation_forced_sale_value || 0,
+      valuationDate: d.valuation_date || null,
+      valuationExpiry: d.valuation_expiry_date || null,
+      valuationValidityDays: d.valuation_validity_period_days || 180,
+      valuerName: d.valuation_valuer_name || '',
+      valuationStatus: d.valuation_status || '',
+      valuationReviewRequired: !!d.valuation_review_required,
+      valuationDocumentId: d.valuation_document_id || d.latest_valuation_document_id || '',
+      landSearchValid: !d.legal_hold_active,
+      injunctionActive: !!d.active_injunction,
+      legalHold: !!d.legal_hold_active,
+      legalHoldReason: d.legal_hold_reason || '',
+      exteriorImage: (d.image_count || 0) > 0,
+      titleNumber: d.title_certificate_number || '',
+      titleType: d.title_type || '',
+      titleRegistry: d.title_registry || '',
+      titleOwner: d.title_registered_owner || '',
+      titlePerfection: d.title_perfection_status || '',
+      titleVerificationStatus: d.title_verification_status || '',
+      titleDocumentId: d.title_document_id || d.latest_title_document_id || '',
+      titleVerified: d.title_verification_status === 'Verified',
+      titleDetails: !!d.title_certificate_number,
+      caseRef: d.enforcement_case_number || d.internal_bank_ref || '',
+      branchId: d.branch_id || '',
+      branchName: d.branch_name || '',
+      enforcementBasis: d.enforcement_basis || '',
+      images: d.image_count || 0,
+      documents: d.document_count || 0,
+      activeOffers: d.offer_count || 0,
+      deletionRequested: !!d.deletion_requested,
+      createdAt: d.created_at,
+      updatedAt: d.updated_at,
+      createdBy: d.created_by || 'Not recorded',
+      legalSubstate: {
+        enforcementRecorded: !!d.enforcement_case_number,
+        instrumentsVerified: (d.legal_instruments || []).length > 0 &&
+          d.legal_instruments.every(instrument => instrument.verification_status === 'Verified'),
+        injunctionClear: !d.active_injunction,
+        clearanceIssued: d.enforcement_case_status === 'Cleared'
+      },
+      legalNotes: [],
+      instruments: (d.legal_instruments || []).map(instrument => ({
+        id: instrument.id,
+        type: instrument.instrument_type,
+        ref: instrument.instrument_ref,
+        status: instrument.verification_status,
+        documentId: instrument.document_id || '',
+        uploadedBy: instrument.uploaded_by_name || 'Not recorded',
+        uploadedAt: instrument.uploaded_at || '',
+        uploadedByPublicId: instrument.uploaded_by_public_id || ''
+      })),
+      activity: [{ when: d.created_at, who: d.created_by || 'Not recorded', what: 'Asset created' }]
+    };
+  },
+
+  _parseOffer(o) {
+    if (!o) return null;
+    let ghanaCard = '';
+    let phone = '';
+    let email = '';
+    const notes = o.notes || '';
+    const gcMatch = notes.match(/Ghana Card:\s*([^\s·]+)/i);
+    if (gcMatch) ghanaCard = gcMatch[1];
+    const phoneMatch = notes.match(/Contact:\s*([^\s(]+)/i);
+    if (phoneMatch) phone = phoneMatch[1];
+    const emailMatch = notes.match(/\(([^)]+@[^)]+)\)/i);
+    if (emailMatch) email = emailMatch[1];
+
+    return {
+      id: o.id,
+      ref: o.offer_ref,
+      assetId: o.asset_id,
+      assetRef: o.asset_ref || '',
+      assetTitle: o.asset_title || '',
+      bankName: o.bank_name || '',
+      buyer: o.buyer_name,
+      amount: o.amount,
+      status: o.status,
+      belowReserve: !!o.below_reserve,
+      date: o.created_at,
+      validity: o.validity_date,
+      notes: o.notes || '',
+      conditions: o.conditions || 'Cash / Direct Bank Transfer',
+      ghanaCard: ghanaCard || '',
+      phone: phone || '',
+      email: email || '',
+      surgeVerified: !!o.surge_verified,
+      surgeVerifiedBy: o.surge_verified_by || '',
+      surgeVerifiedAt: o.surge_verified_at || null,
+      rejectionReason: o.rejection_reason || ''
+    };
+  },
+
+  async fetchAssets() {
+    try {
+      const headers = this.getAuthHeaders();
+      const portal = document.body?.dataset.portal;
+      const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
+      const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : portal === 'public' ? '/api/marketplace/assets' : '/api/v1/assets' + scopeParam;
+      const res = await fetch(this.API_BASE + assetsEndpoint, { headers, cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.assets = json.data.map(d => this._parseAsset(d, portal));
+          return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  async fetchOffers() {
+    try {
+      const headers = this.getAuthHeaders();
+      const portal = document.body?.dataset.portal;
+      const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
+      const res = await fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.offers = json.data.map(o => this._parseOffer(o));
+          return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  async fetchAuditLogs() {
+    try {
+      const headers = this.getAuthHeaders();
+      const portal = document.body?.dataset.portal;
+      const scopeParam = portal === 'admin' ? '?scope=all' : '';
+      const res = await fetch(this.API_BASE + '/api/v1/audit-logs' + (scopeParam ? scopeParam : ''), { headers, cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.auditLog = json.data
+            .filter(a => ['Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase'].includes(a.entity_type) && !a.action_type?.startsWith('SESSION_'))
+            .map(a => ({
+              id: a.id,
+              when: a.created_at,
+              who: a.actor_name,
+              actorRole: a.actor_role,
+              organization: a.organization,
+              action: a.action_type,
+              entity: a.entity_type,
+              entityRef: a.entity_id,
+              detail: a.delta_summary
+            }));
+          return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  async fetchDocuments() {
+    try {
+      const headers = this.getAuthHeaders();
+      const portal = document.body?.dataset.portal;
+      const endpoint = portal === 'admin' ? '/api/admin/documents' : '/api/bank/documents';
+      const res = await fetch(this.API_BASE + endpoint, { headers, cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          this.documents = json.data.map(d => ({
+            id: d.id, asset_id: d.asset_id, asset_ref: d.asset_ref || '',
+            title: d.title, category: d.category,
+            filename: d.filename, file_size: d.file_size,
+            uploaded_at: d.uploaded_at, uploaded_by_name: d.uploaded_by_name
+          }));
+          return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  },
+
+  fetchRemote() {
+    if (this._fetchPromise) return this._fetchPromise;
+    this._fetchPromise = this._doFetchRemote().finally(() => { this._fetchPromise = null; });
+    return this._fetchPromise;
+  },
+
+  async _doFetchRemote() {
     try {
       const headers = this.getAuthHeaders();
       const portal = document.body?.dataset.portal;
@@ -970,135 +1213,72 @@ const Store = {
 // UI UTILITIES
 // ============================================================
 const UI = {
-  renderSkeletonLoader(portal = 'bank') {
+  getTabIcon(tab) {
+    if (!tab) return '';
+    const id = tab.id || '';
+    const view = tab.view || '';
+    if (id === 'dashboard' || view === 'dashboard') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
+    }
+    if (id.startsWith('asset-') || tab.assetId) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
+    }
+    if (id === 'assets' || view === 'assets') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
+    }
+    if (id === 'legal' || view === 'legal' || id.startsWith('legal-')) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>`;
+    }
+    if (id === 'documents' || view === 'documents') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l7-2 9-9-5-5-9 9z"/><path d="M14 4l5 5"/></svg>`;
+    }
+    if (id.startsWith('offer-') || id === 'offers' || view === 'offers') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>`;
+    }
+    if (id === 'reports' || view === 'reports') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V9M12 20V4M19 20v-7"/></svg>`;
+    }
+    if (id === 'notifications' || view === 'notifications') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V9a6 6 0 0112 0v7"/><path d="M4 16h16v4H4z"/></svg>`;
+    }
+    if (id === 'review' || view === 'review') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`;
+    }
+    if (id === 'title' || view === 'title' || id.startsWith('title-')) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    }
+    if (id === 'banks' || view === 'banks') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M15 10v11M12 3l9 7H3z"/></svg>`;
+    }
+    if (id === 'audit' || view === 'audit') {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`;
+    }
+    if (id.startsWith('val-')) {
+      return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+    }
+    return `<svg class="dtab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  },
+
+  renderVerificationScreen(portal = 'bank') {
     const isBank = portal === 'bank';
-    return `<nav class="switcher">
-      <span class="brandmark">SURGE <span>&#9632;</span></span>
-      ${isBank ? '<button class="active">Bank Portal</button><span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Surge Admin</span>' : '<span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</span><button class="active">Surge Admin</button>'}
-      <span class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</span>
-      <span class="skeleton-shimmer" style="margin-left:auto;width:80px;height:24px;border-radius:4px;background:rgba(224,85,92,0.18) !important"></span>
-    </nav>
-    <div class="viewport">
-      <div class="window">
-        <div class="menubar">
-          <span class="app-title"><span class="sq"></span>Surge Solutions</span>
-          <span class="menu-item"><u>A</u>ssets</span>
-          <span class="menu-item"><u>L</u>egal</span>
-          <span class="menu-item"><u>S</u>ales</span>
-          <span class="menu-item"><u>R</u>eports</span>
-          <span class="menu-spacer"></span>
-          <span class="menu-env">${isBank ? 'BANK PORTAL' : 'SURGE ADMIN'}</span>
+    const envLabel = isBank ? 'BANK PORTAL' : 'SURGE ADMIN';
+    const subtitle = isBank ? 'Authenticating secure banking workspace' : 'Authenticating administrative console';
+    return `
+      <div class="auth-dialog-card">
+        <div class="auth-dialog-header">
+          <span class="auth-dialog-brand"><span class="sq"></span>Surge Solutions</span>
+          <span class="auth-dialog-env">${envLabel}</span>
         </div>
-        <div class="toolbar">
-          <span class="skeleton-shimmer" style="width:105px;height:28px"></span>
-          <span class="tsep"></span>
-          <span class="skeleton-shimmer" style="width:120px;height:28px"></span>
-          <span class="tsep"></span>
-          <span class="skeleton-shimmer" style="width:65px;height:28px"></span>
-          <span class="skeleton-shimmer" style="width:75px;height:28px"></span>
-          <span class="skeleton-shimmer" style="margin-left:auto;width:210px;height:26px"></span>
-        </div>
-        <div class="mainrow">
-          <div class="navpane">
-            <div class="navitem active"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:85px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:70px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:110px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:80px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:115px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:65px;height:13px"></span></div>
-            <div class="navitem"><span class="skeleton-shimmer" style="width:16px;height:16px;border-radius:2px"></span><span class="skeleton-shimmer" style="width:90px;height:13px"></span></div>
-          </div>
-          <div class="workspace">
-            <div class="doctabs">
-              <div class="dtab active"><span class="skeleton-shimmer" style="width:70px;height:12px"></span></div>
-            </div>
-            <div class="work">
-              <div class="page-head">
-                <span class="skeleton-shimmer" style="width:130px;height:20px"></span>
-                <span class="skeleton-shimmer" style="width:200px;height:13px"></span>
-                <span class="spacer"></span>
-                <span class="skeleton-shimmer" style="width:105px;height:28px"></span>
-              </div>
-              <div class="kpis">
-                <div class="kpi"><div class="skeleton-shimmer" style="width:70px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:35px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:110px;height:11px"></div></div>
-                <div class="kpi ok"><div class="skeleton-shimmer" style="width:75px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:40px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:95px;height:11px"></div></div>
-                <div class="kpi warn"><div class="skeleton-shimmer" style="width:85px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:30px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:115px;height:11px"></div></div>
-                <div class="kpi alert"><div class="skeleton-shimmer" style="width:70px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:30px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:125px;height:11px"></div></div>
-                <div class="kpi"><div class="skeleton-shimmer" style="width:80px;height:11px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:40px;height:22px;margin-bottom:6px"></div><div class="skeleton-shimmer" style="width:105px;height:11px"></div></div>
-              </div>
-              <div class="gridwrap">
-                <div class="gridtoolbar">
-                  <div class="skeleton-shimmer" style="width:250px;height:26px"></div>
-                  <span class="skeleton-shimmer" style="margin-left:auto;width:180px;height:12px"></span>
-                </div>
-                <table class="grid">
-                  <thead>
-                    <tr>
-                      <th><span class="skeleton-shimmer" style="width:90px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:120px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:80px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:110px;height:12px"></span></th>
-                      <th class="num"><span class="skeleton-shimmer" style="width:85px;height:12px;margin-left:auto"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:65px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:75px;height:12px"></span></th>
-                      <th><span class="skeleton-shimmer" style="width:70px;height:12px"></span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:135px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:70px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:130px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:85px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:155px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:85px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:120px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:90px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:125px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:140px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:80px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                    <tr>
-                      <td><span class="skeleton-shimmer" style="width:115px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:140px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:80px;height:14px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:110px;height:14px"></span></td>
-                      <td class="num"><span class="skeleton-shimmer" style="width:95px;height:14px;margin-left:auto"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:55px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:65px;height:18px;border-radius:2px"></span></td>
-                      <td><span class="skeleton-shimmer" style="width:75px;height:14px"></span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="statusbar">
-          <span class="cell">Platform: <b>Surge Enterprise</b></span>
-          <span class="cell">Tenant: <b>${isBank ? 'Surge Partner Bank' : 'Platform Oversight'}</b></span>
-          <span class="cell">Status: <b>Active</b></span>
-          <span class="cell grow">Encrypted TLS 1.3</span>
+        <div class="auth-dialog-body">
+          <div class="auth-spinner"></div>
+          <div class="auth-title">Verifying session…</div>
+          <div class="auth-subtitle">${subtitle}</div>
         </div>
       </div>
-    </div>`;
+    `;
+  },
+  renderSkeletonLoader(portal = 'bank') {
+    return this.renderVerificationScreen(portal);
   },
 
   toast(msg, type = 'success', duration = 3500) {
@@ -1171,25 +1351,178 @@ const UI = {
   auditActor(entry) {
     if (!entry) return 'System';
     const who = this.escapeHtml(entry.who || 'Staff Member');
-    const role = this.escapeHtml(entry.actorRole || 'Staff');
+    const roleCodes = {
+      'SA': 'Surge Admin',
+      'AP': 'Surge Partner',
+      'LRO': 'Loan Recovery Officer',
+      'AO': 'Asset Officer',
+      'SO': 'Settlements Officer',
+      'RA': 'Risk & Compliance',
+      'ED': 'Executive Director',
+      'Staff': 'Staff Officer'
+    };
+    const role = this.escapeHtml(roleCodes[entry.actorRole] || entry.actorRole || 'Staff');
     const org = this.escapeHtml(entry.organization || '');
     if (entry.actorRole === 'Buyer' || entry.actorRole === 'Public Buyer') {
       return `${who} · Buyer`;
     }
-    // Do not show hash codes of logs: display only verified names, roles and organizations
     const parts = [who, role, org].filter(Boolean);
     return parts.join(' · ') || 'Verified Staff';
   },
+
+  renderAuditRow(item) {
+    if (!item) return '';
+    const actionLabel = this.auditActionLabel(item.action);
+    const ref = this.cleanAuditRef(item.entityRef, item.entity);
+    const detail = this.cleanAuditDetail(item.detail, item);
+    const actor = this.auditActor(item);
+    const when = this.fmtDate(item.when);
+    let changeSnippet = '';
+    if (item.oldValue && item.newValue) {
+      changeSnippet = ` <span class="ae-change" style="color:var(--text-2);font-size:11px">(${this.escapeHtml(item.oldValue)} &rarr; ${this.escapeHtml(item.newValue)})</span>`;
+    }
+    return `
+      <div class="audit-entry">
+        <div class="ae-when">${when}</div>
+        <div class="ae-who">${actor}</div>
+        <div class="ae-what">
+          <b>${this.escapeHtml(actionLabel)}</b>${ref ? ` &middot; <span class="ref">${this.escapeHtml(ref)}</span>` : ''}${changeSnippet}
+          ${detail ? `<div class="ae-detail" style="margin-top:2px;color:var(--text-2);font-size:12px;line-height:1.4">${detail}</div>` : ''}
+        </div>
+      </div>
+    `;
+  },
+
+  renderTimelineItem(a) {
+    if (!a) return '';
+    const actionLabel = this.auditActionLabel(a.action);
+    const ref = this.cleanAuditRef(a.entityRef, a.entity);
+    const detail = this.cleanAuditDetail(a.detail, a);
+    const actor = this.auditActor(a);
+    const dotClass = a.action === 'LEGAL_HOLD' ? 'red' : (a.action === 'PUBLISH' ? 'green' : '');
+    return `
+      <li>
+        <span class="dot ${dotClass}"></span>
+        <div class="tl-when">${this.fmtDate(a.when)}</div>
+        <div class="tl-what">
+          <b>${this.escapeHtml(actionLabel)}</b>${ref ? ` &middot; <span class="ref">${this.escapeHtml(ref)}</span>` : ''}
+          <div style="margin-top:2px;color:var(--text-2);font-size:11.5px;line-height:1.35">${detail}</div>
+        </div>
+        <div class="tl-who">${actor}</div>
+      </li>
+    `;
+  },
+
+  auditActionLabel(action) {
+    if (!action) return 'Activity Recorded';
+    const map = {
+      'UPDATE': 'Asset Details Updated',
+      'CREATE': 'Draft Asset Created',
+      'DELETE': 'Asset Deleted',
+      'SUBMIT': 'Submitted for Review',
+      'START_REVIEW': 'Review Commenced',
+      'APPROVE': 'Approved for Disposition',
+      'REQUEST_CHANGES': 'Changes Requested',
+      'REJECT': 'Disposition Declined',
+      'PUBLISH': 'Published to Marketplace',
+      'UNPUBLISH': 'Withdrawn from Marketplace',
+      'LEGAL_HOLD': 'Placed on Legal Hold',
+      'RELEASE_HOLD': 'Legal Hold Released',
+      'OFFER_VERIFY': 'Offer Verified',
+      'OFFER_DECISION': 'Offer Decision Recorded',
+      'OFFER_REJECT': 'Offer Rejected',
+      'OFFER_RESCIND': 'Offer Acceptance Rescinded',
+      'INVOICE_GENERATED': 'Commission Invoice Issued',
+      'DELETION_REQUEST': 'Asset Removal Requested',
+      'REJECT_DELETION_REQUEST': 'Deletion Request Dismissed',
+      'VERIFY_TITLE': 'Title Deed Cleared',
+      'REJECT_TITLE': 'Title Deed Flagged',
+      'VERIFY_VALUATION': 'Valuation Cleared',
+      'REJECT_VALUATION': 'Valuation Flagged',
+      'ADD_BANK': 'Partner Bank Enrolled',
+      'DELETE_BANK': 'Partner Bank Removed',
+      'CREATE_USER': 'Staff Enrolled',
+      'RESET_PASSWORD': 'Password Reset',
+      'SESSION_ROTATED': 'Secure Session Refreshed',
+      'CREATE_BRANCH': 'Branch Enrolled',
+      'UPDATE_BRANCH': 'Branch Updated',
+      'DELETE_BRANCH': 'Branch Removed'
+    };
+    if (map[action]) return map[action];
+    return action.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  },
+
   cleanAuditDetail(detail, entry) {
-    if (!detail) return entry?.action || 'Activity recorded';
-    // Remove any hex hash codes, UUIDs, or raw database ID hashes
-    let clean = String(detail)
+    if (!detail) return this.auditActionLabel(entry?.action) || 'Activity recorded';
+    let text = String(detail)
+      .replace(/—/g, ' - ')
       .replace(/\b[0-9a-fA-F]{24,64}\b/g, '')
       .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '')
       .replace(/\b(u|doc|val|li|img|sess|asset|bank|branch)-[a-zA-Z0-9_-]{8,}\b/g, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
-    return this.escapeHtml(clean || entry?.action || 'Activity recorded');
+
+    // Translate raw technical camelCase lists:
+    if (text.startsWith('Asset updated:')) {
+      const rawFields = text.replace('Asset updated:', '').split(',').map(s => s.trim()).filter(Boolean);
+      const dict = {
+        internalBankRef: 'Internal Reference',
+        categoryCode: 'Category',
+        assetType: 'Property Type',
+        title: 'Title',
+        description: 'Description',
+        region: 'Region',
+        district: 'District',
+        town: 'Town',
+        publicLocation: 'Location',
+        exactAddress: 'Exact Address',
+        reservePrice: 'Reserve Price',
+        minimumOffer: 'Minimum Offer',
+        showReservePublicly: 'Public Pricing',
+        occupancyStatus: 'Occupancy Status',
+        landGuardRisk: 'Land Guard Risk',
+        beds: 'Bedrooms',
+        baths: 'Bathrooms',
+        branchId: 'Branch Allocation',
+        ownerBankId: 'Owning Bank',
+        ownerName: 'Asset Owner'
+      };
+      const cleanFields = rawFields.map(f => dict[f] || f);
+      if (cleanFields.length >= 4) {
+        if (rawFields.includes('reservePrice') || rawFields.includes('minimumOffer')) {
+          text = 'Updated property details, location, and reserve pricing';
+        } else {
+          text = 'Updated property details and location';
+        }
+      } else if (cleanFields.length > 0) {
+        text = 'Updated ' + cleanFields.join(', ');
+      } else {
+        text = 'Updated asset details';
+      }
+    } else if (text.includes('deleted by Surge Admin')) {
+      text = 'Asset permanently deleted by Surge Administrator';
+    } else if (text.includes('Offer verified by Surge Admin')) {
+      text = 'Offer verified by Surge Admin and released to Recovery Bank for review';
+    } else if (text.startsWith('Draft asset created:')) {
+      text = 'Draft asset record initialized';
+    } else if (text.startsWith('Bank requested deletion:')) {
+      text = 'Bank requested asset deletion: ' + text.replace('Bank requested deletion:', '').trim();
+    } else if (text.startsWith('Legal hold imposed:')) {
+      text = 'Legal hold placed: ' + text.replace('Legal hold imposed:', '').trim();
+    } else if (text.includes('Legal hold released')) {
+      text = 'Legal hold cleared; asset approved for disposition';
+    } else if (text.includes('submitted on') && text.includes('awaiting Surge')) {
+      text = text.replace(/awaiting Surge.*$/i, '(awaiting Surge review)');
+    } else if (text.includes('Legacy bearer session rotated')) {
+      text = 'User session security refreshed';
+    } else if (text.includes('All active sessions revoked')) {
+      text = 'All active user sessions signed out';
+    } else if (text.includes('User revoked an active session')) {
+      text = 'User session signed out';
+    }
+
+    text = text.replace(/—/g, ' - ');
+    return this.escapeHtml(text || this.auditActionLabel(entry?.action) || 'Activity recorded');
   },
   cleanAuditRef(ref, entityType) {
     if (!ref) return '';
@@ -1347,7 +1680,7 @@ const UI = {
         <table>
           <thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Entity</th><th>Reference</th><th>Detail</th></tr></thead>
           <tbody>
-            ${logs.map(a => `<tr><td style="white-space:nowrap">${this.fmtDate(a.when)}</td><td>${this.escapeHtml(a.who || '')}</td><td class="mono">${a.action}</td><td>${a.entity}</td><td class="mono">${a.entityRef || ''}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(a.detail || '')}</td></tr>`).join('')}
+            ${logs.map(a => `<tr><td style="white-space:nowrap">${this.fmtDate(a.when)}</td><td>${this.escapeHtml(a.who || '')}</td><td class="mono">${this.escapeHtml(this.auditActionLabel(a.action))}</td><td>${a.entity}</td><td class="mono">${a.entityRef || ''}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(this.cleanAuditDetail(a.detail, a))}</td></tr>`).join('')}
           </tbody>
         </table>`;
     }
@@ -1424,7 +1757,7 @@ const UI = {
 // BANK PORTAL
 // ============================================================
 const BankPortal = {
-  currentView: 'assets', selectedAssetId: null, detailTab: 'overview',
+  currentView: 'dashboard', selectedAssetId: null, detailTab: 'overview',
   subPage: null,
   branches: [],
   branchStats: null,
@@ -1432,6 +1765,14 @@ const BankPortal = {
     { id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }
   ],
   activeTabId: 'dashboard',
+
+  updateCurrentTab(updates) {
+    if (!Array.isArray(this.tabs)) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && updates && typeof updates === 'object') {
+      Object.assign(tab, updates);
+    }
+  },
 
   getViewTitle(view) {
     const titleMap = {
@@ -1500,6 +1841,17 @@ const BankPortal = {
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('bank');
     if (!authed) return;
+
+    const tabsEl = document.getElementById('bank-doctabs');
+    if (tabsEl && !tabsEl._wheelBound) {
+      tabsEl._wheelBound = true;
+      tabsEl.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+          tabsEl.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+    }
 
     document.querySelectorAll('#bank-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
@@ -1667,12 +2019,27 @@ const BankPortal = {
       this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Dashboard', view: current, closable: false }];
       this.activeTabId = current;
     }
-    el.innerHTML = this.tabs.map(t => `
-      <div class="dtab ${t.id === this.activeTabId ? 'active' : ''}" onclick="BankPortal.switchTab('${UI.escapeHtml(t.id)}')">
-        <span>${UI.escapeHtml(t.title)}</span>
-        ${t.closable ? `<span class="x" title="Close tab" onclick="BankPortal.closeTab('${UI.escapeHtml(t.id)}', event)">×</span>` : ''}
-      </div>
-    `).join('');
+    el.innerHTML = this.tabs.map(t => {
+      const isActive = t.id === this.activeTabId;
+      return `
+        <div class="dtab ${isActive ? 'active' : ''}"
+             role="tab"
+             aria-selected="${isActive ? 'true' : 'false'}"
+             tabindex="0"
+             title="${UI.escapeHtml(t.title)}"
+             onclick="BankPortal.switchTab('${UI.escapeHtml(t.id)}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();BankPortal.switchTab('${UI.escapeHtml(t.id)}');}"
+             onauxclick="if(event.button===1){event.preventDefault();${t.closable ? `BankPortal.closeTab('${UI.escapeHtml(t.id)}',event)` : ''}}">
+          ${UI.getTabIcon(t)}
+          <span class="dtab-title">${UI.escapeHtml(t.title)}</span>
+          ${t.closable ? `
+            <span class="x" role="button" aria-label="Close tab ${UI.escapeHtml(t.title)}" title="Close tab (or middle click)" onclick="BankPortal.closeTab('${UI.escapeHtml(t.id)}', event)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </span>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
   },
 
   getSubPageTitle() {
@@ -1714,13 +2081,7 @@ const BankPortal = {
         <div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity ${activeBranch ? '— ' + activeBranch.name : ''}</strong></div>
         <div style="padding:10px 14px">
           <ul class="timeline">
-            ${Store.getBankAuditLogs().slice(0, 8).map(a => `
-              <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span>
-                <div class="tl-when">${UI.fmtDate(a.when)}</div>
-                <div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} — ${UI.cleanAuditDetail(a.detail, a)}</div>
-                <div class="tl-who">${UI.auditActor(a)}</div>
-              </li>
-            `).join('') || '<li style="color:var(--text-2)">No recent activity</li>'}
+            ${Store.getBankAuditLogs().slice(0, 8).map(a => UI.renderTimelineItem(a)).join('') || '<li style="color:var(--text-2)">No recent activity</li>'}
           </ul>
         </div>
       </div>
@@ -1781,22 +2142,32 @@ const BankPortal = {
   openAsset(id) {
     this._stagedFile = null;
     this._stagedPhotos = {};
-    this.selectedAssetId = id;
-    this.currentView = 'assets';
-    this.detailTab = 'overview';
-    this.subPage = null;
-    this.render();
+    const a = Store.getAsset(id);
+    this.openTab({
+      id: 'asset-' + id,
+      title: a ? a.ref : 'Asset ' + id,
+      view: 'assets',
+      assetId: id,
+      subPage: null,
+      detailTab: 'overview',
+      closable: true
+    });
     void this.loadPhotos(id);
   },
   closeAsset() {
     this._stagedFile = null;
     this._stagedPhotos = {};
-    this.selectedAssetId = null;
-    this.subPage = null;
-    this.render();
+    if (this.activeTabId && this.activeTabId.startsWith('asset-')) {
+      this.closeTab(this.activeTabId);
+    } else {
+      this.selectedAssetId = null;
+      this.subPage = null;
+      this.render();
+    }
   },
   setTab(t) {
     this.detailTab = t;
+    this.updateCurrentTab({ detailTab: t });
     this.render();
     if (t === 'media' && this.selectedAssetId) {
       void this.loadPhotos(this.selectedAssetId);
@@ -1804,14 +2175,20 @@ const BankPortal = {
   },
 
   openOffer(offerId) {
-    this.selectedOfferId = offerId;
-    this.currentView = 'offers';
-    this.subPage = 'offer-detail';
-    this.render();
+    const o = Store.offers.find(x => x.id === offerId);
+    this.openTab({
+      id: 'offer-' + offerId,
+      title: o ? 'Offer: ' + o.ref : 'Offer Detail',
+      view: 'offers',
+      selectedOfferId: offerId,
+      subPage: 'offer-detail',
+      closable: true
+    });
   },
   openSubPage(name) {
     this._stagedFile = null;
     this.subPage = name;
+    this.updateCurrentTab({ subPage: name });
     this.render();
     if (name === 'edit-media' && this.selectedAssetId) {
       void this.loadPhotos(this.selectedAssetId);
@@ -1822,6 +2199,7 @@ const BankPortal = {
     this._stagedPhotos = {};
     this.selectedOfferId = null;
     this.subPage = null;
+    this.updateCurrentTab({ subPage: null, selectedOfferId: null });
     this.render();
   },
 
@@ -3374,7 +3752,7 @@ const BankPortal = {
 
   renderNotificationsView() {
     const logs = Store.getBankAuditLogs();
-    return `<div class="page-head"><h1>Notifications &amp; Activity</h1><span class="crumb">${logs.length} bank-isolated events</span></div><div class="gridwrap"><div style="padding:10px 14px">${logs.slice(0, 30).map(n => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(n.when)}</div><div class="ae-who">${UI.auditActor(n)}</div><div class="ae-what"><b>${UI.escapeHtml(n.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(n.entityRef, n.entity))} — ${UI.cleanAuditDetail(n.detail, n)}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No notifications recorded for this bank.</p>'}</div></div>`;
+    return `<div class="page-head"><h1>Notifications &amp; Activity</h1><span class="crumb">${logs.length} bank-isolated events</span></div><div class="gridwrap"><div style="padding:10px 14px">${logs.slice(0, 30).map(n => UI.renderAuditRow(n)).join('') || '<p style="color:var(--text-2);padding:20px">No notifications recorded for this bank.</p>'}</div></div>`;
   },
 
   async newAsset() {
@@ -3984,7 +4362,7 @@ const AdminPortal = {
         <div class="kpi" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Partner Banks</div><div class="v">${Store.banks.length}</div></div>
         <div class="kpi ok" onclick="AdminPortal.nav('banks')" style="cursor:pointer"><div class="k">Active Staff</div><div class="v">${Store.users.length}</div></div>
       </div>
-      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => `      <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span><div class="tl-when">${UI.fmtDate(a.when)}</div><div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} — ${UI.cleanAuditDetail(a.detail, a)}</div><div class="tl-who">${UI.auditActor(a)}</div></li>`).join('')}</ul></div></div>
+      <div class="gridwrap"><div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity</strong></div><div style="padding:10px 14px"><ul class="timeline">${Store.auditLog.slice(0, 8).map(a => UI.renderTimelineItem(a)).join('') || '<li style="color:var(--text-2)">No recent activity</li>'}</ul></div></div>
     `;
   },
 
@@ -4295,7 +4673,7 @@ const AdminPortal = {
 
   renderAuditTab(a) {
     const list = Store.auditLog.filter(x => x.entityRef === a.ref || x.entityRef === a.id);
-    return `<div class="group"><div class="caption">Audit</div><div class="body">${list.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b>${x.oldValue ? ` — <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
+    return `<div class="group"><div class="caption">Audit</div><div class="body">${list.map(x => UI.renderAuditRow(x)).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
   },
 
   renderReviewQueue() {
@@ -4460,7 +4838,7 @@ const AdminPortal = {
   },
 
   renderAuditView() {
-    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(x.entityRef, x.entity))}${x.oldValue ? ` — <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No audit events recorded.</p>'}</div></div>`;
+    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => UI.renderAuditRow(x)).join('') || '<p style="color:var(--text-2);padding:20px">No audit events recorded.</p>'}</div></div>`;
   },
 
   renderSubPage() {

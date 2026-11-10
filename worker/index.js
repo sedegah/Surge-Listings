@@ -2970,7 +2970,7 @@ export default {
             `Ghana Card: ${ghanaCard || 'Provided'} · Contact: ${phone} (${email || ''})`
           ).run();
 
-          await auditLog(name, 'Public Buyer', 'Public', 'OFFER_SUBMISSION', 'Offer', offerRef, `Purchase offer of GHS ${Number(amount).toLocaleString()} submitted on ${asset.public_ref} — awaiting Surge verification`);
+          await auditLog(name, 'Public Buyer', 'Public', 'OFFER_SUBMISSION', 'Offer', offerRef, `Purchase offer of GHS ${Number(amount).toLocaleString()} submitted on ${asset.public_ref} (awaiting Surge review)`);
           return json({ success: true, reference: offerRef, message: 'Formal offer submitted. Awaiting Surge Solutions verification before bank review.' }, 201);
         }
       }
@@ -2992,7 +2992,7 @@ export default {
           WHERE id = ?
         `).bind(actorName, offer.id).run();
 
-        await auditLog(actorName, actorRole, 'Surge', 'OFFER_VERIFY', 'Offer', offer.offer_ref, `Offer verified by Surge Admin — released to Recovery Bank for review`);
+        await auditLog(actorName, actorRole, 'Surge', 'OFFER_VERIFY', 'Offer', offer.offer_ref, `Offer verified by Surge Admin and released to Recovery Bank for review`);
         return json({ success: true, message: `Offer ${offer.offer_ref} verified and released to the partner bank for review.` });
       }
 
