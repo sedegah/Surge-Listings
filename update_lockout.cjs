@@ -204,9 +204,9 @@ replace(
 // =========================================================
 replace(
   'User listing: include locked_until',
-  `           SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
+  `          SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
                  u.status, u.mfa_enabled, u.last_login, u.created_at,`,
-  `           SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
+  `          SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
                  u.status, u.locked_until, u.mfa_enabled, u.last_login, u.created_at,`
 );
 

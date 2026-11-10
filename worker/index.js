@@ -506,7 +506,7 @@ export default {
 
     // Lock an account after repeated failures and throttle abusive source IPs.
     async function checkLoginRateLimit(username, ipAddress) {
-      const [accountAttempts, ipAttempts] = await Promise.all([
+      const [accountAttempts, ipAttempts, userRow] = await Promise.all([
         env.DB.prepare(`
         SELECT COUNT(*) as c FROM login_attempts
         WHERE username = ? AND success = 0
@@ -516,12 +516,45 @@ export default {
         SELECT COUNT(*) as c FROM login_attempts
         WHERE ip_address = ? AND success = 0
           AND datetime(attempted_at) >= datetime('now', '-15 minutes')
-      `).bind(ipAddress).first()
+      `).bind(ipAddress).first(),
+        env.DB.prepare(`
+        SELECT locked_until FROM users WHERE (username = ? OR email = ?)
+      `).bind(username, username).first()
       ]);
+      const failCount = Number(accountAttempts?.c || 0);
+      const maxAttempts = 5;
+      let hardLocked = false;
+      let lockMinutesLeft = 0;
+      if (userRow?.locked_until) {
+        const lockEnd = new Date(userRow.locked_until + (userRow.locked_until.endsWith('Z') ? '' : 'Z'));
+        const now = new Date();
+        if (lockEnd > now) {
+          hardLocked = true;
+          lockMinutesLeft = Math.ceil((lockEnd - now) / 60000);
+        }
+      }
       return {
-        accountLocked: Number(accountAttempts?.c || 0) >= 5,
-        ipRateLimited: Number(ipAttempts?.c || 0) >= 20
+        accountLocked: hardLocked || failCount >= maxAttempts,
+        ipRateLimited: Number(ipAttempts?.c || 0) >= 20,
+        failCount,
+        attemptsRemaining: Math.max(0, maxAttempts - failCount),
+        lockMinutesLeft: hardLocked ? lockMinutesLeft : (failCount >= maxAttempts ? 15 : 0)
       };
+    }
+
+    async function lockUserAccount(username) {
+      try {
+        await env.DB.prepare(`
+          UPDATE users SET locked_until = datetime('now', '+15 minutes')
+          WHERE (username = ? OR email = ?) AND (locked_until IS NULL OR datetime(locked_until) <= datetime('now'))
+        `).bind(username, username).run();
+      } catch (e) {}
+    }
+
+    async function clearUserLock(userId) {
+      try {
+        await env.DB.prepare(`UPDATE users SET locked_until = NULL WHERE id = ?`).bind(userId).run();
+      } catch (e) {}
     }
 
     // Legacy context (used by non-auth-gated routes only)
@@ -607,7 +640,13 @@ export default {
 
         const loginLimits = await checkLoginRateLimit(lockoutUsername, ipAddress);
         if (loginLimits.accountLocked || loginLimits.ipRateLimited) {
-          return err('Too many sign-in attempts. Wait 15 minutes before trying again.', 429);
+          const mins = loginLimits.lockMinutesLeft || 15;
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'This account has been temporarily locked after too many failed sign-in attempts. Try again in ' + mins + ' minute' + (mins === 1 ? '' : 's') + '.',
+            locked: true,
+            lockMinutesLeft: mins
+          }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
         const recordFailure = async (reason) => {
@@ -634,7 +673,20 @@ export default {
         }
         if (!validPassword) {
           await recordFailure('WRONG_PASSWORD');
-          return err('The username or password is incorrect.', 401);
+          const updatedLimits = await checkLoginRateLimit(lockoutUsername, ipAddress);
+          if (updatedLimits.attemptsRemaining <= 0) {
+            await lockUserAccount(lockoutUsername);
+            return new Response(JSON.stringify({
+              success: false,
+              error: 'This account has been locked after too many failed sign-in attempts. Try again in 15 minutes.',
+              locked: true, lockMinutesLeft: 15, attemptsRemaining: 0
+            }), { status: 423, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'The username or password is incorrect. ' + updatedLimits.attemptsRemaining + ' attempt' + (updatedLimits.attemptsRemaining === 1 ? '' : 's') + ' remaining.',
+            attemptsRemaining: updatedLimits.attemptsRemaining
+          }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
         // Create session
@@ -654,10 +706,11 @@ export default {
           ipAddress, userAgent, parseDeviceName(userAgent), remembered ? 1 : 0, expiresAt).run();
         setSessionCookie(sessionSecret, remembered ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
 
-        // Record success & update last_login
+        // Record success, clear lockout & update last_login
         await env.DB.prepare(`INSERT INTO login_attempts (id, username, ip_address, success, attempted_at) VALUES (?, ?, ?, 1, datetime('now'))`)
           .bind(randomId(), uname, ipAddress).run();
-        await env.DB.prepare(`UPDATE users SET last_login = datetime('now') WHERE id = ?`).bind(user.id).run();
+        await clearUserLock(user.id);
+        await env.DB.prepare(`UPDATE users SET last_login = datetime('now'), locked_until = NULL WHERE id = ?`).bind(user.id).run();
         await auditLog(user.full_name, user.role_code, user.org_name, 'LOGIN', 'User', user.public_id, `Signed in from ${ipAddress}`, null, null, user.id);
 
         const isSurge = user.scope === 'surge';
@@ -940,7 +993,7 @@ export default {
         const filterRole = url.searchParams.get('role');
         let sql = `
           SELECT u.id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email, u.role_code,
-                 u.status, u.mfa_enabled, u.last_login, u.created_at,
+                 u.status, u.locked_until, u.mfa_enabled, u.last_login, u.created_at,
                  CASE WHEN u.password_hash IS NOT NULL AND length(u.password_hash) > 0 THEN 1 ELSE 0 END as has_password,
                  EXISTS (SELECT 1 FROM protected_user_accounts pua WHERE pua.user_id = u.id) AS is_protected,
                  r.name as role_name, r.scope, o.name as org_name,
@@ -1114,6 +1167,22 @@ export default {
         if (!results[2]?.meta?.changes) return err('User was not deleted. Refresh the staff list and try again.', 409);
         return json({ success: true, message: `Staff account @${target.username} was deleted.` });
       }
+
+      // PUT /api/admin/users/:id/unlock - Admin unlock a locked account
+      const unlockUserMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)\/unlock$/);
+      if (unlockUserMatch && method === 'PUT') {
+        const session = await requireAdminAuth();
+        const targetId = unlockUserMatch[1];
+        const target = await env.DB.prepare(`SELECT id, username, full_name, locked_until, status FROM users WHERE id = ?`).bind(targetId).first();
+        if (!target) return err('User not found.', 404);
+        await env.DB.batch([
+          env.DB.prepare(`UPDATE users SET locked_until = NULL WHERE id = ?`).bind(targetId),
+          env.DB.prepare(`DELETE FROM login_attempts WHERE username = ? AND success = 0 AND datetime(attempted_at) >= datetime('now', '-15 minutes')`).bind(target.username)
+        ]);
+        await auditLog(session.full_name, session.role_code, session.organization_name || 'Surge Solutions', 'UNLOCK_USER', 'User', target.full_name, 'Account unlocked by administrator');
+        return json({ success: true, message: target.full_name + '\'s account has been unlocked.' });
+      }
+
 
       // Password Reset
       if ((pathname.match(/^\/api\/admin\/users\/[a-zA-Z0-9_-]+\/reset-password$/) || pathname.match(/^\/api\/v1\/users\/[a-zA-Z0-9_-]+\/reset-password$/)) && method === 'POST') {
