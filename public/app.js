@@ -4863,9 +4863,9 @@ const AdminPortal = {
     return `<div class="group"><div class="caption">Gates with Diagnostics</div><div class="body">${readiness.checks.map(c => this.renderGateItem(c, a)).join('')}</div></div>`;
   },
 
-  renderGateReviewTab(a) {
+    renderGateReviewTab(a) {
     if (this.gateReadinessLoading) {
-      return '<div class="group"><div class="body">Loading current gate status…</div></div>';
+      return '<div class="group"><div class="body" style="color:var(--text-2);padding:24px;text-align:center">Loading current gate status...</div></div>';
     }
     if (this.gateReadinessError) {
       return `<div class="group"><div class="body"><p class="error">${UI.escapeHtml(this.gateReadinessError)}</p><button class="btn primary" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Retry</button></div></div>`;
@@ -4875,57 +4875,66 @@ const AdminPortal = {
     }
     const passedCount = this.gateReadiness.gates.filter(g => g.passed).length;
     const totalCount = this.gateReadiness.gates.length;
-    const cards = this.gateReadiness.gates.map(gate => {
+    const rows = this.gateReadiness.gates.map(gate => {
       const key = gate.gate.startsWith('LG-2') ? 'legal'
         : gate.gate.startsWith('TL-2') ? 'title'
           : gate.gate.startsWith('VL-1') ? 'valuation' : '';
       const codePart = gate.gate.split(' ')[0];
       const namePart = gate.gate.replace(/^[A-Z]+-\d+\s*/, '').trim();
-      let action = `<button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">↻ Recheck</button>`;
+      let action = `<button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Recheck</button>`;
       if (key === 'legal') {
-        action = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open Legal Review</button>
-          ${gate.passed ? `<button class="btn small danger" onclick="AdminPortal.revokeLegalClearance('${UI.escapeHtml(a.id)}')">Revoke Gate</button>` : ''}`;
+        action = `<button class="btn small primary" onclick="AdminPortal.openSubPage('legal-review')">Open legal review</button>
+          ${gate.passed ? `<button class="btn small danger" onclick="AdminPortal.revokeLegalClearance('${UI.escapeHtml(a.id)}')">Revoke gate</button>` : ''}`;
       } else if (key === 'title') {
-        action = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Review / Reverify Title</button>`;
+        action = `<button class="btn small primary" onclick="AdminPortal.openSubPage('title-verify')">Review / reverify title</button>`;
       } else if (key === 'valuation') {
-        action = `<button class="btn small primary" onclick="AdminPortal.openAssetValuationReview('${UI.escapeHtml(a.id)}')">Review / Reverify Valuation</button>`;
+        action = `<button class="btn small primary" onclick="AdminPortal.openAssetValuationReview('${UI.escapeHtml(a.id)}')">Review / reverify valuation</button>`;
       }
-      return `<div class="gate-review-card ${gate.passed ? 'gate-pass' : 'gate-fail'}">
-        <div class="gate-review-left">
-          <span class="gate-code-badge">${UI.escapeHtml(codePart)}</span>
-          <div>
-            <div class="gate-review-name">${UI.escapeHtml(namePart)}</div>
-            ${gate.detail ? `<div class="gate-review-detail">${UI.escapeHtml(gate.detail)}</div>` : ''}
-          </div>
-        </div>
-        <div class="gate-review-right">
-          <span class="gate-status-pill ${gate.passed ? 'pill-pass' : 'pill-fail'}">${gate.passed ? 'PASS' : 'FAIL'}</span>
-          <div class="gate-actions">${action}</div>
-        </div>
-      </div>`;
+      return `<tr>
+        <td style="width:90px;vertical-align:middle"><span class="gate-code">${UI.escapeHtml(codePart)}</span></td>
+        <td style="vertical-align:middle">
+          <div style="font-weight:600;color:var(--text);font-size:12.5px">${UI.escapeHtml(namePart)}</div>
+          ${gate.detail ? `<div style="font-size:11px;color:var(--text-2);margin-top:2px">${UI.escapeHtml(gate.detail)}</div>` : ''}
+        </td>
+        <td style="width:85px;text-align:center;vertical-align:middle">
+          <span class="gate-status ${gate.passed ? 'pass' : 'fail'}">${gate.passed ? 'PASS' : 'FAIL'}</span>
+        </td>
+        <td style="width:260px;text-align:right;vertical-align:middle">
+          <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">${action}</div>
+        </td>
+      </tr>`;
     }).join('');
+
     return `
-      <div class="page-head" style="margin-bottom:16px">
-        <h2 style="font-family:'Inter',system-ui,sans-serif;font-size:17px;font-weight:700;color:#0F172A;margin:0">Review Readiness Gates</h2>
-        <span class="crumb" style="font-family:'Inter',system-ui,sans-serif;font-size:12px;color:#64748B">${passedCount}/${totalCount} passed &middot; Live verification</span>
-        <button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')" style="margin-left:auto">↻ Recheck all</button>
+      <div class="page-head">
+        <h2>Review Readiness Gates</h2>
+        <span class="crumb">${passedCount}/${totalCount} passed &middot; Live verification</span>
+        <button class="btn small" onclick="AdminPortal.recheckGate('${UI.escapeHtml(a.id)}')">Recheck all</button>
       </div>
-      <div class="gate-info-banner">
-        <svg style="width:16px;height:16px;flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <span>Review each gate independently. Legal, title, and valuation decisions can be reopened and revoked; evidence-based gates are recalculated from verified records.</span>
-      </div>
-      <div style="margin-bottom:24px">
-        ${cards || '<div style="text-align:center;padding:32px;color:#64748B;font-family:Inter,sans-serif">No readiness gates were returned for this asset.</div>'}
-      </div>
-      <div class="gate-revoke-section">
-        <div class="gate-revoke-header">
-          <svg style="width:15px;height:15px;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Revoke Legal Clearance
+      <div class="group">
+        <div class="caption">Gate-by-gate review</div>
+        <div class="gridwrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Gate</th>
+                <th>Gate and current evidence</th>
+                <th style="text-align:center">Status</th>
+                <th style="text-align:right">Review action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-2)">No readiness gates were returned for this asset.</td></tr>'}
+            </tbody>
+          </table>
         </div>
-        <div class="gate-revoke-body">
-          <textarea id="gate-review-notes" placeholder="A reason is required to revoke legal clearance. This action is logged and audited."></textarea>
-          <div style="margin-top:10px;display:flex;justify-content:flex-end">
-            <button class="btn danger small" onclick="AdminPortal.revokeLegalClearance('${UI.escapeHtml(a.id)}')">Revoke Legal Clearance</button>
+      </div>
+      <div class="group" style="margin-top:16px">
+        <div class="caption">Revoke legal clearance</div>
+        <div class="body">
+          <textarea id="gate-review-notes" placeholder="Reason required to revoke legal clearance" style="width:100%;height:68px;padding:8px 10px;border:1px solid var(--border);border-radius:2px;font-family:inherit;font-size:12.5px;box-sizing:border-box"></textarea>
+          <div style="margin-top:8px;display:flex;justify-content:flex-end">
+            <button class="btn danger small" onclick="AdminPortal.revokeLegalClearance('${UI.escapeHtml(a.id)}')">Revoke legal clearance</button>
           </div>
         </div>
       </div>`;

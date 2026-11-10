@@ -460,99 +460,7 @@ table.details tr+tr th, table.details tr+tr td { border-top: 1px solid #F0F0F0 }
   background: #EBF0F9;
   color: #0B3C75;
 }
-/* Gate review card styles */
-.gate-review-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  background: #fff;
-  gap: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
-  transition: box-shadow .15s;
-}
-.gate-review-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.08); }
-.gate-review-card.gate-fail { border-left: 4px solid #B3262E; }
-.gate-review-card.gate-pass { border-left: 4px solid #16A34A; }
-.gate-review-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
-.gate-code-badge {
-  background: #0B3C75;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 4px;
-  white-space: nowrap;
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  letter-spacing: 0.03em;
-  flex-shrink: 0;
-}
-.gate-review-name {
-  font-weight: 600;
-  font-size: 13.5px;
-  color: #0F172A;
-  font-family: 'Inter', system-ui, sans-serif;
-}
-.gate-review-detail {
-  font-size: 12px;
-  color: #64748B;
-  margin-top: 3px;
-  font-family: 'Inter', system-ui, sans-serif;
-}
-.gate-review-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.gate-status-pill {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 20px;
-  letter-spacing: 0.05em;
-  font-family: 'Inter', system-ui, sans-serif;
-}
-.gate-status-pill.pill-pass { background: #DCFCE7; color: #15803D; }
-.gate-status-pill.pill-fail { background: #FEE2E2; color: #B91C1C; }
-.gate-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.gate-revoke-section {
-  margin-top: 20px;
-  border: 1px solid #FDDBD9;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(179,38,46,.06);
-}
-.gate-revoke-header {
-  background: #FFF5F5;
-  border-bottom: 1px solid #FDDBD9;
-  padding: 12px 18px;
-  font-weight: 700;
-  font-size: 12.5px;
-  color: #B3262E;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: 'Inter', system-ui, sans-serif;
-  letter-spacing: 0.01em;
-}
-.gate-revoke-body { padding: 16px 18px; background: #fff; }
-.gate-revoke-body textarea {
-  width: 100%;
-  min-height: 80px;
-  padding: 10px 12px;
-  border: 1px solid #E2E8F0;
-  border-radius: 6px;
-  font-family: 'Inter', system-ui, sans-serif;
-  font-size: 13px;
-  resize: vertical;
-  color: #0F172A;
-  box-sizing: border-box;
-  transition: border-color .15s;
-}
-.gate-revoke-body textarea:focus {
-  outline: none;
-  border-color: #0B3C75;
-  box-shadow: 0 0 0 3px rgba(11,60,117,.1);
-}
+
 .tab-inner .pill.alert {
   background: var(--banner-red-bg);
   color: var(--danger);
@@ -981,4 +889,39 @@ html.surge-offline .switcher::after {
   background: #F8FAFC !important;
   border-top: 1px solid #E2E8F0 !important;
   padding: 14px 24px !important;
+}
+
+
+/* Gate Code & Status (Sharp 2px theme, No Green) */
+.gate-code {
+  font-family: Consolas, monospace;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--blue, #0B3C75);
+  background: #EDF2F7;
+  border: 1px solid #CBD5E1;
+  padding: 2px 7px;
+  border-radius: 2px;
+  display: inline-block;
+  white-space: nowrap;
+}
+.gate-status {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+  text-align: center;
+  white-space: nowrap;
+}
+.gate-status.pass {
+  background: #E8EEF5;
+  color: #0B3C75;
+  border: 1px solid #C4D6E8;
+}
+.gate-status.fail {
+  background: #FCE8E8;
+  color: #B3262E;
+  border: 1px solid #F5C6C6;
 }
