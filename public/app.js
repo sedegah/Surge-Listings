@@ -2083,6 +2083,21 @@ const BankPortal = {
       const blob = await response.blob();
       const disposition = response.headers.get('Content-Disposition') || '';
       const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
+      const contentType = response.headers.get('Content-Type') || '';
+
+      if (window.surgeDesktop && window.surgeDesktop.isDesktop && window.surgeDesktop.openDocument) {
+        const ab = await blob.arrayBuffer();
+        const res = await window.surgeDesktop.openDocument({
+          data: new Uint8Array(ab),
+          filename,
+          contentType
+        });
+        if (res && res.success) {
+          UI.toast(`Opened ${filename} in ${res.app || 'application'}`, 'success');
+          return;
+        }
+      }
+
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -4463,6 +4478,21 @@ const AdminPortal = {
       const blob = await response.blob();
       const disposition = response.headers.get('Content-Disposition') || '';
       const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
+      const contentType = response.headers.get('Content-Type') || '';
+
+      if (window.surgeDesktop && window.surgeDesktop.isDesktop && window.surgeDesktop.openDocument) {
+        const ab = await blob.arrayBuffer();
+        const res = await window.surgeDesktop.openDocument({
+          data: new Uint8Array(ab),
+          filename,
+          contentType
+        });
+        if (res && res.success) {
+          UI.toast(`Opened ${filename} in ${res.app || 'application'}`, 'success');
+          return;
+        }
+      }
+
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -4477,11 +4507,6 @@ const AdminPortal = {
   },
 
   async openReviewDocument(documentId) {
-    let reviewWindow = null;
-    try {
-      reviewWindow = window.open('', '_blank');
-    } catch (_) {}
-
     try {
       const response = await fetch(
         `${Store.API_BASE}/api/admin/documents/${encodeURIComponent(documentId)}/download?view=1`,
@@ -4492,12 +4517,30 @@ const AdminPortal = {
         throw new Error(data.error || `Document could not be opened (${response.status}).`);
       }
       const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'supporting_document.pdf';
       const contentType = response.headers.get('Content-Type') || '';
+
+      // Desktop App: directly open in Word, Photos, or Chrome
+      if (window.surgeDesktop && window.surgeDesktop.isDesktop && window.surgeDesktop.openDocument) {
+        const ab = await blob.arrayBuffer();
+        const res = await window.surgeDesktop.openDocument({
+          data: new Uint8Array(ab),
+          filename,
+          contentType
+        });
+        if (res && res.success) {
+          UI.toast(`Opened ${filename} in ${res.app || 'viewer'}`, 'success');
+          return true;
+        }
+      }
+
+      // Web fallback
+      const objectUrl = URL.createObjectURL(blob);
       if (['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(contentType.toLowerCase())) {
-        if (reviewWindow && !reviewWindow.closed) {
-          reviewWindow.location.href = objectUrl;
-        } else {
+        let reviewWindow = null;
+        try { reviewWindow = window.open(objectUrl, '_blank'); } catch (_) {}
+        if (!reviewWindow) {
           const link = document.createElement('a');
           link.href = objectUrl;
           link.target = '_blank';
@@ -4507,19 +4550,15 @@ const AdminPortal = {
           link.remove();
         }
       } else {
-        const disposition = response.headers.get('Content-Disposition') || '';
-        const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'document';
         const link = document.createElement('a');
         link.href = objectUrl;
         link.download = filename;
         document.body.appendChild(link);
         link.click();
         link.remove();
-        if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
       }
       return true;
     } catch (error) {
-      if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
       UI.toast(error.message || 'Supporting document could not be opened.', 'error');
       return false;
     }

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('surgeDesktop', {
   platform: 'windows',
   retryConnection: () => ipcRenderer.invoke('surge:retry-connection'),
   getAppInfo: () => ipcRenderer.invoke('surge:get-app-info'),
-  openMarketplace: () => ipcRenderer.invoke('surge:open-marketplace')
+  openMarketplace: () => ipcRenderer.invoke('surge:open-marketplace'),
+  openDocument: (docData) => ipcRenderer.invoke('surge:open-document', docData)
 });
 
