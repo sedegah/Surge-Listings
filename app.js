@@ -1169,6 +1169,7 @@ const UI = {
   cleanAuditDetail(detail, entry) {
     if (!detail) return this.auditActionLabel(entry?.action) || 'Activity recorded';
     let text = String(detail)
+      .replace(/—/g, ' - ')
       .replace(/\b[0-9a-fA-F]{24,64}\b/g, '')
       .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '')
       .replace(/\b(u|doc|val|li|img|sess|asset|bank|branch)-[a-zA-Z0-9_-]{8,}\b/g, '')
@@ -1213,19 +1214,28 @@ const UI = {
         text = 'Updated asset details';
       }
     } else if (text.includes('deleted by Surge Admin')) {
-      text = 'Asset deleted from platform by Surge Administrator';
-    } else if (text.includes('Offer verified by Surge Admin — released to Recovery Bank for review')) {
-      text = 'Offer verified by Surge and released to Recovery Bank committee';
+      text = 'Asset permanently deleted by Surge Administrator';
+    } else if (text.includes('Offer verified by Surge Admin')) {
+      text = 'Offer verified by Surge Admin and released to Recovery Bank for review';
     } else if (text.startsWith('Draft asset created:')) {
       text = 'Draft asset record initialized';
     } else if (text.startsWith('Bank requested deletion:')) {
-      text = 'Bank requested asset removal: ' + text.replace('Bank requested deletion:', '').trim();
+      text = 'Bank requested asset deletion: ' + text.replace('Bank requested deletion:', '').trim();
     } else if (text.startsWith('Legal hold imposed:')) {
       text = 'Legal hold placed: ' + text.replace('Legal hold imposed:', '').trim();
-    } else if (text === 'Legal hold released') {
-      text = 'Legal hold released; asset approved for disposition';
+    } else if (text.includes('Legal hold released')) {
+      text = 'Legal hold cleared; asset approved for disposition';
+    } else if (text.includes('submitted on') && text.includes('awaiting Surge')) {
+      text = text.replace(/awaiting Surge.*$/i, '(awaiting Surge review)');
+    } else if (text.includes('Legacy bearer session rotated')) {
+      text = 'User session security refreshed';
+    } else if (text.includes('All active sessions revoked')) {
+      text = 'All active user sessions signed out';
+    } else if (text.includes('User revoked an active session')) {
+      text = 'User session signed out';
     }
 
+    text = text.replace(/—/g, ' - ');
     return this.escapeHtml(text || this.auditActionLabel(entry?.action) || 'Activity recorded');
   },
   cleanAuditRef(ref, entityType) {
