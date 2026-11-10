@@ -1,4 +1,5 @@
 ; Surge Listings — Custom NSIS Setup Wizard Definitions
+ManifestDPIAware true
 
 !macro customHeader
   !define MUI_WELCOMEPAGE_TITLE "Surge Listings Desktop Setup"
@@ -7,4 +8,3 @@
   !define MUI_FINISHPAGE_TEXT "Surge Listings is ready to use.$\r$\n$\r$\nShortcuts have been created on your Desktop and in the Windows Start Menu for quick access."
   !define MUI_FINISHPAGE_RUN_TEXT "Launch Surge Listings"
 !macroend
-
