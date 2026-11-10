@@ -1,255 +1,438 @@
+// update_app.cjs — Add workspace persistence + background refresh to both portals
 const fs = require('fs');
+let src = fs.readFileSync('app.js', 'utf8');
 
-let code = fs.readFileSync('app.js', 'utf8');
+// Normalize to \n for matching, restore \r\n at the end
+const hadCRLF = src.includes('\r\n');
+if (hadCRLF) src = src.replace(/\r\n/g, '\n');
 
-// 1. Add _parseAsset, _parseOffer, and targeted fetch methods to Store
-const parseHelpers = `  _parseAsset(d, portal = '') {
-    if (!d) return null;
-    if (portal === 'public') {
-      return {
-        id: d.id,
-        ref: d.public_ref,
-        bankId: '',
-        bankName: '',
-        category: d.category_code,
-        assetType: d.asset_type,
-        title: d.title,
-        region: d.region,
-        district: d.district || '',
-        town: d.town || '',
-        publicLocation: d.public_location,
-        description: d.description,
-        reserve: d.reserve_price,
-        showReserve: !!d.show_reserve_publicly,
-        status: d.status,
-        publicationStatus: d.status === 'Live' ? 'Published' : 'Unpublished',
-        legalHold: false,
-        exteriorImage: (d.image_count || 0) > 0,
-        primaryImage: d.primary_image || '',
-        images: d.image_count || 0,
-        beds: d.beds || null,
-        baths: d.baths || null,
-        occupancyStatus: d.occupancy_status || '',
-        landGuardRisk: d.land_guard_risk || '',
-        priceDisplay: d.price_display || 'Price on Application',
-        legalStatus: 'Cleared',
-        titleVerified: true,
-        legalSubstate: { clearanceIssued: true, instrumentsVerified: true }
-      };
+let patchCount = 0;
+function replace(label, target, replacement) {
+  if (!src.includes(target)) {
+    console.error('MISS: ' + label);
+    console.error('  First 150 chars:', JSON.stringify(target.slice(0, 150)));
+    // Try to find nearby text
+    const first20 = target.slice(0, 40).trim();
+    const idx = src.indexOf(first20);
+    if (idx >= 0) {
+      console.error('  Found start at offset', idx);
+      console.error('  Actual text:', JSON.stringify(src.slice(idx, idx + 200)));
     }
-    return {
-      id: d.id,
-      ref: d.public_ref,
-      bankId: d.bank_id,
-      bankName: d.bank_name || '',
-      ownershipType: d.ownership_type || 'bank',
-      ownerBankId: d.owner_bank_id || '',
-      ownerBankName: d.owner_bank_name || '',
-      ownerName: d.owner_name || '',
-      category: d.category_code,
-      assetType: d.asset_type,
-      region: d.region,
-      district: d.district || '',
-      town: d.town || '',
-      publicLocation: d.public_location,
-      exactAddress: d.exact_address,
-      description: d.description,
-      reserve: d.reserve_price,
-      minOffer: d.minimum_offer,
-      showReserve: !!d.show_reserve_publicly,
-      status: d.status,
-      publicationStatus: d.status === 'Live' ? 'Published' : (d.status === 'Approved' ? 'Pending Approval' : 'Unpublished'),
-      legalStatus: d.legal_hold_active ? 'On Hold' : (d.enforcement_case_status === 'Cleared' ? 'Cleared' : (d.enforcement_case_number ? 'Pending' : 'Not Started')),
-      valuationAmount: d.valuation_market_value || 0,
-      forcedSaleValue: d.valuation_forced_sale_value || 0,
-      valuationDate: d.valuation_date || null,
-      valuationExpiry: d.valuation_expiry_date || null,
-      valuationValidityDays: d.valuation_validity_period_days || 180,
-      valuerName: d.valuation_valuer_name || '',
-      valuationStatus: d.valuation_status || '',
-      valuationReviewRequired: !!d.valuation_review_required,
-      valuationDocumentId: d.valuation_document_id || d.latest_valuation_document_id || '',
-      landSearchValid: !d.legal_hold_active,
-      injunctionActive: !!d.active_injunction,
-      legalHold: !!d.legal_hold_active,
-      legalHoldReason: d.legal_hold_reason || '',
-      exteriorImage: (d.image_count || 0) > 0,
-      titleNumber: d.title_certificate_number || '',
-      titleType: d.title_type || '',
-      titleRegistry: d.title_registry || '',
-      titleOwner: d.title_registered_owner || '',
-      titlePerfection: d.title_perfection_status || '',
-      titleVerificationStatus: d.title_verification_status || '',
-      titleDocumentId: d.title_document_id || d.latest_title_document_id || '',
-      titleVerified: d.title_verification_status === 'Verified',
-      titleDetails: !!d.title_certificate_number,
-      caseRef: d.enforcement_case_number || d.internal_bank_ref || '',
-      branchId: d.branch_id || '',
-      branchName: d.branch_name || '',
-      enforcementBasis: d.enforcement_basis || '',
-      images: d.image_count || 0,
-      documents: d.document_count || 0,
-      activeOffers: d.offer_count || 0,
-      deletionRequested: !!d.deletion_requested,
-      createdAt: d.created_at,
-      updatedAt: d.updated_at,
-      createdBy: d.created_by || 'Not recorded',
-      legalSubstate: {
-        enforcementRecorded: !!d.enforcement_case_number,
-        instrumentsVerified: (d.legal_instruments || []).length > 0 &&
-          d.legal_instruments.every(instrument => instrument.verification_status === 'Verified'),
-        injunctionClear: !d.active_injunction,
-        clearanceIssued: d.enforcement_case_status === 'Cleared'
-      },
-      legalNotes: [],
-      instruments: (d.legal_instruments || []).map(instrument => ({
-        id: instrument.id,
-        type: instrument.instrument_type,
-        ref: instrument.instrument_ref,
-        status: instrument.verification_status,
-        documentId: instrument.document_id || '',
-        uploadedBy: instrument.uploaded_by_name || 'Not recorded',
-        uploadedAt: instrument.uploaded_at || '',
-        uploadedByPublicId: instrument.uploaded_by_public_id || ''
-      })),
-      activity: [{ when: d.created_at, who: d.created_by || 'Not recorded', what: 'Asset created' }]
-    };
-  },
+    process.exit(1);
+  }
+  src = src.replace(target, replacement);
+  patchCount++;
+  console.log('OK: ' + label);
+}
 
-  _parseOffer(o) {
-    if (!o) return null;
-    let ghanaCard = '';
-    let phone = '';
-    let email = '';
-    const notes = o.notes || '';
-    const gcMatch = notes.match(/Ghana Card:\\s*([^\\s·]+)/i);
-    if (gcMatch) ghanaCard = gcMatch[1];
-    const phoneMatch = notes.match(/Contact:\\s*([^\\s(]+)/i);
-    if (phoneMatch) phone = phoneMatch[1];
-    const emailMatch = notes.match(/\\(([^)]+@[^)]+)\\)/i);
-    if (emailMatch) email = emailMatch[1];
+// =========================================================
+// 1. ADMIN PORTAL — insert saveWorkspace, restoreWorkspace, refreshActiveTab before openTab
+//    and patch switchTab to call saveWorkspace + refreshActiveTab
+// =========================================================
+replace(
+  'AdminPortal: add workspace methods + patch switchTab',
+  [
+    '  openTab(tab) {',
+    '    if (!Array.isArray(this.tabs)) this.tabs = [];',
+    '    if (!tab || !tab.id) return;',
+    '    const existingIndex = this.tabs.findIndex(t => t.id === tab.id);',
+    '    if (existingIndex >= 0) {',
+    '      this.tabs[existingIndex] = { ...this.tabs[existingIndex], ...tab };',
+    '    } else {',
+    '      this.tabs.push(tab);',
+    '    }',
+    '    this.switchTab(tab.id);',
+    '  },',
+    '',
+    '  switchTab(tabId) {',
+    '    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {',
+    "      this.tabs = [{ id: 'assets', title: 'Assets', view: 'assets', closable: false }];",
+    '    }',
+    '    const tab = this.tabs.find(t => t.id === tabId) || this.tabs[0];',
+    '    if (!tab) return;',
+    '    this.activeTabId = tab.id;',
+    "    this.currentView = tab.view || 'assets';",
+    '    this.selectedAssetId = tab.assetId || null;',
+    '    this.selectedValuationId = tab.selectedValuationId || null;',
+    '    this.selectedOfferId = tab.selectedOfferId || null;',
+    '    this.subPage = tab.subPage || null;',
+    "    this.detailTab = tab.detailTab || 'overview';",
+    '',
+    "    document.querySelectorAll('#admin-nav .navitem').forEach(n => {",
+    "      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);",
+    '    });',
+    '',
+    '    this.render();',
+    '  },'
+  ].join('\n'),
 
-    return {
-      id: o.id,
-      ref: o.offer_ref,
-      assetId: o.asset_id,
-      assetRef: o.asset_ref || '',
-      assetTitle: o.asset_title || '',
-      bankName: o.bank_name || '',
-      buyer: o.buyer_name,
-      amount: o.amount,
-      status: o.status,
-      belowReserve: !!o.below_reserve,
-      date: o.created_at,
-      validity: o.validity_date,
-      notes: o.notes || '',
-      conditions: o.conditions || 'Cash / Direct Bank Transfer',
-      ghanaCard: ghanaCard || '',
-      phone: phone || '',
-      email: email || '',
-      surgeVerified: !!o.surge_verified,
-      surgeVerifiedBy: o.surge_verified_by || '',
-      surgeVerifiedAt: o.surge_verified_at || null,
-      rejectionReason: o.rejection_reason || ''
-    };
-  },
-
-  async fetchAssets() {
-    try {
-      const headers = this.getAuthHeaders();
-      const portal = document.body?.dataset.portal;
-      const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
-      const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : portal === 'public' ? '/api/marketplace/assets' : '/api/v1/assets' + scopeParam;
-      const res = await fetch(this.API_BASE + assetsEndpoint, { headers, cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          this.assets = json.data.map(d => this._parseAsset(d, portal));
-          return true;
-        }
-      }
-    } catch (e) {}
-    return false;
-  },
-
-  async fetchOffers() {
-    try {
-      const headers = this.getAuthHeaders();
-      const portal = document.body?.dataset.portal;
-      const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
-      const res = await fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          this.offers = json.data.map(o => this._parseOffer(o));
-          return true;
-        }
-      }
-    } catch (e) {}
-    return false;
-  },
-
-  async fetchAuditLogs() {
-    try {
-      const headers = this.getAuthHeaders();
-      const portal = document.body?.dataset.portal;
-      const scopeParam = portal === 'admin' ? '?scope=all' : '';
-      const res = await fetch(this.API_BASE + '/api/v1/audit-logs' + (scopeParam ? scopeParam : ''), { headers, cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          this.auditLog = json.data
-            .filter(a => ['Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase'].includes(a.entity_type) && !a.action_type?.startsWith('SESSION_'))
-            .map(a => ({
-              id: a.id,
-              when: a.created_at,
-              who: a.actor_name,
-              actorRole: a.actor_role,
-              organization: a.organization,
-              action: a.action_type,
-              entity: a.entity_type,
-              entityRef: a.entity_id,
-              detail: a.delta_summary
-            }));
-          return true;
-        }
-      }
-    } catch (e) {}
-    return false;
-  },
-
-  async fetchDocuments() {
-    try {
-      const headers = this.getAuthHeaders();
-      const portal = document.body?.dataset.portal;
-      const endpoint = portal === 'admin' ? '/api/admin/documents' : '/api/bank/documents';
-      const res = await fetch(this.API_BASE + endpoint, { headers, cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          this.documents = json.data.map(d => ({
-            id: d.id, asset_id: d.asset_id, asset_ref: d.asset_ref || '',
-            title: d.title, category: d.category,
-            filename: d.filename, file_size: d.file_size,
-            uploaded_at: d.uploaded_at, uploaded_by_name: d.uploaded_by_name
-          }));
-          return true;
-        }
-      }
-    } catch (e) {}
-    return false;
-  },
-`;
-
-// Insert parseHelpers before `async fetchRemote()`
-code = code.replace('  async fetchRemote() {', parseHelpers + '\n  fetchRemote() {\n    if (this._fetchPromise) return this._fetchPromise;\n    this._fetchPromise = this._doFetchRemote().finally(() => { this._fetchPromise = null; });\n    return this._fetchPromise;\n  },\n\n  async _doFetchRemote() {');
-
-// In fetchRemote, replace the asset and offer mapping to use _parseAsset and _parseOffer
-code = code.replace(
-  'if (assetsRes.status === \'fulfilled\' && assetsRes.value.ok) {\n        const json = await assetsRes.value.json();\n        if (json.success && Array.isArray(json.data)) {\n          // Public marketplace API returns a simpler shape — map it into the same Store.assets format\n          if (portal === \'public\') {\n            this.assets = json.data.map(d => ({\n              id: d.id,\n              ref: d.public_ref,\n              bankId: \'\',\n              bankName: \'\',\n              category: d.category_code,\n              assetType: d.asset_type,\n              title: d.title,\n              region: d.region,\n              district: d.district || \'\',\n              town: d.town || \'\',\n              publicLocation: d.public_location,\n              description: d.description,\n              reserve: d.reserve_price,\n              showReserve: !!d.show_reserve_publicly,\n              status: d.status,\n              publicationStatus: d.status === \'Live\' ? \'Published\' : \'Unpublished\',\n              legalHold: false,\n              exteriorImage: (d.image_count || 0) > 0,\n              primaryImage: d.primary_image || \'\',\n              images: d.image_count || 0,\n              beds: d.beds || null,\n              baths: d.baths || null,\n              occupancyStatus: d.occupancy_status || \'\',\n              landGuardRisk: d.land_guard_risk || \'\',\n              priceDisplay: d.price_display || \'Price on Application\',\n              legalStatus: \'Cleared\',\n              titleVerified: true,\n              legalSubstate: { clearanceIssued: true, instrumentsVerified: true },\n            }));\n          } else {\n          this.assets = json.data.map(d => ({\n            id: d.id,\n            ref: d.public_ref,\n            bankId: d.bank_id,\n            bankName: d.bank_name || \'\',\n            ownershipType: d.ownership_type || \'bank\',\n            ownerBankId: d.owner_bank_id || \'\',\n            ownerBankName: d.owner_bank_name || \'\',\n            ownerName: d.owner_name || \'\',\n            category: d.category_code,\n            assetType: d.asset_type,\n            region: d.region,\n            district: d.district || \'\',\n            town: d.town || \'\',\n            publicLocation: d.public_location,\n            exactAddress: d.exact_address,\n            description: d.description,\n            reserve: d.reserve_price,\n            minOffer: d.minimum_offer,\n            showReserve: !!d.show_reserve_publicly,\n            status: d.status,\n            publicationStatus: d.status === \'Live\' ? \'Published\' : (d.status === \'Approved\' ? \'Pending Approval\' : \'Unpublished\'),\n            legalStatus: d.legal_hold_active ? \'On Hold\' : (d.enforcement_case_status === \'Cleared\' ? \'Cleared\' : (d.enforcement_case_number ? \'Pending\' : \'Not Started\')),\n            valuationAmount: d.valuation_market_value || 0,\n            forcedSaleValue: d.valuation_forced_sale_value || 0,\n            valuationDate: d.valuation_date || null,\n            valuationExpiry: d.valuation_expiry_date || null,\n            valuationValidityDays: d.valuation_validity_period_days || 180,\n            valuerName: d.valuation_valuer_name || \'\',\n            valuationStatus: d.valuation_status || \'\',\n            valuationReviewRequired: !!d.valuation_review_required,\n            valuationDocumentId: d.valuation_document_id || d.latest_valuation_document_id || \'\',\n            landSearchValid: !d.legal_hold_active,\n            injunctionActive: !!d.active_injunction,\n            legalHold: !!d.legal_hold_active,\n            legalHoldReason: d.legal_hold_reason || \'\',\n            exteriorImage: (d.image_count || 0) > 0,\n            titleNumber: d.title_certificate_number || \'\',\n            titleType: d.title_type || \'\',\n            titleRegistry: d.title_registry || \'\',\n            titleOwner: d.title_registered_owner || \'\',\n            titlePerfection: d.title_perfection_status || \'\',\n            titleVerificationStatus: d.title_verification_status || \'\',\n            titleDocumentId: d.title_document_id || d.latest_title_document_id || \'\',\n            titleVerified: d.title_verification_status === \'Verified\',\n            titleDetails: !!d.title_certificate_number,\n            caseRef: d.enforcement_case_number || d.internal_bank_ref || \'\',\n            branchId: d.branch_id || \'\',\n            branchName: d.branch_name || \'\',\n            enforcementBasis: d.enforcement_basis || \'\',\n            images: d.image_count || 0,\n            documents: d.document_count || 0,\n            activeOffers: d.offer_count || 0,\n            deletionRequested: !!d.deletion_requested,\n            createdAt: d.created_at,\n            updatedAt: d.updated_at,\n            createdBy: d.created_by || \'Not recorded\',\n            legalSubstate: {\n              enforcementRecorded: !!d.enforcement_case_number,\n              instrumentsVerified: (d.legal_instruments || []).length > 0 &&\n                d.legal_instruments.every(instrument => instrument.verification_status === \'Verified\'),\n              injunctionClear: !d.active_injunction,\n              clearanceIssued: d.enforcement_case_status === \'Cleared\'\n            },\n            legalNotes: [],\n            instruments: (d.legal_instruments || []).map(instrument => ({\n              id: instrument.id,\n              type: instrument.instrument_type,\n              ref: instrument.instrument_ref,\n              status: instrument.verification_status,\n              documentId: instrument.document_id || \'\',\n              uploadedBy: instrument.uploaded_by_name || \'Not recorded\',\n              uploadedAt: instrument.uploaded_at || \'\',\n              uploadedByPublicId: instrument.uploaded_by_public_id || \'\'\n            })),\n            activity: [{ when: d.created_at, who: d.created_by || \'Not recorded\', what: \'Asset created\' }]\n          }));\n          } // end else (non-public portal)\n        }\n      }',
-  'if (assetsRes.status === \'fulfilled\' && assetsRes.value.ok) {\n        const json = await assetsRes.value.json();\n        if (json.success && Array.isArray(json.data)) {\n          this.assets = json.data.map(d => this._parseAsset(d, portal));\n        }\n      }'
+  [
+    '  saveWorkspace() {',
+    '    try {',
+    '      const state = {',
+    '        tabs: this.tabs, activeTabId: this.activeTabId, currentView: this.currentView,',
+    '        selectedAssetId: this.selectedAssetId, selectedValuationId: this.selectedValuationId,',
+    '        selectedOfferId: this.selectedOfferId, subPage: this.subPage, detailTab: this.detailTab',
+    '      };',
+    "      localStorage.setItem('surge_admin_state', JSON.stringify(state));",
+    "      if (this.activeTabId) history.replaceState(null, '', '#' + encodeURIComponent(this.activeTabId));",
+    '    } catch (e) {}',
+    '  },',
+    '',
+    '  restoreWorkspace() {',
+    '    try {',
+    "      const raw = localStorage.getItem('surge_admin_state');",
+    '      const saved = raw ? JSON.parse(raw) : null;',
+    "      const hash = window.location.hash.replace(/^#/, '');",
+    '      if (saved && Array.isArray(saved.tabs) && saved.tabs.length > 0) {',
+    '        this.tabs = saved.tabs;',
+    '        this.activeTabId = saved.activeTabId || this.tabs[0].id;',
+    "        this.currentView = saved.currentView || 'assets';",
+    '        this.selectedAssetId = saved.selectedAssetId || null;',
+    '        this.selectedValuationId = saved.selectedValuationId || null;',
+    '        this.selectedOfferId = saved.selectedOfferId || null;',
+    '        this.subPage = saved.subPage || null;',
+    "        this.detailTab = saved.detailTab || 'overview';",
+    '      }',
+    '      if (hash) {',
+    '        const decoded = decodeURIComponent(hash);',
+    '        const match = this.tabs.find(t => t.id === decoded);',
+    '        if (match) {',
+    '          this.activeTabId = match.id;',
+    '          this.currentView = match.view || this.currentView;',
+    '          this.selectedAssetId = match.assetId || null;',
+    '          this.subPage = match.subPage || null;',
+    "          this.detailTab = match.detailTab || 'overview';",
+    "        } else if (decoded.startsWith('asset-')) {",
+    "          const assetId = decoded.replace('asset-', '');",
+    '          if (!this.tabs.find(t => t.id === decoded)) {',
+    "            this.tabs.push({ id: decoded, title: 'Asset', view: 'assets', assetId, closable: true });",
+    '          }',
+    "          this.activeTabId = decoded; this.currentView = 'assets'; this.selectedAssetId = assetId;",
+    "        } else if (['dashboard','assets','review','legal','title','offers','banks','audit'].includes(decoded)) {",
+    '          if (!this.tabs.find(t => t.id === decoded)) {',
+    "            this.tabs.push({ id: decoded, title: this.getViewTitle(decoded), view: decoded, closable: decoded !== 'assets' });",
+    '          }',
+    '          this.activeTabId = decoded; this.currentView = decoded; this.selectedAssetId = null;',
+    '        }',
+    '      }',
+    '    } catch (e) {}',
+    '  },',
+    '',
+    '  async refreshActiveTab() {',
+    '    try { await Store.fetchRemote(); this.render(); } catch (e) {}',
+    '  },',
+    '',
+    '  openTab(tab) {',
+    '    if (!Array.isArray(this.tabs)) this.tabs = [];',
+    '    if (!tab || !tab.id) return;',
+    '    const existingIndex = this.tabs.findIndex(t => t.id === tab.id);',
+    '    if (existingIndex >= 0) {',
+    '      this.tabs[existingIndex] = { ...this.tabs[existingIndex], ...tab };',
+    '    } else {',
+    '      this.tabs.push(tab);',
+    '    }',
+    '    this.switchTab(tab.id);',
+    '  },',
+    '',
+    '  switchTab(tabId) {',
+    '    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {',
+    "      this.tabs = [{ id: 'assets', title: 'Assets', view: 'assets', closable: false }];",
+    '    }',
+    '    const tab = this.tabs.find(t => t.id === tabId) || this.tabs[0];',
+    '    if (!tab) return;',
+    '    this.activeTabId = tab.id;',
+    "    this.currentView = tab.view || 'assets';",
+    '    this.selectedAssetId = tab.assetId || null;',
+    '    this.selectedValuationId = tab.selectedValuationId || null;',
+    '    this.selectedOfferId = tab.selectedOfferId || null;',
+    '    this.subPage = tab.subPage || null;',
+    "    this.detailTab = tab.detailTab || 'overview';",
+    '',
+    "    document.querySelectorAll('#admin-nav .navitem').forEach(n => {",
+    "      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);",
+    '    });',
+    '',
+    '    this.saveWorkspace();',
+    '    this.render();',
+    '    void this.refreshActiveTab();',
+    '  },'
+  ].join('\n')
 );
 
-fs.writeFileSync('app.js', code, 'utf8');
-console.log('Store parsed helpers added successfully');
+// =========================================================
+// 2. ADMIN PORTAL — patch init() to call restoreWorkspace + hashchange
+// =========================================================
+replace(
+  'AdminPortal: init restoreWorkspace',
+  [
+    '  async init(alreadyAuthenticated = false) {',
+    "    const authed = alreadyAuthenticated || await Auth.checkAuth('surge');",
+    '    if (!authed) return;',
+    '',
+    "    document.querySelectorAll('#admin-nav .navitem').forEach(el => {",
+    "      el.addEventListener('click', () => this.nav(el.dataset.view));",
+    '    });',
+    '    this.render();',
+    '    try {',
+    '      await Store.fetchRemote();',
+    '    } finally {',
+    '      this.render();',
+    '    }',
+    '  },'
+  ].join('\n'),
 
+  [
+    '  async init(alreadyAuthenticated = false) {',
+    "    const authed = alreadyAuthenticated || await Auth.checkAuth('surge');",
+    '    if (!authed) return;',
+    '',
+    '    this.restoreWorkspace();',
+    "    window.addEventListener('hashchange', () => {",
+    "      const hash = window.location.hash.replace(/^#/, '');",
+    '      if (hash && hash !== this.activeTabId) {',
+    '        const decoded = decodeURIComponent(hash);',
+    '        const match = this.tabs.find(t => t.id === decoded);',
+    '        if (match) this.switchTab(match.id);',
+    '      }',
+    '    });',
+    '',
+    "    document.querySelectorAll('#admin-nav .navitem').forEach(el => {",
+    "      el.addEventListener('click', () => this.nav(el.dataset.view));",
+    '    });',
+    '    this.render();',
+    '    try {',
+    '      await Store.fetchRemote();',
+    '    } finally {',
+    '      this.render();',
+    '    }',
+    '  },'
+  ].join('\n')
+);
+
+// =========================================================
+// 3. ADMIN PORTAL — closeTab: add saveWorkspace in else branch
+// =========================================================
+replace(
+  'AdminPortal: closeTab saveWorkspace',
+  '    } else {\n      this.renderDoctabs();\n    }\n  },\n\n  async init(alreadyAuthenticated',
+  '    } else {\n      this.saveWorkspace();\n      this.renderDoctabs();\n    }\n  },\n\n  async init(alreadyAuthenticated'
+);
+
+// =========================================================
+// 4. ADMIN PORTAL — openSubPage: add saveWorkspace
+// =========================================================
+replace(
+  'AdminPortal: openSubPage saveWorkspace',
+  '  openSubPage(name) { this.subPage = name; this.render(); },',
+  '  openSubPage(name) { this.subPage = name; this.saveWorkspace(); this.render(); },'
+);
+
+// =========================================================
+// 5. ADMIN PORTAL — closeSubPage: add saveWorkspace
+// =========================================================
+replace(
+  'AdminPortal: closeSubPage saveWorkspace',
+  '    this.subPage = null;\n    this.selectedOfferId = null;\n    if (this.currentView === \'title\') {\n      this.selectedAssetId = null;\n      this.selectedValuationId = null;\n    }\n    if (this.currentView === \'assets\'',
+  '    this.subPage = null;\n    this.selectedOfferId = null;\n    if (this.currentView === \'title\') {\n      this.selectedAssetId = null;\n      this.selectedValuationId = null;\n    }\n    this.saveWorkspace();\n    if (this.currentView === \'assets\''
+);
+
+// =========================================================
+// 6. BANK PORTAL — insert saveWorkspace, restoreWorkspace, refreshActiveTab before openTab
+//    and patch switchTab
+// =========================================================
+replace(
+  'BankPortal: add workspace methods + patch switchTab',
+  [
+    '  openTab(tab) {',
+    '    if (!Array.isArray(this.tabs)) this.tabs = [];',
+    '    if (!tab || !tab.id) return;',
+    '    const existingIndex = this.tabs.findIndex(t => t.id === tab.id);',
+    '    if (existingIndex >= 0) {',
+    '      this.tabs[existingIndex] = { ...this.tabs[existingIndex], ...tab };',
+    '    } else {',
+    '      this.tabs.push(tab);',
+    '    }',
+    '    this.switchTab(tab.id);',
+    '  },',
+    '',
+    '  switchTab(tabId) {',
+    '    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {',
+    "      this.tabs = [{ id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }];",
+    '    }',
+    '    const tab = this.tabs.find(t => t.id === tabId) || this.tabs[0];',
+    '    if (!tab) return;',
+    '    this.activeTabId = tab.id;',
+    "    this.currentView = tab.view || 'dashboard';",
+    '    this.selectedAssetId = tab.assetId || null;',
+    '    this.selectedOfferId = tab.selectedOfferId || null;',
+    '    this.subPage = tab.subPage || null;',
+    "    this.detailTab = tab.detailTab || 'overview';",
+    '',
+    "    document.querySelectorAll('#bank-nav .navitem').forEach(n => {",
+    "      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);",
+    '    });',
+    '',
+    '    this.render();',
+    '  },'
+  ].join('\n'),
+
+  [
+    '  saveWorkspace() {',
+    '    try {',
+    '      const state = {',
+    '        tabs: this.tabs, activeTabId: this.activeTabId, currentView: this.currentView,',
+    '        selectedAssetId: this.selectedAssetId, selectedOfferId: this.selectedOfferId,',
+    '        subPage: this.subPage, detailTab: this.detailTab',
+    '      };',
+    "      localStorage.setItem('surge_bank_state', JSON.stringify(state));",
+    "      if (this.activeTabId) history.replaceState(null, '', '#' + encodeURIComponent(this.activeTabId));",
+    '    } catch (e) {}',
+    '  },',
+    '',
+    '  restoreWorkspace() {',
+    '    try {',
+    "      const raw = localStorage.getItem('surge_bank_state');",
+    '      const saved = raw ? JSON.parse(raw) : null;',
+    "      const hash = window.location.hash.replace(/^#/, '');",
+    '      if (saved && Array.isArray(saved.tabs) && saved.tabs.length > 0) {',
+    '        this.tabs = saved.tabs;',
+    '        this.activeTabId = saved.activeTabId || this.tabs[0].id;',
+    "        this.currentView = saved.currentView || 'dashboard';",
+    '        this.selectedAssetId = saved.selectedAssetId || null;',
+    '        this.selectedOfferId = saved.selectedOfferId || null;',
+    '        this.subPage = saved.subPage || null;',
+    "        this.detailTab = saved.detailTab || 'overview';",
+    '      }',
+    '      if (hash) {',
+    '        const decoded = decodeURIComponent(hash);',
+    '        const match = this.tabs.find(t => t.id === decoded);',
+    '        if (match) {',
+    '          this.activeTabId = match.id;',
+    '          this.currentView = match.view || this.currentView;',
+    '          this.selectedAssetId = match.assetId || null;',
+    '          this.subPage = match.subPage || null;',
+    "          this.detailTab = match.detailTab || 'overview';",
+    "        } else if (decoded.startsWith('asset-')) {",
+    "          const assetId = decoded.replace('asset-', '');",
+    '          if (!this.tabs.find(t => t.id === decoded)) {',
+    "            this.tabs.push({ id: decoded, title: 'Asset', view: 'assets', assetId, closable: true });",
+    '          }',
+    "          this.activeTabId = decoded; this.currentView = 'assets'; this.selectedAssetId = assetId;",
+    "        } else if (['dashboard','assets','legal','documents','offers','reports','notifications'].includes(decoded)) {",
+    '          if (!this.tabs.find(t => t.id === decoded)) {',
+    "            this.tabs.push({ id: decoded, title: this.getViewTitle(decoded), view: decoded, closable: decoded !== 'dashboard' });",
+    '          }',
+    '          this.activeTabId = decoded; this.currentView = decoded; this.selectedAssetId = null;',
+    '        }',
+    '      }',
+    '    } catch (e) {}',
+    '  },',
+    '',
+    '  async refreshActiveTab() {',
+    '    try { await Store.fetchRemote(); this.render(); } catch (e) {}',
+    '  },',
+    '',
+    '  openTab(tab) {',
+    '    if (!Array.isArray(this.tabs)) this.tabs = [];',
+    '    if (!tab || !tab.id) return;',
+    '    const existingIndex = this.tabs.findIndex(t => t.id === tab.id);',
+    '    if (existingIndex >= 0) {',
+    '      this.tabs[existingIndex] = { ...this.tabs[existingIndex], ...tab };',
+    '    } else {',
+    '      this.tabs.push(tab);',
+    '    }',
+    '    this.switchTab(tab.id);',
+    '  },',
+    '',
+    '  switchTab(tabId) {',
+    '    if (!Array.isArray(this.tabs) || this.tabs.length === 0) {',
+    "      this.tabs = [{ id: 'dashboard', title: 'Dashboard', view: 'dashboard', closable: false }];",
+    '    }',
+    '    const tab = this.tabs.find(t => t.id === tabId) || this.tabs[0];',
+    '    if (!tab) return;',
+    '    this.activeTabId = tab.id;',
+    "    this.currentView = tab.view || 'dashboard';",
+    '    this.selectedAssetId = tab.assetId || null;',
+    '    this.selectedOfferId = tab.selectedOfferId || null;',
+    '    this.subPage = tab.subPage || null;',
+    "    this.detailTab = tab.detailTab || 'overview';",
+    '',
+    "    document.querySelectorAll('#bank-nav .navitem').forEach(n => {",
+    "      n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);",
+    '    });',
+    '',
+    '    this.saveWorkspace();',
+    '    this.render();',
+    '    void this.refreshActiveTab();',
+    '  },'
+  ].join('\n')
+);
+
+// =========================================================
+// 7. BANK PORTAL — patch init() to call restoreWorkspace + hashchange
+// =========================================================
+replace(
+  'BankPortal: init restoreWorkspace',
+  [
+    '  async init(alreadyAuthenticated = false) {',
+    "    const authed = alreadyAuthenticated || await Auth.checkAuth('bank');",
+    '    if (!authed) return;',
+    '',
+    "    const tabsEl = document.getElementById('bank-doctabs');"
+  ].join('\n'),
+
+  [
+    '  async init(alreadyAuthenticated = false) {',
+    "    const authed = alreadyAuthenticated || await Auth.checkAuth('bank');",
+    '    if (!authed) return;',
+    '',
+    '    this.restoreWorkspace();',
+    "    window.addEventListener('hashchange', () => {",
+    "      const hash = window.location.hash.replace(/^#/, '');",
+    '      if (hash && hash !== this.activeTabId) {',
+    '        const decoded = decodeURIComponent(hash);',
+    '        const match = this.tabs.find(t => t.id === decoded);',
+    '        if (match) this.switchTab(match.id);',
+    '      }',
+    '    });',
+    '',
+    "    const tabsEl = document.getElementById('bank-doctabs');"
+  ].join('\n')
+);
+
+// =========================================================
+// 8. BANK PORTAL — closeTab: add saveWorkspace in else branch
+// =========================================================
+replace(
+  'BankPortal: closeTab saveWorkspace',
+  '    } else {\n      this.renderDoctabs();\n    }\n  },\n\n  async init(alreadyAuthenticated',
+  '    } else {\n      this.saveWorkspace();\n      this.renderDoctabs();\n    }\n  },\n\n  async init(alreadyAuthenticated'
+);
+
+// =========================================================
+// 9. BANK PORTAL — openSubPage: add saveWorkspace
+// =========================================================
+replace(
+  'BankPortal: openSubPage saveWorkspace',
+  '  openSubPage(name) {\n    this._stagedFile = null;\n    this.subPage = name;\n    this.updateCurrentTab({ subPage: name });\n    this.render();',
+  '  openSubPage(name) {\n    this._stagedFile = null;\n    this.subPage = name;\n    this.updateCurrentTab({ subPage: name });\n    this.saveWorkspace();\n    this.render();'
+);
+
+// =========================================================
+// 10. BANK PORTAL — closeSubPage: add saveWorkspace
+// =========================================================
+replace(
+  'BankPortal: closeSubPage saveWorkspace',
+  '    this.updateCurrentTab({ subPage: null, selectedOfferId: null });\n    this.render();\n  },\n\n  async loadPhotos',
+  '    this.updateCurrentTab({ subPage: null, selectedOfferId: null });\n    this.saveWorkspace();\n    this.render();\n  },\n\n  async loadPhotos'
+);
+
+// Restore original line endings
+if (hadCRLF) src = src.replace(/\n/g, '\r\n');
+
+fs.writeFileSync('app.js', src, 'utf8');
+console.log('\n=== All ' + patchCount + ' patches applied successfully ===');
+console.log('Copying to public/app.js...');
+fs.copyFileSync('app.js', 'public/app.js');
+console.log('Done. public/app.js synced.');

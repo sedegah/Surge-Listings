@@ -1544,6 +1544,61 @@ const BankPortal = {
     return titleMap[view] || 'Workspace';
   },
 
+  saveWorkspace() {
+    try {
+      const state = {
+        tabs: this.tabs, activeTabId: this.activeTabId, currentView: this.currentView,
+        selectedAssetId: this.selectedAssetId, selectedOfferId: this.selectedOfferId,
+        subPage: this.subPage, detailTab: this.detailTab
+      };
+      localStorage.setItem('surge_bank_state', JSON.stringify(state));
+      if (this.activeTabId) history.replaceState(null, '', '#' + encodeURIComponent(this.activeTabId));
+    } catch (e) {}
+  },
+
+  restoreWorkspace() {
+    try {
+      const raw = localStorage.getItem('surge_bank_state');
+      const saved = raw ? JSON.parse(raw) : null;
+      const hash = window.location.hash.replace(/^#/, '');
+      if (saved && Array.isArray(saved.tabs) && saved.tabs.length > 0) {
+        this.tabs = saved.tabs;
+        this.activeTabId = saved.activeTabId || this.tabs[0].id;
+        this.currentView = saved.currentView || 'dashboard';
+        this.selectedAssetId = saved.selectedAssetId || null;
+        this.selectedOfferId = saved.selectedOfferId || null;
+        this.subPage = saved.subPage || null;
+        this.detailTab = saved.detailTab || 'overview';
+      }
+      if (hash) {
+        const decoded = decodeURIComponent(hash);
+        const match = this.tabs.find(t => t.id === decoded);
+        if (match) {
+          this.activeTabId = match.id;
+          this.currentView = match.view || this.currentView;
+          this.selectedAssetId = match.assetId || null;
+          this.subPage = match.subPage || null;
+          this.detailTab = match.detailTab || 'overview';
+        } else if (decoded.startsWith('asset-')) {
+          const assetId = decoded.replace('asset-', '');
+          if (!this.tabs.find(t => t.id === decoded)) {
+            this.tabs.push({ id: decoded, title: 'Asset', view: 'assets', assetId, closable: true });
+          }
+          this.activeTabId = decoded; this.currentView = 'assets'; this.selectedAssetId = assetId;
+        } else if (['dashboard','assets','legal','documents','offers','reports','notifications'].includes(decoded)) {
+          if (!this.tabs.find(t => t.id === decoded)) {
+            this.tabs.push({ id: decoded, title: this.getViewTitle(decoded), view: decoded, closable: decoded !== 'dashboard' });
+          }
+          this.activeTabId = decoded; this.currentView = decoded; this.selectedAssetId = null;
+        }
+      }
+    } catch (e) {}
+  },
+
+  async refreshActiveTab() {
+    try { await Store.fetchRemote(); this.render(); } catch (e) {}
+  },
+
   openTab(tab) {
     if (!Array.isArray(this.tabs)) this.tabs = [];
     if (!tab || !tab.id) return;
@@ -1573,7 +1628,9 @@ const BankPortal = {
       n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
     });
 
+    this.saveWorkspace();
     this.render();
+    void this.refreshActiveTab();
   },
 
   closeTab(tabId, event) {
@@ -1591,6 +1648,7 @@ const BankPortal = {
       const nextTab = this.tabs[Math.min(idx, this.tabs.length - 1)];
       this.switchTab(nextTab.id);
     } else {
+      this.saveWorkspace();
       this.renderDoctabs();
     }
   },
@@ -1598,6 +1656,16 @@ const BankPortal = {
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('bank');
     if (!authed) return;
+
+    this.restoreWorkspace();
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash && hash !== this.activeTabId) {
+        const decoded = decodeURIComponent(hash);
+        const match = this.tabs.find(t => t.id === decoded);
+        if (match) this.switchTab(match.id);
+      }
+    });
 
     const tabsEl = document.getElementById('bank-doctabs');
     if (tabsEl && !tabsEl._wheelBound) {
@@ -1952,6 +2020,7 @@ const BankPortal = {
     this._stagedFile = null;
     this.subPage = name;
     this.updateCurrentTab({ subPage: name });
+    this.saveWorkspace();
     this.render();
     if (name === 'edit-media' && this.selectedAssetId) {
       void this.loadPhotos(this.selectedAssetId);
@@ -1963,6 +2032,7 @@ const BankPortal = {
     this.selectedOfferId = null;
     this.subPage = null;
     this.updateCurrentTab({ subPage: null, selectedOfferId: null });
+    this.saveWorkspace();
     this.render();
   },
 
@@ -3897,6 +3967,62 @@ const AdminPortal = {
     return titleMap[view] || 'Workspace';
   },
 
+  saveWorkspace() {
+    try {
+      const state = {
+        tabs: this.tabs, activeTabId: this.activeTabId, currentView: this.currentView,
+        selectedAssetId: this.selectedAssetId, selectedValuationId: this.selectedValuationId,
+        selectedOfferId: this.selectedOfferId, subPage: this.subPage, detailTab: this.detailTab
+      };
+      localStorage.setItem('surge_admin_state', JSON.stringify(state));
+      if (this.activeTabId) history.replaceState(null, '', '#' + encodeURIComponent(this.activeTabId));
+    } catch (e) {}
+  },
+
+  restoreWorkspace() {
+    try {
+      const raw = localStorage.getItem('surge_admin_state');
+      const saved = raw ? JSON.parse(raw) : null;
+      const hash = window.location.hash.replace(/^#/, '');
+      if (saved && Array.isArray(saved.tabs) && saved.tabs.length > 0) {
+        this.tabs = saved.tabs;
+        this.activeTabId = saved.activeTabId || this.tabs[0].id;
+        this.currentView = saved.currentView || 'assets';
+        this.selectedAssetId = saved.selectedAssetId || null;
+        this.selectedValuationId = saved.selectedValuationId || null;
+        this.selectedOfferId = saved.selectedOfferId || null;
+        this.subPage = saved.subPage || null;
+        this.detailTab = saved.detailTab || 'overview';
+      }
+      if (hash) {
+        const decoded = decodeURIComponent(hash);
+        const match = this.tabs.find(t => t.id === decoded);
+        if (match) {
+          this.activeTabId = match.id;
+          this.currentView = match.view || this.currentView;
+          this.selectedAssetId = match.assetId || null;
+          this.subPage = match.subPage || null;
+          this.detailTab = match.detailTab || 'overview';
+        } else if (decoded.startsWith('asset-')) {
+          const assetId = decoded.replace('asset-', '');
+          if (!this.tabs.find(t => t.id === decoded)) {
+            this.tabs.push({ id: decoded, title: 'Asset', view: 'assets', assetId, closable: true });
+          }
+          this.activeTabId = decoded; this.currentView = 'assets'; this.selectedAssetId = assetId;
+        } else if (['dashboard','assets','review','legal','title','offers','banks','audit'].includes(decoded)) {
+          if (!this.tabs.find(t => t.id === decoded)) {
+            this.tabs.push({ id: decoded, title: this.getViewTitle(decoded), view: decoded, closable: decoded !== 'assets' });
+          }
+          this.activeTabId = decoded; this.currentView = decoded; this.selectedAssetId = null;
+        }
+      }
+    } catch (e) {}
+  },
+
+  async refreshActiveTab() {
+    try { await Store.fetchRemote(); this.render(); } catch (e) {}
+  },
+
   openTab(tab) {
     if (!Array.isArray(this.tabs)) this.tabs = [];
     if (!tab || !tab.id) return;
@@ -3927,7 +4053,9 @@ const AdminPortal = {
       n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
     });
 
+    this.saveWorkspace();
     this.render();
+    void this.refreshActiveTab();
   },
 
   closeTab(tabId, event) {
@@ -3945,6 +4073,7 @@ const AdminPortal = {
       const nextTab = this.tabs[Math.min(idx, this.tabs.length - 1)];
       this.switchTab(nextTab.id);
     } else {
+      this.saveWorkspace();
       this.renderDoctabs();
     }
   },
@@ -3952,6 +4081,16 @@ const AdminPortal = {
   async init(alreadyAuthenticated = false) {
     const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
     if (!authed) return;
+
+    this.restoreWorkspace();
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash && hash !== this.activeTabId) {
+        const decoded = decodeURIComponent(hash);
+        const match = this.tabs.find(t => t.id === decoded);
+        if (match) this.switchTab(match.id);
+      }
+    });
 
     document.querySelectorAll('#admin-nav .navitem').forEach(el => {
       el.addEventListener('click', () => this.nav(el.dataset.view));
@@ -4242,7 +4381,7 @@ const AdminPortal = {
     this.subPage = 'offer-verify';
     this.render();
   },
-  openSubPage(name) { this.subPage = name; this.render(); },
+  openSubPage(name) { this.subPage = name; this.saveWorkspace(); this.render(); },
   closeSubPage() {
     this.subPage = null;
     this.selectedOfferId = null;
@@ -4250,6 +4389,7 @@ const AdminPortal = {
       this.selectedAssetId = null;
       this.selectedValuationId = null;
     }
+    this.saveWorkspace();
     if (this.currentView === 'assets' && this.detailTab === 'review' && this.selectedAssetId) {
       void this.loadGateReadiness(this.selectedAssetId);
       return;
