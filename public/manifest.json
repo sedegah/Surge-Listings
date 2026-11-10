@@ -3,7 +3,7 @@
   "name": "Surge Listings · Institutional Asset Disposition",
   "short_name": "Surge Listings",
   "description": "Institutional asset disposition and marketplace platform for Ghanaian commercial banks. Browse verified listings, track legal disposition, and submit formal purchase offers.",
-  "start_url": "/index.html",
+  "start_url": "/login.html",
   "scope": "/",
   "display": "standalone",
   "display_override": [
@@ -105,3 +105,4 @@
   ],
   "prefer_related_applications": false
 }
+

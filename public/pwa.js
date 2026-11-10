@@ -27,6 +27,12 @@
   if (isStandalone()) {
     document.documentElement.classList.add('surge-desktop-app');
     console.info('[Surge PWA] Running as standalone desktop application window');
+
+    // Ensure desktop PWA leads to the login portal first when opened at root
+    const path = window.location.pathname;
+    if (path === '/' || path.endsWith('/index.html')) {
+      window.location.replace('/login.html');
+    }
   }
 
   // 2. Service Worker Registration
