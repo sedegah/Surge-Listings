@@ -1,5 +1,5 @@
 /**
- * Surge Listings Desktop Application — Preload Script
+ * Surge Listings Desktop Application - Preload Script
  * 
  * Secure Context Isolation Bridge
  * Exposes only safe, strictly defined desktop capabilities to the renderer.

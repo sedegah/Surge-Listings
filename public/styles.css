@@ -87,7 +87,7 @@ a:hover { text-decoration: underline }
 .navitem .count.alert { background: var(--red); color: #fff }
 .workspace { flex: 1; display: flex; flex-direction: column; min-width: 0 }
 /* =====================================================================
-   DOCUMENT TABS BAR — Clean underline theme matching inner tabs
+   DOCUMENT TABS BAR - Clean underline theme matching inner tabs
 ===================================================================== */
 .doctabs-wrap {
   display: flex;

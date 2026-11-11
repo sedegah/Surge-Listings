@@ -1,5 +1,5 @@
 /**
- * Surge Listings — Modern Enterprise Notification & Dialog System
+ * Surge Listings - Modern Enterprise Notification & Dialog System
  * Complete implementation of the UI/UX Design Specification.
  */
 (function (global) {

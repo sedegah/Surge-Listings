@@ -1,5 +1,5 @@
 /**
- * Surge Listings — Enterprise Progressive Web App (PWA) Service Worker
+ * Surge Listings - Enterprise Progressive Web App (PWA) Service Worker
  * Version: 1.0.0
  * 
  * Features:

@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS assets (
   reserve_price REAL NOT NULL,
   minimum_offer REAL,
   show_reserve_publicly INTEGER NOT NULL DEFAULT 1,
-  occupancy_status TEXT NOT NULL, -- 'Vacant', 'Occupied — Cooperative', 'Occupied — Hostile'
+  occupancy_status TEXT NOT NULL, -- 'Vacant', 'Occupied - Cooperative', 'Occupied - Hostile'
   land_guard_risk TEXT NOT NULL DEFAULT 'Low', -- 'Low', 'Medium', 'High'
   status TEXT NOT NULL DEFAULT 'Draft', -- 'Draft', 'Submitted by Bank', 'Surge Review', 'Approved', 'Live', 'Legal Hold', 'Changes Required', 'Sold', 'Withdrawn'
   legal_hold_active INTEGER NOT NULL DEFAULT 0,
@@ -528,7 +528,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 -- AUTH EXTENSION TABLES (Centralized Authentication & RBAC)
 -- ============================================================
 
--- 36. Sessions — Secure server-side session store
+-- 36. Sessions - Secure server-side session store
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,                       -- session token (random 64-char hex)
   secret_hash TEXT UNIQUE,
@@ -552,7 +552,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- 37. Invitations — Invitation-only bank employee registration
+-- 37. Invitations - Invitation-only bank employee registration
 CREATE TABLE IF NOT EXISTS invitations (
   id TEXT PRIMARY KEY,
   token TEXT NOT NULL UNIQUE,                -- secure random token sent in email link
@@ -569,7 +569,7 @@ CREATE TABLE IF NOT EXISTS invitations (
   FOREIGN KEY (bank_id) REFERENCES banks(id) ON DELETE CASCADE
 );
 
--- 38. Login Attempts — Security monitoring and rate limiting
+-- 38. Login Attempts - Security monitoring and rate limiting
 CREATE TABLE IF NOT EXISTS login_attempts (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL,
@@ -583,7 +583,7 @@ CREATE INDEX IF NOT EXISTS idx_login_attempts_username_success_time
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_success_time
   ON login_attempts(ip_address, success, attempted_at);
 
--- 39. Password Resets — Reset tokens (admin-issued)
+-- 39. Password Resets - Reset tokens (admin-issued)
 CREATE TABLE IF NOT EXISTS password_resets (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -595,7 +595,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- 40. Organization Members — Links users to organizations with RBAC roles
+-- 40. Organization Members - Links users to organizations with RBAC roles
 CREATE TABLE IF NOT EXISTS organization_members (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

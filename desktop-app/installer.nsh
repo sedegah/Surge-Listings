@@ -1,4 +1,4 @@
-; Surge Listings — Custom NSIS Setup Wizard Definitions
+; Surge Listings - Custom NSIS Setup Wizard Definitions
 ManifestDPIAware true
 
 !macro customHeader

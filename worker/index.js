@@ -1,13 +1,13 @@
 /**
- * Surge Solutions — Cloudflare Workers Monolith API v2.2.0
+ * Surge Solutions - Cloudflare Workers Monolith API v2.2.0
  * Centralized Authentication + Role-Based Authorization
  *
  * Auth Architecture:
  * - ONE central login: /api/auth/login
  * - Server-side sessions stored in D1 (sessions table)
  * - Session token sent via Authorization: Bearer <token> header
- * - bankId is NEVER trusted from the client — always derived from the authenticated session
- * - Every /api/bank/* route calls requireBankAuth() — unauthorized requests return 401/403
+ * - bankId is NEVER trusted from the client - always derived from the authenticated session
+ * - Every /api/bank/* route calls requireBankAuth() - unauthorized requests return 401/403
  * - Invitation-only bank employee registration
  *
  * Portals & Required Scopes:
@@ -361,7 +361,7 @@ export default {
               : 'Enforcement instruments and legal clearance are pending'
         },
         { gate: 'TL-2 Title Perfection', passed: titleVerified, detail: titleVerified ? 'Title and deed verified by Surge' : 'Title details and supporting deed pending verification' },
-        { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuation ? `${valuation.status}${valuation.review_required ? ' — review required' : ''}; expires ${valuation.expiry_date}` : 'No valuation submitted' },
+        { gate: 'VL-1 Valuation Validity Window', passed: valuationValid, detail: valuation ? `${valuation.status}${valuation.review_required ? ' - review required' : ''}; expires ${valuation.expiry_date}` : 'No valuation submitted' },
         { gate: 'AS-4 Photo Documentation', passed: photoRequirementMet, detail: `${imageCount?.c || 0} media assets verified` },
         { gate: 'AS-8 Reserve Price Guard', passed: reservePriceSet, detail: `GHS ${asset.reserve_price?.toLocaleString()}` }
       ];
@@ -463,7 +463,7 @@ export default {
       return session;
     }
 
-    // Require authentication — returns session or sends 401
+    // Require authentication - returns session or sends 401
     async function requireAuth() {
       const session = await resolveSession();
       if (!session) {
@@ -472,7 +472,7 @@ export default {
       return session;
     }
 
-    // Require bank-level authentication — scope must be 'bank' or 'surge'
+    // Require bank-level authentication - scope must be 'bank' or 'surge'
     // All staff of Surge are also staff of the Surge Partner Bank
     async function requireBankAuth() {
       const session = await requireAuth();
@@ -608,10 +608,10 @@ export default {
 
       // ============================================================
       // 1. CENTRALIZED AUTHENTICATION
-      // POST /api/auth/login   — Central login for all portals
-      // POST /api/auth/logout  — Revoke current session
-      // GET  /api/auth/me      — Validate session + get profile
-      // POST /api/auth/accept-invitation — Activate account from invite
+      // POST /api/auth/login   - Central login for all portals
+      // POST /api/auth/logout  - Revoke current session
+      // GET  /api/auth/me      - Validate session + get profile
+      // POST /api/auth/accept-invitation - Activate account from invite
       // ============================================================
 
       if (['/api/auth/login', '/api/v1/auth/login', '/api/bank/auth/login', '/api/admin/auth/login'].includes(pathname) && method === 'POST') {
@@ -730,7 +730,7 @@ export default {
         });
       }
 
-      // POST /api/auth/logout — Revoke session
+      // POST /api/auth/logout - Revoke session
       if (pathname === '/api/auth/logout' && method === 'POST') {
         const session = await resolveSession();
         if (session) {
@@ -777,7 +777,7 @@ export default {
         return json({ success: true });
       }
 
-      // GET /api/auth/me — Validate session and return user profile
+      // GET /api/auth/me - Validate session and return user profile
       if ((pathname === '/api/auth/me' || pathname === '/api/v1/auth/me') && method === 'GET') {
         const session = await resolveSession();
         if (!session) return json({ success: true, authenticated: false, user: null });
@@ -799,7 +799,7 @@ export default {
         });
       }
 
-      // POST /api/auth/accept-invitation — Activate account from invitation link
+      // POST /api/auth/accept-invitation - Activate account from invitation link
       if (pathname === '/api/auth/accept-invitation' && method === 'POST') {
         const body = await getBody();
         const { token, password, full_name } = body;
@@ -843,7 +843,7 @@ export default {
         return json({ success: true, message: 'Account activated. You can now sign in.' });
       }
 
-      // POST /api/auth/invite — Send bank employee invitation (Bank Admin or Surge Admin)
+      // POST /api/auth/invite - Send bank employee invitation (Bank Admin or Surge Admin)
       if (pathname === '/api/auth/invite' && method === 'POST') {
         const session = await requireBankAuth();
         const body = await getBody();
@@ -1674,7 +1674,7 @@ export default {
       // =========================================================================
       // 3. BANK PORTAL API (/api/bank/*)
       // ALL routes below require a valid bank session.
-      // bankId is derived from the authenticated session ONLY — never from the client.
+      // bankId is derived from the authenticated session ONLY - never from the client.
       // =========================================================================
 
       // GET /api/bank/dashboard
@@ -2211,7 +2211,7 @@ export default {
         return json({ success: true, count: enquiries.results.length, data: enquiries.results });
       }
 
-      // GET /api/bank/staff — List all staff for authenticated bank
+      // GET /api/bank/staff - List all staff for authenticated bank
       if (pathname === '/api/bank/staff' && method === 'GET') {
         const session = await requireBankAuth();
         const staff = await env.DB.prepare(`
@@ -2228,7 +2228,7 @@ export default {
         return json({ success: true, count: staff.results.length, data: staff.results });
       }
 
-      // GET /api/bank/invitations — List pending invitations
+      // GET /api/bank/invitations - List pending invitations
       if (pathname === '/api/bank/invitations' && method === 'GET') {
         const session = await requireBankAuth();
         const invites = await env.DB.prepare(`
@@ -3160,7 +3160,7 @@ export default {
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Issued', datetime('now'))
             `).bind(
               invId, invNumber, offer.id, offer.bank_id, commAmount,
-              `Surge Solutions ${commRate}% Success Fee — Asset ${offer.asset_ref} (Accepted Offer ${offer.offer_ref} by ${offer.buyer_name})`,
+              `Surge Solutions ${commRate}% Success Fee - Asset ${offer.asset_ref} (Accepted Offer ${offer.offer_ref} by ${offer.buyer_name})`,
               issueDate, dueDate
             ).run();
 
@@ -3190,7 +3190,7 @@ export default {
         return json({ success: true, count: invoices.results.length, data: invoices.results });
       }
 
-      // Audit Logs — Track activity related to assets and documents
+      // Audit Logs - Track activity related to assets and documents
       // Bank audit logs are isolated to that bank and its assets; hash codes are stripped
       if (['/api/v1/audit-logs', '/api/admin/audit-logs', '/api/bank/audit-logs'].includes(pathname)) {
         const session = pathname === '/api/admin/audit-logs'
@@ -3266,7 +3266,7 @@ export default {
       }
 
       // =========================================================================
-      // 7. BRANCH MANAGEMENT (CRUD) — Region + District + Town Isolation
+      // 7. BRANCH MANAGEMENT (CRUD) - Region + District + Town Isolation
       // Each branch operates as a sub-system under its parent bank.
       // =========================================================================
 
@@ -3295,7 +3295,7 @@ export default {
         return json({ success: true, count: branches.results.length, data: branches.results });
       }
 
-      // POST /api/admin/branches — Create a branch for any bank
+      // POST /api/admin/branches - Create a branch for any bank
       if (pathname === '/api/admin/branches' && method === 'POST') {
         const body = await getBody();
         const { bank_id, name, branch_code, region, district, town, address, phone, email, manager_name } = body;
@@ -3317,7 +3317,7 @@ export default {
         return json({ success: true, message: 'Branch created successfully.', data: created }, 201);
       }
 
-      // PUT /api/admin/branches/:id — Update a branch
+      // PUT /api/admin/branches/:id - Update a branch
       if (pathname.match(/^\/api\/admin\/branches\/[a-zA-Z0-9_-]+$/) && method === 'PUT') {
         const id = pathname.split('/').pop();
         const branch = await env.DB.prepare(`SELECT * FROM bank_branches WHERE id = ?`).bind(id).first();
@@ -3356,7 +3356,7 @@ export default {
         return json({ success: true, message: `Branch '${branch.name}' deleted.` });
       }
 
-      // POST /api/bank/branches — Bank creates its own branch
+      // POST /api/bank/branches - Bank creates its own branch
       if (pathname === '/api/bank/branches' && method === 'POST') {
         const body = await getBody();
         const { name, branch_code, region, district, town, address, phone, email, manager_name } = body;
@@ -3382,7 +3382,7 @@ export default {
         return json({ success: true, message: 'Branch created.', data: created }, 201);
       }
 
-      // GET /api/bank/branches/:id/assets — Branch-scoped asset isolation
+      // GET /api/bank/branches/:id/assets - Branch-scoped asset isolation
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/assets$/) && method === 'GET') {
         const parts = pathname.split('/');
         const branchId = parts[4];
@@ -3409,7 +3409,7 @@ export default {
         return json({ success: true, branch: { id: branch.id, name: branch.name, region: branch.region, district: branch.district }, count: assets.results.length, data: assets.results });
       }
 
-      // GET /api/bank/branches/:id/staff — Branch-scoped staff listing
+      // GET /api/bank/branches/:id/staff - Branch-scoped staff listing
       if (pathname.match(/^\/api\/bank\/branches\/[a-zA-Z0-9_-]+\/staff$/) && method === 'GET') {
         const parts = pathname.split('/');
         const branchId = parts[4];
@@ -3469,7 +3469,7 @@ export default {
       // Backend resolves the hash to the real internal handler.
       // =========================================================================
 
-      // POST /api/enc/resolve — Resolve a hashed route token to its internal handler
+      // POST /api/enc/resolve - Resolve a hashed route token to its internal handler
       if (pathname === '/api/enc/resolve' && method === 'POST') {
         const body = await getBody();
         const { token, context } = body;
@@ -3526,7 +3526,7 @@ export default {
         return json({ success: true, route: resolvedRoute, key: resolvedKey, context: context || null });
       }
 
-      // GET /api/enc/tokens — Generate hashed tokens for all portal routes (admin use only)
+      // GET /api/enc/tokens - Generate hashed tokens for all portal routes (admin use only)
       if (pathname === '/api/enc/tokens' && method === 'GET') {
         const routeKeys = [
           'admin:dashboard', 'admin:banks', 'admin:users', 'admin:assets',
@@ -3576,7 +3576,7 @@ export default {
         });
       }
 
-      // GET /api/regions — All 16 Ghana regions with their constituencies (used as districts)
+      // GET /api/regions - All 16 Ghana regions with their constituencies (used as districts)
       // District dropdown MUST be filtered by region selection
       if (pathname === '/api/regions' && method === 'GET') {
         const requestedRegion = url.searchParams.get('region');
@@ -3615,7 +3615,7 @@ export default {
       // 404 Route Fallback
       return err(`Route '${pathname}' with method '${method}' not found on Surge API. Check / for endpoint documentation.`, 404);
     } catch (error) {
-      // Auth guards throw Response objects directly — pass them through unchanged
+      // Auth guards throw Response objects directly - pass them through unchanged
       if (error instanceof Response) return error;
       console.error('Unhandled API Error:', error);
       return json({ success: false, error: error.message || 'An internal server error occurred.' }, 500);

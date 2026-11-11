@@ -1,4 +1,4 @@
-# Surge Listings — Windows Desktop Application
+# Surge Listings - Windows Desktop Application
 
 Standalone Windows Desktop Application for the **Surge Listings** platform, built using Electron and packaged with electron-builder.
 

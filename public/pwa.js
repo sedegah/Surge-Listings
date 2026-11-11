@@ -1,5 +1,5 @@
 /**
- * Surge Listings — Progressive Web App (PWA) Client Controller
+ * Surge Listings - Progressive Web App (PWA) Client Controller
  * Version: 1.0.0
  * 
  * Manages:

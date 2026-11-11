@@ -1,11 +1,11 @@
 /**
  * Surge Solutions Platform Engine
  * Unified Interactive Controller & Shared Data Store
- * Derived from Surge Solutions — Complete Interactive Mockup.html
+ * Derived from Surge Solutions - Complete Interactive Mockup.html
  */
 
 // ============================================================
-// GHANA GEOGRAPHIC DATA — 16 Administrative Regions & 276 Constituencies
+// GHANA GEOGRAPHIC DATA - 16 Administrative Regions & 276 Constituencies
 // ============================================================
 const GhanaGeo = {
   REGIONS: {
@@ -626,11 +626,11 @@ const Store = {
   },
 
   persist() {
-    // No-op — Cloudflare D1 is the persistence layer
+    // No-op - Cloudflare D1 is the persistence layer
   },
 
   load() {
-    // No-op — data comes exclusively from fetchRemote()
+    // No-op - data comes exclusively from fetchRemote()
   },
 
   async fetchRemote() {
@@ -659,7 +659,7 @@ const Store = {
       if (assetsRes.status === 'fulfilled' && assetsRes.value.ok) {
         const json = await assetsRes.value.json();
         if (json.success && Array.isArray(json.data)) {
-          // Public marketplace API returns a simpler shape — map it into the same Store.assets format
+          // Public marketplace API returns a simpler shape - map it into the same Store.assets format
           if (portal === 'public') {
             this.assets = json.data.map(d => ({
               id: d.id,
@@ -861,7 +861,7 @@ const Store = {
         }
       }
 
-      // Audit Log — Track activity related to assets and documents (isolated per bank; no hash codes)
+      // Audit Log - Track activity related to assets and documents (isolated per bank; no hash codes)
       if (auditRes.status === 'fulfilled' && auditRes.value?.ok) {
         const json = await auditRes.value.json();
         if (json.success && Array.isArray(json.data)) {
@@ -951,7 +951,7 @@ const Store = {
       if (typeof AdminPortal !== 'undefined' && AdminPortal.render) AdminPortal.render();
       if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
     } catch (e) {
-      console.warn('API fetch failed — UI will show empty state:', e);
+      console.warn('API fetch failed - UI will show empty state:', e);
     }
   },
 
@@ -1123,7 +1123,7 @@ const Store = {
 
 
   seed() {
-    // No mock data — Cloudflare D1 is the single source of truth
+    // No mock data - Cloudflare D1 is the single source of truth
     this.assets = [];
     this.leads = [];
     this.offers = [];
@@ -1439,7 +1439,7 @@ const UI = {
     return asset.ownerBankName || asset.bankName || 'Partner bank';
   },
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
-  fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
+  fmtDate(iso) { if (!iso) return '-'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
   auditActor(entry) {
     if (!entry) return 'System';
     const who = this.escapeHtml(entry.who || 'Staff Member');
@@ -1547,7 +1547,7 @@ const UI = {
   cleanAuditDetail(detail, entry) {
     if (!detail) return this.auditActionLabel(entry?.action) || 'Activity recorded';
     let text = String(detail)
-      .replace(/—/g, ' - ')
+      .replace(/\u2014/g, ' - ')
       .replace(/\b[0-9a-fA-F]{24,64}\b/g, '')
       .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g, '')
       .replace(/\b(u|doc|val|li|img|sess|asset|bank|branch)-[a-zA-Z0-9_-]{8,}\b/g, '')
@@ -1613,7 +1613,7 @@ const UI = {
       text = 'User session signed out';
     }
 
-    text = text.replace(/—/g, ' - ');
+    text = text.replace(/\u2014/g, ' - ');
     return this.escapeHtml(text || this.auditActionLabel(entry?.action) || 'Activity recorded');
   },
   cleanAuditRef(ref, entityType) {
@@ -1624,7 +1624,7 @@ const UI = {
     }
     return ref;
   },
-  fmtDateShort(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
+  fmtDateShort(iso) { if (!iso) return '-'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric' }); },
   badge(status) {
     const map = {
       'Live': 'live', 'Published': 'live', 'Verified': 'ok', 'Cleared': 'ok',
@@ -1742,7 +1742,7 @@ const UI = {
         <table>
           <thead><tr><th>Invoice #</th><th>Description</th><th>Issue Date</th><th>Due Date</th><th style="text-align:right">Amount (GHS)</th><th>Status</th></tr></thead>
           <tbody>
-            ${invoices.map(i => `<tr><td class="mono">${i.ref}</td><td>${this.escapeHtml(i.description || '')}</td><td>${i.issuedAt ? this.fmtDateShort(i.issuedAt) : '—'}</td><td>${i.dueDate ? this.fmtDateShort(i.dueDate) : '—'}</td><td style="text-align:right">${this.fmtMoney(i.amount || 0)}</td><td><span class="status-pill ${i.status === 'Paid' ? 'green' : i.status === 'Overdue' ? 'red' : 'amber'}">${i.status}</span></td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No invoices on record.</td></tr>'}
+            ${invoices.map(i => `<tr><td class="mono">${i.ref}</td><td>${this.escapeHtml(i.description || '')}</td><td>${i.issuedAt ? this.fmtDateShort(i.issuedAt) : '-'}</td><td>${i.dueDate ? this.fmtDateShort(i.dueDate) : '-'}</td><td style="text-align:right">${this.fmtMoney(i.amount || 0)}</td><td><span class="status-pill ${i.status === 'Paid' ? 'green' : i.status === 'Overdue' ? 'red' : 'amber'}">${i.status}</span></td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No invoices on record.</td></tr>'}
           </tbody>
         </table>`;
     }
@@ -1777,7 +1777,7 @@ const UI = {
         </table>`;
     }
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — Surge Solutions</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} - Surge Solutions</title>
     <style>
       @page { size: A4 landscape; margin: 18mm 15mm; }
       * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1829,7 +1829,7 @@ const UI = {
       <div class="report-title">${title}</div>
       ${bodyContent}
       <div class="report-footer">
-        <div class="confidential">Confidential — For Authorised Recipients Only</div>
+        <div class="confidential">Confidential - For Authorised Recipients Only</div>
         <div>© ${now.getFullYear()} Surge Solutions · Accra, Ghana · All rights reserved</div>
       </div>
       <div class="no-print" style="text-align:center;margin-top:24px">
@@ -2276,13 +2276,13 @@ const BankPortal = {
         <div class="kpi" onclick="BankPortal.nav('offers')"><div class="k">Active Offers</div><div class="v">${activeOffers}</div><div class="d">Awaiting decision</div></div>
       </div>
       <div class="gridwrap">
-        <div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity ${activeBranch ? '— ' + activeBranch.name : ''}</strong></div>
+        <div class="gridtoolbar"><strong style="font-size:12.5px">Recent Activity ${activeBranch ? '- ' + activeBranch.name : ''}</strong></div>
         <div style="padding:10px 14px">
           <ul class="timeline">
             ${Store.getBankAuditLogs().slice(0, 8).map(a => `
               <li><span class="dot ${a.action === 'LEGAL_HOLD' ? 'red' : a.action === 'PUBLISH' ? 'green' : ''}"></span>
                 <div class="tl-when">${UI.fmtDate(a.when)}</div>
-                <div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} — ${UI.cleanAuditDetail(a.detail, a)}</div>
+                <div class="tl-what"><b>${UI.escapeHtml(a.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(a.entityRef, a.entity))} - ${UI.cleanAuditDetail(a.detail, a)}</div>
                 <div class="tl-who">${UI.auditActor(a)}</div>
               </li>
             `).join('') || '<li style="color:var(--text-2)">No recent activity</li>'}
@@ -2494,7 +2494,7 @@ const BankPortal = {
 
       <div class="detailhead">
         <span class="ref">${a.ref}</span>
-        <span class="title">${a.category} — ${a.assetType}</span>
+        <span class="title">${a.category} - ${a.assetType}</span>
         <span class="spacer"></span>
         <span class="badge info">${a.region}</span>
       </div>
@@ -2534,18 +2534,18 @@ const BankPortal = {
             <div class="body">
               <div class="field"><span class="lbl">Public Reference</span><div class="ctl"><input value="${a.ref}" readonly></div></div>
               <div class="field"><span class="lbl">Category</span><div class="ctl"><input value="${a.category}" readonly></div></div>
-              <div class="field"><span class="lbl">Asset Type</span><div class="ctl"><input value="${a.assetType || '—'}" readonly></div></div>
-              <div class="field"><span class="lbl">Internal Bank Ref</span><div class="ctl"><input value="${a.caseRef || '—'}" readonly></div></div>
-              <div class="field"><span class="lbl">Asset Owner</span><div class="ctl"><input value="${UI.escapeHtml(owner || '—')}" readonly></div></div>
+              <div class="field"><span class="lbl">Asset Type</span><div class="ctl"><input value="${a.assetType || '-'}" readonly></div></div>
+              <div class="field"><span class="lbl">Internal Bank Ref</span><div class="ctl"><input value="${a.caseRef || '-'}" readonly></div></div>
+              <div class="field"><span class="lbl">Asset Owner</span><div class="ctl"><input value="${UI.escapeHtml(owner || '-')}" readonly></div></div>
             </div>
           </div>
           <div class="group">
             <div class="caption">Location</div>
             <div class="body">
-              <div class="field"><span class="lbl">Region</span><div class="ctl"><input value="${a.region || '—'}" readonly></div></div>
-              <div class="field"><span class="lbl">District</span><div class="ctl"><input value="${a.district || '—'}" readonly></div></div>
-              <div class="field"><span class="lbl">Public Location</span><div class="ctl"><input value="${a.publicLocation || '—'}" readonly></div></div>
-              <div class="field"><span class="lbl">Exact Address</span><div class="ctl"><input value="${a.exactAddress || '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Region</span><div class="ctl"><input value="${a.region || '-'}" readonly></div></div>
+              <div class="field"><span class="lbl">District</span><div class="ctl"><input value="${a.district || '-'}" readonly></div></div>
+              <div class="field"><span class="lbl">Public Location</span><div class="ctl"><input value="${a.publicLocation || '-'}" readonly></div></div>
+              <div class="field"><span class="lbl">Exact Address</span><div class="ctl"><input value="${a.exactAddress || '-'}" readonly></div></div>
             </div>
           </div>
         </div>
@@ -2555,14 +2555,14 @@ const BankPortal = {
             <div class="body">
               <div class="field"><span class="lbl">Reserve Price (GHS)</span><div class="ctl"><input class="money" value="${Number(a.reserve).toLocaleString('en-GH', { minimumFractionDigits: 2 })}" readonly></div></div>
               <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input class="money" value="${Number(a.minOffer).toLocaleString('en-GH', { minimumFractionDigits: 2 })}" readonly></div></div>
-              <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl"><input value="${a.showReserve ? 'Yes' : 'No — Price on Application'}" readonly></div></div>
+              <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl"><input value="${a.showReserve ? 'Yes' : 'No - Price on Application'}" readonly></div></div>
             </div>
           </div>
           <div class="group">
             <div class="caption">Valuation</div>
             <div class="body">
               <div class="field"><span class="lbl">Valuation Amount</span><div class="ctl"><input class="money" value="${a.valuationAmount ? UI.fmtMoney(a.valuationAmount) : 'Not recorded'}" readonly></div></div>
-              <div class="field"><span class="lbl">Valuation Date</span><div class="ctl"><input value="${a.valuationDate ? UI.fmtDateShort(a.valuationDate) : '—'}" readonly></div></div>
+              <div class="field"><span class="lbl">Valuation Date</span><div class="ctl"><input value="${a.valuationDate ? UI.fmtDateShort(a.valuationDate) : '-'}" readonly></div></div>
               <div class="field"><span class="lbl">Expiry Status</span><div class="ctl"><input value="${a.valuationExpiry && new Date(a.valuationExpiry) > new Date() ? 'Valid' : 'REVIEW REQUIRED'}" readonly style="color:${a.valuationExpiry && new Date(a.valuationExpiry) > new Date() ? 'var(--success)' : 'var(--danger)'};font-weight:600"></div></div>
             </div>
           </div>
@@ -2591,11 +2591,11 @@ const BankPortal = {
               <input id="edit-ov-caseRef" value="${a.caseRef || ''}" placeholder="e.g. BNK-LN-88214">
             </div></div>
             <div class="field"><span class="lbl">Asset Owner</span><div class="ctl">
-              <input value="${UI.escapeHtml(owner || '—')}" readonly>
+              <input value="${UI.escapeHtml(owner || '-')}" readonly>
             </div></div>
             <div class="field"><span class="lbl">Enforcement Basis</span><div class="ctl">
               <select id="edit-ov-enforcementBasis">
-                <option value="">— Select Basis —</option>
+                <option value="">- Select Basis -</option>
                 <option ${a.enforcementBasis === 'Court Judgment' ? 'selected' : ''}>Court Judgment</option>
                 <option ${a.enforcementBasis === 'Default Notice' ? 'selected' : ''}>Default Notice</option>
                 <option ${a.enforcementBasis === 'Memorandum of Agreement' ? 'selected' : ''}>Memorandum of Agreement</option>
@@ -2643,8 +2643,8 @@ const BankPortal = {
             </div></div>
             <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
               <select id="edit-ov-showReserve">
-                <option value="true" ${a.showReserve ? 'selected' : ''}>Yes — display reserve price</option>
-                <option value="false" ${!a.showReserve ? 'selected' : ''}>No — Price on Application</option>
+                <option value="true" ${a.showReserve ? 'selected' : ''}>Yes - display reserve price</option>
+                <option value="false" ${!a.showReserve ? 'selected' : ''}>No - Price on Application</option>
               </select>
             </div></div>
           </div>
@@ -2744,7 +2744,7 @@ const BankPortal = {
           <div class="kv-row"><span class="kv-k">Case Reference</span><span class="kv-v">${a.caseRef}</span></div>
           <div class="kv-row"><span class="kv-k">Legal Status</span><span class="kv-v">${UI.badge(a.legalStatus)}</span></div>
           <div class="kv-row"><span class="kv-k">Injunction</span><span class="kv-v">${a.injunctionActive ? UI.badge('Active') : '<span class="badge ok">None</span>'}</span></div>
-          <div class="kv-row"><span class="kv-k">Legal Hold</span><span class="kv-v">${a.legalHold ? `<span class="badge hold">Active — ${a.legalHoldReason}</span>` : '<span class="badge ok">None</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Legal Hold</span><span class="kv-v">${a.legalHold ? `<span class="badge hold">Active - ${a.legalHoldReason}</span>` : '<span class="badge ok">None</span>'}</span></div>
         </div>
       </div>
       <div class="group">
@@ -2922,8 +2922,8 @@ const BankPortal = {
           <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input id="edit-minOffer" class="money" type="number" value="${a.minOffer}" min="0"></div></div>
           <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
             <select id="edit-showReserve">
-              <option value="true" ${a.showReserve ? 'selected' : ''}>Yes — show reserve</option>
-              <option value="false" ${!a.showReserve ? 'selected' : ''}>No — Price on Application</option>
+              <option value="true" ${a.showReserve ? 'selected' : ''}>Yes - show reserve</option>
+              <option value="false" ${!a.showReserve ? 'selected' : ''}>No - Price on Application</option>
             </select>
           </div></div>
         </div>
@@ -3005,7 +3005,7 @@ const BankPortal = {
         <div class="body">
           <div class="field"><span class="lbl">Basis Type <span class="req">*</span></span><div class="ctl">
             <select id="edit-enforcementBasis">
-              <option value="">— Select —</option>
+              <option value="">- Select -</option>
               <option ${a.enforcementBasis === 'Court Judgment' ? 'selected' : ''}>Court Judgment</option>
               <option ${a.enforcementBasis === 'Memorandum of Agreement' ? 'selected' : ''}>Memorandum of Agreement</option>
               <option ${a.enforcementBasis === 'Settlement Agreement' ? 'selected' : ''}>Settlement Agreement</option>
@@ -3188,7 +3188,7 @@ const BankPortal = {
     a.legalSubstate = a.legalSubstate || {};
     a.legalSubstate.enforcementRecorded = true;
     Store.updateAsset(this.selectedAssetId, { enforcementBasis, caseRef, legalStatus: 'Pending'     }, Auth.getActorName(), 'Enforcement basis and instruments submitted for legal review');
-    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Submitted enforcement documents — awaiting Surge legal verification');
+    Store.addActivity(this.selectedAssetId, Auth.getActorName(), 'Submitted enforcement documents - awaiting Surge legal verification');
     UI.toast('Legal documents submitted. Surge Legal will review within 2 business days.', 'success');
     this.closeSubPage();
   },
@@ -3259,7 +3259,7 @@ const BankPortal = {
               <span class="slot-title">${title}</span>
               <span class="slot-hint">${tagline}</span>
             </div>
-            ${photo ? '<span class="badge live">✓ Uploaded</span>' : '<span class="badge alert">Missing — Required</span>'}
+            ${photo ? '<span class="badge live">✓ Uploaded</span>' : '<span class="badge alert">Missing - Required</span>'}
           </div>
           <div class="slot-body">
             ${photo ? `
@@ -3797,7 +3797,7 @@ const BankPortal = {
         </td>
         <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
         <td>
-          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}" style="font-weight:600">${UI.escapeHtml(l.phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
+          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}" style="font-weight:600">${UI.escapeHtml(l.phone)}</a>` : '<span style="color:var(--text-2)">-</span>'}
           ${l.email ? `<br><a href="mailto:${UI.escapeHtml(l.email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(l.email)}</a>` : ''}
         </td>
         <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
@@ -3849,7 +3849,7 @@ const BankPortal = {
           ${ghanaCard ? `<br><span style="font-size:11px;color:var(--text-2);font-family:monospace">${UI.escapeHtml(ghanaCard)}</span>` : ''}
         </td>
         <td>
-          ${phone ? `<a href="tel:${UI.escapeHtml(phone)}" style="font-weight:600">${UI.escapeHtml(phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
+          ${phone ? `<a href="tel:${UI.escapeHtml(phone)}" style="font-weight:600">${UI.escapeHtml(phone)}</a>` : '<span style="color:var(--text-2)">-</span>'}
           ${email ? `<br><a href="mailto:${UI.escapeHtml(email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(email)}</a>` : ''}
         </td>
         <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
@@ -4029,7 +4029,7 @@ const BankPortal = {
           <div class="kv-row"><span class="kv-k">Asset Reference</span><span class="kv-v"><b>${o.assetRef}</b>${asset ? ` <button class="btn small" style="margin-left:8px" onclick="BankPortal.openAsset('${asset.id}')">View Asset Listing</button>` : ''}</span></div>
           ${asset?.title ? `<div class="kv-row"><span class="kv-k">Asset Title</span><span class="kv-v">${UI.escapeHtml(asset.title)}</span></div>` : ''}
           <div class="kv-row"><span class="kv-k">Offered Purchase Price</span><span class="kv-v"><b style="font-size:15px;color:var(--primary)">${UI.fmtMoney(o.amount)}</b></span></div>
-          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '—'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '-'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
           <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
           <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
           <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
@@ -4175,7 +4175,7 @@ const BankPortal = {
                 <tr>
                   <td class="ref"><b>${i.ref}</b></td>
                   <td>${UI.escapeHtml(i.description)}</td>
-                  <td><small>${i.issuedAt ? UI.fmtDateShort(i.issuedAt) : '—'}</small></td>
+                  <td><small>${i.issuedAt ? UI.fmtDateShort(i.issuedAt) : '-'}</small></td>
                   <td><small>${i.dueDate ? UI.fmtDateShort(i.dueDate) : '14 Days'}</small></td>
                   <td class="num"><b>${UI.fmtMoney(i.amount)}</b></td>
                   <td>${UI.badge(i.status)}</td>
@@ -4190,7 +4190,7 @@ const BankPortal = {
 
   renderNotificationsView() {
     const logs = Store.getBankAuditLogs();
-    return `<div class="page-head"><h1>Notifications &amp; Activity</h1><span class="crumb">${logs.length} bank-isolated events</span></div><div class="gridwrap"><div style="padding:10px 14px">${logs.slice(0, 30).map(n => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(n.when)}</div><div class="ae-who">${UI.auditActor(n)}</div><div class="ae-what"><b>${UI.escapeHtml(n.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(n.entityRef, n.entity))} — ${UI.cleanAuditDetail(n.detail, n)}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No notifications recorded for this bank.</p>'}</div></div>`;
+    return `<div class="page-head"><h1>Notifications &amp; Activity</h1><span class="crumb">${logs.length} bank-isolated events</span></div><div class="gridwrap"><div style="padding:10px 14px">${logs.slice(0, 30).map(n => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(n.when)}</div><div class="ae-who">${UI.auditActor(n)}</div><div class="ae-what"><b>${UI.escapeHtml(n.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(n.entityRef, n.entity))} - ${UI.cleanAuditDetail(n.detail, n)}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No notifications recorded for this bank.</p>'}</div></div>`;
   },
 
   async newAsset() {
@@ -4283,7 +4283,7 @@ const BankPortal = {
       const d = json.data;
       const actorName = d.created_by || 'Not recorded';
       const asset = {
-        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || user?.bankName || '—',
+        id: d.id, ref: d.public_ref, bankId: d.bank_id, bankName: d.bank_name || user?.bankName || '-',
         ownershipType: d.ownership_type || ownershipType, ownerBankId: d.owner_bank_id || ownerBankId,
         ownerBankName: d.owner_bank_name || (ownerBankId ? document.getElementById('asset-owner-bank')?.selectedOptions[0]?.textContent : '') || '',
         ownerName: d.owner_name || ownerName, branchId: d.branch_id || branchId,
@@ -5097,7 +5097,7 @@ const AdminPortal = {
       ` : ''}
       <div class="detailhead">
         <span class="ref">${a.ref}</span>
-        <span class="title">${a.category} — ${a.assetType}</span>
+        <span class="title">${a.category} - ${a.assetType}</span>
         <span class="spacer"></span>
         <span class="badge ${readiness.allPass ? 'ok' : 'warn'}">${readiness.checks.filter(c => c.pass).length}/${readiness.checks.length} gates</span>
       </div>
@@ -5272,7 +5272,7 @@ const AdminPortal = {
 
   renderAuditTab(a) {
     const list = Store.auditLog.filter(x => x.entityRef === a.ref || x.entityRef === a.id);
-    return `<div class="group"><div class="caption">Audit</div><div class="body">${list.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b>${x.oldValue ? ` — <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
+    return `<div class="group"><div class="caption">Audit</div><div class="body">${list.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b>${x.oldValue ? ` - <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2)">No events</p>'}</div></div>`;
   },
 
   renderReviewQueue() {
@@ -5460,7 +5460,7 @@ const AdminPortal = {
         </td>
         <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
         <td>
-          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}" style="font-weight:600">${UI.escapeHtml(l.phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
+          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}" style="font-weight:600">${UI.escapeHtml(l.phone)}</a>` : '<span style="color:var(--text-2)">-</span>'}
           ${l.email ? `<br><a href="mailto:${UI.escapeHtml(l.email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(l.email)}</a>` : ''}
         </td>
         <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
@@ -5512,7 +5512,7 @@ const AdminPortal = {
           ${ghanaCard ? `<br><span style="font-size:11px;color:var(--text-2);font-family:monospace">${UI.escapeHtml(ghanaCard)}</span>` : ''}
         </td>
         <td>
-          ${phone ? `<a href="tel:${UI.escapeHtml(phone)}" style="font-weight:600">${UI.escapeHtml(phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
+          ${phone ? `<a href="tel:${UI.escapeHtml(phone)}" style="font-weight:600">${UI.escapeHtml(phone)}</a>` : '<span style="color:var(--text-2)">-</span>'}
           ${email ? `<br><a href="mailto:${UI.escapeHtml(email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(email)}</a>` : ''}
         </td>
         <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
@@ -5675,7 +5675,7 @@ const AdminPortal = {
   },
 
   renderAuditView() {
-    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(x.entityRef, x.entity))}${x.oldValue ? ` — <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No audit events recorded.</p>'}</div></div>`;
+    return `<div class="page-head"><h1>Audit Log</h1><span class="crumb">${Store.auditLog.length} events</span></div><div class="gridwrap"><div style="padding:10px 14px">${Store.auditLog.map(x => `<div class="audit-entry"><div class="ae-when">${UI.fmtDate(x.when)}</div><div class="ae-who">${UI.auditActor(x)}</div><div class="ae-what"><b>${UI.escapeHtml(x.action)}</b> ${UI.escapeHtml(UI.cleanAuditRef(x.entityRef, x.entity))}${x.oldValue ? ` - <span class="ae-old">${UI.escapeHtml(x.oldValue)}</span> → <span class="ae-new">${UI.escapeHtml(x.newValue)}</span>` : ''}${x.detail ? `<br><span style="color:var(--text-2)">${UI.cleanAuditDetail(x.detail, x)}</span>` : ''}</div></div>`).join('') || '<p style="color:var(--text-2);padding:20px">No audit events recorded.</p>'}</div></div>`;
   },
 
   renderSubPage() {
@@ -5724,7 +5724,7 @@ const AdminPortal = {
           ${asset?.title ? `<div class="kv-row"><span class="kv-k">Asset Title</span><span class="kv-v">${UI.escapeHtml(asset.title)}</span></div>` : ''}
           <div class="kv-row"><span class="kv-k">Managing Bank</span><span class="kv-v">${UI.escapeHtml(o.bankName || 'Partner Bank')}</span></div>
           <div class="kv-row"><span class="kv-k">Offered Purchase Price</span><span class="kv-v"><b style="font-size:15px;color:var(--primary)">${UI.fmtMoney(o.amount)}</b></span></div>
-          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '—'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Reserve Price</span><span class="kv-v">${asset ? UI.fmtMoney(asset.reserve) : '-'} ${o.belowReserve ? '<span class="badge alert" style="margin-left:6px">Below Reserve</span>' : '<span class="badge ok" style="margin-left:6px">Meets Reserve</span>'}</span></div>
           <div class="kv-row"><span class="kv-k">Submission Date</span><span class="kv-v">${UI.fmtDate(o.date)}</span></div>
           <div class="kv-row"><span class="kv-k">Offer Validity</span><span class="kv-v">${o.validity ? UI.fmtDate(o.validity) : '30 Days'}</span></div>
           <div class="kv-row"><span class="kv-k">Payment Terms</span><span class="kv-v">${UI.escapeHtml(o.conditions || 'Cash / Direct Bank Transfer')}</span></div>
@@ -5795,8 +5795,8 @@ const AdminPortal = {
         <div class="body">
           <div class="kv-row"><span class="kv-k">Recorded Basis</span><span class="kv-v">${a.enforcementBasis || '<span style="color:var(--danger)">Not recorded</span>'}</span></div>
           <div class="kv-row"><span class="kv-k">Case Reference</span><span class="kv-v">${a.caseRef}</span></div>
-          <div class="kv-row"><span class="kv-k">Injunction</span><span class="kv-v">${a.injunctionActive ? '<span class="badge alert">ACTIVE — blocks publication</span>' : '<span class="badge ok">None</span>'}</span></div>
-          <div class="kv-row"><span class="kv-k">Legal Hold</span><span class="kv-v">${a.legalHold ? `<span class="badge hold">Active — ${a.legalHoldReason}</span>` : '<span class="badge ok">None</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Injunction</span><span class="kv-v">${a.injunctionActive ? '<span class="badge alert">ACTIVE - blocks publication</span>' : '<span class="badge ok">None</span>'}</span></div>
+          <div class="kv-row"><span class="kv-k">Legal Hold</span><span class="kv-v">${a.legalHold ? `<span class="badge hold">Active - ${a.legalHoldReason}</span>` : '<span class="badge ok">None</span>'}</span></div>
         </div>
       </div>
 
@@ -5983,11 +5983,11 @@ const AdminPortal = {
         <div class="caption">Submitted Title Information</div>
         <div class="body">
           <div class="kv-row"><span class="kv-k">Title Number</span><span class="kv-v">${UI.escapeHtml(title?.certificate_number || a.titleNumber || 'Not provided')}</span></div>
-          <div class="kv-row"><span class="kv-k">Title Type</span><span class="kv-v">${UI.escapeHtml(title?.title_type || a.titleType || '—')}</span></div>
-          <div class="kv-row"><span class="kv-k">Registry</span><span class="kv-v">${UI.escapeHtml(title?.registry || a.titleRegistry || '—')}</span></div>
-          <div class="kv-row"><span class="kv-k">Registered Owner</span><span class="kv-v">${UI.escapeHtml(title?.registered_owner || a.titleOwner || '—')}</span></div>
-          <div class="kv-row"><span class="kv-k">Perfection Status</span><span class="kv-v">${UI.escapeHtml(title?.perfection_status || a.titlePerfection || '—')}</span></div>
-          <div class="kv-row"><span class="kv-k">Verification Notes</span><span class="kv-v">${UI.escapeHtml(title?.notes || '—')}</span></div>
+          <div class="kv-row"><span class="kv-k">Title Type</span><span class="kv-v">${UI.escapeHtml(title?.title_type || a.titleType || '-')}</span></div>
+          <div class="kv-row"><span class="kv-k">Registry</span><span class="kv-v">${UI.escapeHtml(title?.registry || a.titleRegistry || '-')}</span></div>
+          <div class="kv-row"><span class="kv-k">Registered Owner</span><span class="kv-v">${UI.escapeHtml(title?.registered_owner || a.titleOwner || '-')}</span></div>
+          <div class="kv-row"><span class="kv-k">Perfection Status</span><span class="kv-v">${UI.escapeHtml(title?.perfection_status || a.titlePerfection || '-')}</span></div>
+          <div class="kv-row"><span class="kv-k">Verification Notes</span><span class="kv-v">${UI.escapeHtml(title?.notes || '-')}</span></div>
           <div class="kv-row"><span class="kv-k">Supporting Deed</span><span class="kv-v">${document ? `${UI.escapeHtml(document.title)} · ${UI.escapeHtml(document.file_size || '')}` : 'No deed linked'}</span>
             ${documentId ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(documentId)}">Download deed</button>` : ''}</div>
         </div>
@@ -6021,13 +6021,13 @@ const AdminPortal = {
         <span class="crumb">${UI.escapeHtml(a.ref)} · ${UI.escapeHtml(a.bankName)}</span>
       </div>
       <div class="group"><div class="caption">Submitted Valuation</div><div class="body">
-        <div class="kv-row"><span class="kv-k">Valuer</span><span class="kv-v">${UI.escapeHtml(valuation.valuer_name || '—')}</span></div>
+        <div class="kv-row"><span class="kv-k">Valuer</span><span class="kv-v">${UI.escapeHtml(valuation.valuer_name || '-')}</span></div>
         <div class="kv-row"><span class="kv-k">Market Value</span><span class="kv-v">${UI.fmtMoney(valuation.market_value)}</span></div>
         <div class="kv-row"><span class="kv-k">Forced Sale Value</span><span class="kv-v">${UI.fmtMoney(valuation.forced_sale_value)}</span></div>
-        <div class="kv-row"><span class="kv-k">Valuation Date</span><span class="kv-v">${UI.escapeHtml(valuation.valuation_date || '—')}</span></div>
-        <div class="kv-row"><span class="kv-k">Expiry Date</span><span class="kv-v">${UI.escapeHtml(valuation.expiry_date || '—')}</span></div>
-        <div class="kv-row"><span class="kv-k">Validity</span><span class="kv-v">${UI.escapeHtml(String(valuation.validity_period_days || '—'))} days</span></div>
-        <div class="kv-row"><span class="kv-k">Review Notes</span><span class="kv-v">${UI.escapeHtml(valuation.notes || '—')}</span></div>
+        <div class="kv-row"><span class="kv-k">Valuation Date</span><span class="kv-v">${UI.escapeHtml(valuation.valuation_date || '-')}</span></div>
+        <div class="kv-row"><span class="kv-k">Expiry Date</span><span class="kv-v">${UI.escapeHtml(valuation.expiry_date || '-')}</span></div>
+        <div class="kv-row"><span class="kv-k">Validity</span><span class="kv-v">${UI.escapeHtml(String(valuation.validity_period_days || '-'))} days</span></div>
+        <div class="kv-row"><span class="kv-k">Review Notes</span><span class="kv-v">${UI.escapeHtml(valuation.notes || '-')}</span></div>
         <div class="kv-row"><span class="kv-k">Supporting Report</span><span class="kv-v">${file ? `${UI.escapeHtml(file.title)} · ${UI.escapeHtml(file.file_size || '')}` : 'No report linked'}</span>
           ${documentId ? `<button class="btn small" data-admin-document-download="${UI.escapeHtml(documentId)}">Download report</button>` : ''}</div>
       </div></div>
@@ -6289,8 +6289,8 @@ const AdminPortal = {
                     <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(b.region || 'Greater Accra')} · ${UI.escapeHtml(b.branchName || 'Head Office')}</div>
                   </td>
                   <td>
-                    <div style="font-size:12px">${UI.escapeHtml(b.email || '—')}</div>
-                    <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(b.phone || '—')}</div>
+                    <div style="font-size:12px">${UI.escapeHtml(b.email || '-')}</div>
+                    <div style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(b.phone || '-')}</div>
                   </td>
                   <td style="text-align:center">
                     <span style="font-weight:700;font-size:13px;color:var(--blue)">${b.commissionRate || 4.0}%</span>
@@ -6489,7 +6489,7 @@ const AdminPortal = {
           <span class="lbl">Bank Short Code <span class="req">*</span></span>
           <div class="ctl">
             <input id="add-bank-short-code" style="width:100%" placeholder="e.g. ZBG" maxlength="6" style="text-transform:uppercase" required>
-            <small style="font-size:10.5px;color:var(--text-2)">Used for references, tenant identifiers, and branches (3–5 uppercase letters)</small>
+            <small style="font-size:10.5px;color:var(--text-2)">Used for references, tenant identifiers, and branches (3-5 uppercase letters)</small>
           </div>
         </div>
 
@@ -6640,12 +6640,12 @@ const AdminPortal = {
           <span class="lbl">System Role &amp; Permissions <span class="req">*</span></span>
           <div class="ctl">
             <select id="add-staff-role" style="width:100%">
-              <option value="BA">Bank Administrator — User management and institutional settings</option>
-              <option value="LRO" selected>Legal / Recovery Officer — Asset creation, documents &amp; legal workflow</option>
-              <option value="AO">Asset Officer — Draft asset preparation and specifications</option>
-              <option value="AP">Approver — High-level review and offer acceptance authority</option>
-              <option value="BFO">Finance Officer (Bank) — Invoices, commission reconciliations</option>
-              <option value="VW">Auditor / Viewer — Read-only observation</option>
+              <option value="BA">Bank Administrator - User management and institutional settings</option>
+              <option value="LRO" selected>Legal / Recovery Officer - Asset creation, documents &amp; legal workflow</option>
+              <option value="AO">Asset Officer - Draft asset preparation and specifications</option>
+              <option value="AP">Approver - High-level review and offer acceptance authority</option>
+              <option value="BFO">Finance Officer (Bank) - Invoices, commission reconciliations</option>
+              <option value="VW">Auditor / Viewer - Read-only observation</option>
             </select>
           </div>
         </div>
@@ -7015,7 +7015,7 @@ const PublicMarket = {
     ['Legal & title', 'How does Surge make sure properties are free from litigation and land guards?', 'Every property passes a five-gate audit: High Court writ of possession, Lands Commission search of the root of title, Collateral Registry search, independent valuation, and a physical occupancy inspection. Assets with family or title disputes go on legal hold and are never listed.'],
     ['Legal & title', 'Which title documents will I receive?', 'You receive a Deed of Assignment or Conveyance executed by the bank (attested by the High Court registrar where required), the Certificate of Purchase or Vesting Deed, and certified site plans so you can register the title at the Lands Commission.'],
     ['Pricing & terms', 'Are prices negotiable, and what is the reserve price?', 'The reserve price is the liquidation threshold set by independent chartered valuers and approved by the bank’s Credit Committee. You can offer at, above or near it with reasons. The committee weighs price, settlement speed and payment method.'],
-    ['Pricing & terms', 'Which payment structures are accepted?', 'Three: a direct bank wire or RTGS payment into the bank’s recovery escrow account; a pre-approved mortgage from a registered Ghanaian bank; or a staged settlement, typically 10–20% on acceptance with the balance paid over 30 to 90 days.'],
+    ['Pricing & terms', 'Which payment structures are accepted?', 'Three: a direct bank wire or RTGS payment into the bank’s recovery escrow account; a pre-approved mortgage from a registered Ghanaian bank; or a staged settlement, typically 10-20% on acceptance with the balance paid over 30 to 90 days.'],
     ['Pricing & terms', 'Does Surge charge buyers broker or search fees?', 'No. Surge earns a regulated commission, typically 4.0%, already included in the approved transaction. There are no upfront inspection or registration fees, and searching and enquiring are free.'],
     ['Viewing & process', 'Can I inspect a property before making an offer?', 'Yes. Inspections are supervised and booked in advance through Surge, with an asset recovery officer and security escort. Unescorted visits are not allowed.'],
     ['Viewing & process', 'Can I bring my own engineer, valuer or lawyer?', 'We encourage it. You can bring chartered surveyors, structural engineers or legal counsel and carry out measurements and structural checks during the appointment.'],
@@ -7904,10 +7904,10 @@ const PublicMarket = {
     ];
     const cmp = [
       ['Title and verification', 'Court execution and five-gate Lands Commission audit', 'Unverified indentures and a high risk of multi-party litigation'],
-      ['Pricing', 'Independent chartered valuation with a published reserve price', 'Broker markups, often 10–25% above actual value'],
+      ['Pricing', 'Independent chartered valuation with a published reserve price', 'Broker markups, often 10-25% above actual value'],
       ['Dispute protection', 'Enforceable High Court writ of possession and police clearance', 'Exposure to land guards and customary stool injunctions'],
       ['Payment', 'Designated bank escrow account with a formal invoice', 'Cash requests or unregulated third-party accounts'],
-      ['Conveyance', '14–30 business days with a structured legal handover', 'Open-ended delays and incomplete registration']
+      ['Conveyance', '14-30 business days with a structured legal handover', 'Open-ended delays and incomplete registration']
     ];
 
     return `
@@ -7919,7 +7919,7 @@ const PublicMarket = {
         <div class="in">
           <div><b>5 gates</b><span>Legal title clearance</span></div>
           <div><b>4.0%</b><span>Fixed statutory fee</span></div>
-          <div><b>14–30 days</b><span>Bank conveyance target</span></div>
+          <div><b>14-30 days</b><span>Bank conveyance target</span></div>
           <div><b>100%</b><span>Bank escrow protected</span></div>
         </div>
       </div>

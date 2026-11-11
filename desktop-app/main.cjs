@@ -1,5 +1,5 @@
 /**
- * Surge Listings — Windows Desktop Application (Electron)
+ * Surge Listings - Windows Desktop Application (Electron)
  * 
  * Standalone, enterprise desktop wrapper for the live Surge Listings platform.
  * Strictly isolated in desktop-app/ with no interference to the hosted website.
@@ -118,7 +118,7 @@ function createWindow() {
           height: 850,
           minWidth: 800,
           minHeight: 600,
-          title: 'Surge Listings — Document Preview',
+          title: 'Surge Listings - Document Preview',
           icon: path.join(__dirname, 'assets', 'icon.ico'),
           backgroundColor: '#FFFFFF',
           autoHideMenuBar: true,
@@ -196,7 +196,7 @@ ipcMain.handle('surge:open-marketplace', async () => {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    title: 'Surge Listings — Marketplace',
+    title: 'Surge Listings - Marketplace',
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     backgroundColor: '#0B3C75',
     show: false,

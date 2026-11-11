@@ -37,6 +37,6 @@ INSERT OR IGNORE INTO system_settings (key, value, description) VALUES
 ('land_search_validity_days', '180', 'Land search report validity period in days'),
 ('valuation_validity_days', '180', 'Valuation report validity period in days'),
 ('validity_warning_lead_days', '30', 'Days before expiry to flag Review Required'),
-('watermark_text', 'SURGE SOLUTIONS GHANA — CONFIDENTIAL & VERIFIED', 'Watermark overlay on public listing images'),
+('watermark_text', 'SURGE SOLUTIONS GHANA - CONFIDENTIAL & VERIFIED', 'Watermark overlay on public listing images'),
 ('signed_url_ttl_minutes', '5', 'Pre-signed secure document URL time to live in minutes'),
 ('max_images_per_asset', '20', 'Maximum photo uploads permitted per asset');
