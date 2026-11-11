@@ -1452,6 +1452,22 @@ const UI = {
     const grouped = (whole || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return dot === -1 ? grouped : grouped + '.' + decimals;
   },
+  onMoneyKeydown(e) {
+    const el = e.target;
+    if (el.selectionStart !== el.selectionEnd) return;
+    const pos = el.selectionStart;
+    if (e.key === 'Backspace' && pos >= 2 && el.value[pos - 1] === ',') {
+      e.preventDefault();
+      el.value = el.value.slice(0, pos - 2) + el.value.slice(pos);
+      el.setSelectionRange(pos - 2, pos - 2);
+      this.onMoneyInput(el);
+    } else if (e.key === 'Delete' && el.value[pos] === ',') {
+      e.preventDefault();
+      el.value = el.value.slice(0, pos) + el.value.slice(pos + 2);
+      el.setSelectionRange(pos, pos);
+      this.onMoneyInput(el);
+    }
+  },
   onMoneyInput(el) {
     const before = el.value;
     const caret = el.selectionStart ?? before.length;
@@ -2663,10 +2679,10 @@ const BankPortal = {
           <div class="caption">Pricing &amp; Commercial Terms</div>
           <div class="body">
             <div class="field"><span class="lbl">Reserve Price (GHS) <span class="req">*</span></span><div class="ctl">
-              <input id="edit-ov-reserve" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.reserve || 0)}" oninput="UI.onMoneyInput(this)" placeholder="0.00">
+              <input id="edit-ov-reserve" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.reserve || 0)}" oninput="UI.onMoneyInput(this)" onkeydown="UI.onMoneyKeydown(event)" placeholder="0.00">
             </div></div>
             <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl">
-              <input id="edit-ov-minOffer" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.minOffer || 0)}" oninput="UI.onMoneyInput(this)" placeholder="0.00">
+              <input id="edit-ov-minOffer" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.minOffer || 0)}" oninput="UI.onMoneyInput(this)" onkeydown="UI.onMoneyKeydown(event)" placeholder="0.00">
             </div></div>
             <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
               <select id="edit-ov-showReserve">
@@ -2943,10 +2959,10 @@ const BankPortal = {
         <div class="caption">Pricing</div>
         <div class="body">
           <div class="field"><span class="lbl">Reserve Price (GHS) <span class="req">*</span></span><div class="ctl">
-            <input id="edit-reserve" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.reserve)}" oninput="UI.onMoneyInput(this)">
+            <input id="edit-reserve" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.reserve)}" oninput="UI.onMoneyInput(this)" onkeydown="UI.onMoneyKeydown(event)">
             <span class="help">Must be greater than 0 to publish.</span>
           </div></div>
-          <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input id="edit-minOffer" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.minOffer)}" oninput="UI.onMoneyInput(this)"></div></div>
+          <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input id="edit-minOffer" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.minOffer)}" oninput="UI.onMoneyInput(this)" onkeydown="UI.onMoneyKeydown(event)"></div></div>
           <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
             <select id="edit-showReserve">
               <option value="true" ${a.showReserve ? 'selected' : ''}>Yes - show reserve</option>
@@ -3626,8 +3642,8 @@ const BankPortal = {
       <div class="group">
         <div class="caption">Valuation Record</div>
         <div class="body">
-          <div class="field"><span class="lbl">Market Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.valuationAmount || '')}" oninput="UI.onMoneyInput(this)" required></div></div>
-          <div class="field"><span class="lbl">Forced Sale Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-forced-sale" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.forcedSaleValue || '')}" oninput="UI.onMoneyInput(this)" required></div></div>
+          <div class="field"><span class="lbl">Market Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.valuationAmount || '')}" oninput="UI.onMoneyInput(this)" onkeydown="UI.onMoneyKeydown(event)" required></div></div>
+          <div class="field"><span class="lbl">Forced Sale Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-forced-sale" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.forcedSaleValue || '')}" oninput="UI.onMoneyInput(this)" onkeydown="UI.onMoneyKeydown(event)" required></div></div>
           <div class="field"><span class="lbl">Valuation Date <span class="req">*</span></span><div class="ctl"><input id="val-date" type="date" value="${a.valuationDate ? a.valuationDate.split('T')[0] : ''}" required></div></div>
           <div class="field"><span class="lbl">Validity (days) <span class="req">*</span></span><div class="ctl"><input id="val-validity" type="number" value="${a.valuationValidityDays || 180}" min="1" max="3650" required><span class="help">The valuation remains valid through its expiry date.</span></div></div>
           <div class="field"><span class="lbl">Valuer Name <span class="req">*</span></span><div class="ctl"><input id="val-valuer" maxlength="160" value="${UI.escapeHtml(a.valuerName || '')}" placeholder="Licensed valuer firm" required></div></div>
