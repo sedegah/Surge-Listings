@@ -3793,7 +3793,7 @@ const BankPortal = {
         <td class="ref" title="${UI.escapeHtml(l.id || '')}"><b>${UI.escapeHtml(displayRef || 'ENQ')}</b></td>
         <td>
           <b>${UI.escapeHtml(l.assetRef || 'Asset')}</b>
-          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="BankPortal.openAsset('${asset.id}')">View</button>` : ''}
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
         <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
         <td>
@@ -3804,8 +3804,8 @@ const BankPortal = {
         <td>${UI.fmtDateShort(l.createdAt)}</td>
         <td>${UI.badge(l.status || 'New')}</td>
         <td style="text-align:right;white-space:nowrap">
-          ${l.status === 'New' ? `<button class="btn small primary" onclick="BankPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Processed</span>'}
-          <button class="btn small danger" style="margin-left:6px" onclick="BankPortal.deleteLead('${l.id}')" title="Delete enquiry">Delete</button>
+          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Processed</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteLead('${l.id}')" title="Delete enquiry">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -3842,7 +3842,7 @@ const BankPortal = {
         <td class="ref" title="${UI.escapeHtml(v.id || '')}"><b>${UI.escapeHtml(displayRef)}</b></td>
         <td>
           <b>${UI.escapeHtml(v.assetRef || 'Asset')}</b>
-          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="BankPortal.openAsset('${asset.id}')">View</button>` : ''}
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
         <td>
           <b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b>
@@ -3856,8 +3856,8 @@ const BankPortal = {
         <td style="max-width:280px">${UI.escapeHtml(notes)}</td>
         <td>${UI.badge(v.status || 'Requested')}</td>
         <td style="text-align:right;white-space:nowrap">
-          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="BankPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
-          <button class="btn small danger" style="margin-left:6px" onclick="BankPortal.deleteViewing('${v.id}')" title="Delete viewing request">Delete</button>
+          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteViewing('${v.id}')" title="Delete viewing request">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -5456,7 +5456,7 @@ const AdminPortal = {
         <td class="ref" title="${UI.escapeHtml(l.id || '')}"><b>${UI.escapeHtml(displayRef || 'ENQ')}</b></td>
         <td>
           <b>${UI.escapeHtml(l.assetRef || 'Asset')}</b>
-          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="BankPortal.openAsset('${asset.id}')">View</button>` : ''}
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
         <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
         <td>
@@ -5467,8 +5467,8 @@ const AdminPortal = {
         <td>${UI.fmtDateShort(l.createdAt)}</td>
         <td>${UI.badge(l.status || 'New')}</td>
         <td style="text-align:right;white-space:nowrap">
-          ${l.status === 'New' ? `<button class="btn small primary" onclick="BankPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Processed</span>'}
-          <button class="btn small danger" style="margin-left:6px" onclick="BankPortal.deleteLead('${l.id}')" title="Delete enquiry">Delete</button>
+          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Processed</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteLead('${l.id}')" title="Delete enquiry">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -5505,7 +5505,7 @@ const AdminPortal = {
         <td class="ref" title="${UI.escapeHtml(v.id || '')}"><b>${UI.escapeHtml(displayRef)}</b></td>
         <td>
           <b>${UI.escapeHtml(v.assetRef || 'Asset')}</b>
-          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="BankPortal.openAsset('${asset.id}')">View</button>` : ''}
+          ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
         <td>
           <b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b>
@@ -5519,8 +5519,8 @@ const AdminPortal = {
         <td style="max-width:280px">${UI.escapeHtml(notes)}</td>
         <td>${UI.badge(v.status || 'Requested')}</td>
         <td style="text-align:right;white-space:nowrap">
-          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="BankPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
-          <button class="btn small danger" style="margin-left:6px" onclick="BankPortal.deleteViewing('${v.id}')" title="Delete viewing request">Delete</button>
+          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteViewing('${v.id}')" title="Delete viewing request">Delete</button>
         </td>
       </tr>`;
     }).join('');

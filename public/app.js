@@ -3787,15 +3787,17 @@ const BankPortal = {
 
     const leadRows = leads.map(l => {
       const asset = Store.getAsset(l.assetId) || Store.getAssetByRef(l.assetRef);
+      const rawRef = l.ref || l.id || '';
+      const displayRef = rawRef.startsWith('lead-') ? 'LD-' + rawRef.slice(-6) : rawRef;
       return `<tr>
-        <td class="ref">${UI.escapeHtml(l.ref || 'ENQ')}</td>
+        <td class="ref" title="${UI.escapeHtml(l.id || '')}"><b>${UI.escapeHtml(displayRef || 'ENQ')}</b></td>
         <td>
           <b>${UI.escapeHtml(l.assetRef || 'Asset')}</b>
           ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
         <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
         <td>
-          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}">${UI.escapeHtml(l.phone)}</a>` : '—'}
+          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}" style="font-weight:600">${UI.escapeHtml(l.phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
           ${l.email ? `<br><a href="mailto:${UI.escapeHtml(l.email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(l.email)}</a>` : ''}
         </td>
         <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
@@ -3810,16 +3812,48 @@ const BankPortal = {
 
     const viewingRows = viewings.map(v => {
       const asset = Store.getAsset(v.assetId) || Store.getAssetByRef(v.assetRef);
+      const rawRef = v.ref || v.id || '';
+      const displayRef = rawRef.startsWith('vw-') ? 'VW-' + rawRef.slice(-6) : rawRef;
+
+      let notes = v.notes || '';
+      let ghanaCard = '';
+      let phone = v.phone || '';
+      let email = v.email || '';
+
+      const gcMatch = notes.match(/Ghana Card:\s*([A-Z0-9-]+)/i);
+      if (gcMatch) {
+        ghanaCard = gcMatch[1];
+        notes = notes.replace(/Ghana Card:\s*[A-Z0-9-]+\s*·?\s*/i, '');
+      }
+      const phoneMatch = notes.match(/(?:Contact|Phone):\s*([^\s·]+)/i);
+      if (phoneMatch) {
+        if (!phone) phone = phoneMatch[1];
+        notes = notes.replace(/(?:Contact|Phone):\s*[^\s·]+\s*·?\s*/i, '');
+      }
+      const emailMatch = notes.match(/\(([^)]+@[^)]+)\)/i);
+      if (emailMatch) {
+        if (!email) email = emailMatch[1];
+        notes = notes.replace(/\([^)]+@[^)]+\)\s*·?\s*/i, '');
+      }
+      notes = notes.replace(/^[·\s\-,]+|[·\s\-,]+$/g, '').trim();
+      if (!notes) notes = 'Site inspection';
+
       return `<tr>
-        <td class="ref">${UI.escapeHtml(v.ref || v.id || 'VW')}</td>
+        <td class="ref" title="${UI.escapeHtml(v.id || '')}"><b>${UI.escapeHtml(displayRef)}</b></td>
         <td>
           <b>${UI.escapeHtml(v.assetRef || 'Asset')}</b>
           ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
-        <td><b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b></td>
-        <td>${v.phone ? `<a href="tel:${UI.escapeHtml(v.phone)}">${UI.escapeHtml(v.phone)}</a>` : '—'}</td>
+        <td>
+          <b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b>
+          ${ghanaCard ? `<br><span style="font-size:11px;color:var(--text-2);font-family:monospace">${UI.escapeHtml(ghanaCard)}</span>` : ''}
+        </td>
+        <td>
+          ${phone ? `<a href="tel:${UI.escapeHtml(phone)}" style="font-weight:600">${UI.escapeHtml(phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
+          ${email ? `<br><a href="mailto:${UI.escapeHtml(email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(email)}</a>` : ''}
+        </td>
         <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
-        <td style="max-width:280px">${UI.escapeHtml(v.notes || 'None')}</td>
+        <td style="max-width:280px">${UI.escapeHtml(notes)}</td>
         <td>${UI.badge(v.status || 'Requested')}</td>
         <td style="text-align:right;white-space:nowrap">
           ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
@@ -5416,15 +5450,17 @@ const AdminPortal = {
 
     const leadRows = leads.map(l => {
       const asset = Store.getAsset(l.assetId) || Store.getAssetByRef(l.assetRef);
+      const rawRef = l.ref || l.id || '';
+      const displayRef = rawRef.startsWith('lead-') ? 'LD-' + rawRef.slice(-6) : rawRef;
       return `<tr>
-        <td class="ref">${UI.escapeHtml(l.ref || 'ENQ')}</td>
+        <td class="ref" title="${UI.escapeHtml(l.id || '')}"><b>${UI.escapeHtml(displayRef || 'ENQ')}</b></td>
         <td>
           <b>${UI.escapeHtml(l.assetRef || 'Asset')}</b>
           ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
         <td><b>${UI.escapeHtml(l.name || 'Anonymous')}</b></td>
         <td>
-          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}">${UI.escapeHtml(l.phone)}</a>` : '—'}
+          ${l.phone ? `<a href="tel:${UI.escapeHtml(l.phone)}" style="font-weight:600">${UI.escapeHtml(l.phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
           ${l.email ? `<br><a href="mailto:${UI.escapeHtml(l.email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(l.email)}</a>` : ''}
         </td>
         <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
@@ -5439,16 +5475,48 @@ const AdminPortal = {
 
     const viewingRows = viewings.map(v => {
       const asset = Store.getAsset(v.assetId) || Store.getAssetByRef(v.assetRef);
+      const rawRef = v.ref || v.id || '';
+      const displayRef = rawRef.startsWith('vw-') ? 'VW-' + rawRef.slice(-6) : rawRef;
+
+      let notes = v.notes || '';
+      let ghanaCard = '';
+      let phone = v.phone || '';
+      let email = v.email || '';
+
+      const gcMatch = notes.match(/Ghana Card:\s*([A-Z0-9-]+)/i);
+      if (gcMatch) {
+        ghanaCard = gcMatch[1];
+        notes = notes.replace(/Ghana Card:\s*[A-Z0-9-]+\s*·?\s*/i, '');
+      }
+      const phoneMatch = notes.match(/(?:Contact|Phone):\s*([^\s·]+)/i);
+      if (phoneMatch) {
+        if (!phone) phone = phoneMatch[1];
+        notes = notes.replace(/(?:Contact|Phone):\s*[^\s·]+\s*·?\s*/i, '');
+      }
+      const emailMatch = notes.match(/\(([^)]+@[^)]+)\)/i);
+      if (emailMatch) {
+        if (!email) email = emailMatch[1];
+        notes = notes.replace(/\([^)]+@[^)]+\)\s*·?\s*/i, '');
+      }
+      notes = notes.replace(/^[·\s\-,]+|[·\s\-,]+$/g, '').trim();
+      if (!notes) notes = 'Site inspection';
+
       return `<tr>
-        <td class="ref">${UI.escapeHtml(v.ref || v.id || 'VW')}</td>
+        <td class="ref" title="${UI.escapeHtml(v.id || '')}"><b>${UI.escapeHtml(displayRef)}</b></td>
         <td>
           <b>${UI.escapeHtml(v.assetRef || 'Asset')}</b>
           ${asset ? `<button class="btn small" style="margin-left:6px" onclick="AdminPortal.openAsset('${asset.id}')">View</button>` : ''}
         </td>
-        <td><b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b></td>
-        <td>${v.phone ? `<a href="tel:${UI.escapeHtml(v.phone)}">${UI.escapeHtml(v.phone)}</a>` : '—'}</td>
+        <td>
+          <b>${UI.escapeHtml(v.buyer || 'Prospective Purchaser')}</b>
+          ${ghanaCard ? `<br><span style="font-size:11px;color:var(--text-2);font-family:monospace">${UI.escapeHtml(ghanaCard)}</span>` : ''}
+        </td>
+        <td>
+          ${phone ? `<a href="tel:${UI.escapeHtml(phone)}" style="font-weight:600">${UI.escapeHtml(phone)}</a>` : '<span style="color:var(--text-2)">—</span>'}
+          ${email ? `<br><a href="mailto:${UI.escapeHtml(email)}" style="font-size:11px;color:var(--text-2)">${UI.escapeHtml(email)}</a>` : ''}
+        </td>
         <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
-        <td style="max-width:280px">${UI.escapeHtml(v.notes || 'None')}</td>
+        <td style="max-width:280px">${UI.escapeHtml(notes)}</td>
         <td>${UI.badge(v.status || 'Requested')}</td>
         <td style="text-align:right;white-space:nowrap">
           ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
