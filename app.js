@@ -1439,6 +1439,33 @@ const UI = {
     return asset.ownerBankName || asset.bankName || 'Partner bank';
   },
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+  parseMoney(value) {
+    const n = Number(String(value ?? '').replace(/,/g, '').trim());
+    return Number.isFinite(n) ? n : 0;
+  },
+  moneyInputValue(value) {
+    const raw = String(value ?? '').replace(/[^\d.]/g, '');
+    if (!raw) return '';
+    const dot = raw.indexOf('.');
+    const whole = (dot === -1 ? raw : raw.slice(0, dot)).replace(/^0+(?=\d)/, '');
+    const decimals = dot === -1 ? '' : raw.slice(dot + 1).replace(/\./g, '').slice(0, 2);
+    const grouped = (whole || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return dot === -1 ? grouped : grouped + '.' + decimals;
+  },
+  onMoneyInput(el) {
+    const before = el.value;
+    const caret = el.selectionStart ?? before.length;
+    const kept = before.slice(0, caret).replace(/[^\d.]/g, '').length;
+    const after = this.moneyInputValue(before);
+    if (after === before) return;
+    el.value = after;
+    let seen = 0, pos = 0;
+    for (let i = 0; i < after.length; i++) {
+      if (/[\d.]/.test(after[i])) seen++;
+      if (seen >= kept) { pos = i + 1; break; }
+    }
+    el.setSelectionRange(pos, pos);
+  },
   fmtDate(iso) { if (!iso) return '-'; const d = new Date(iso); return d.toLocaleDateString('en-GH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
   auditActor(entry) {
     if (!entry) return 'System';
@@ -2636,10 +2663,10 @@ const BankPortal = {
           <div class="caption">Pricing &amp; Commercial Terms</div>
           <div class="body">
             <div class="field"><span class="lbl">Reserve Price (GHS) <span class="req">*</span></span><div class="ctl">
-              <input id="edit-ov-reserve" class="money" type="number" value="${a.reserve || 0}" min="0" placeholder="0.00">
+              <input id="edit-ov-reserve" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.reserve || 0)}" oninput="UI.onMoneyInput(this)" placeholder="0.00">
             </div></div>
             <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl">
-              <input id="edit-ov-minOffer" class="money" type="number" value="${a.minOffer || 0}" min="0" placeholder="0.00">
+              <input id="edit-ov-minOffer" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.minOffer || 0)}" oninput="UI.onMoneyInput(this)" placeholder="0.00">
             </div></div>
             <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
               <select id="edit-ov-showReserve">
@@ -2916,10 +2943,10 @@ const BankPortal = {
         <div class="caption">Pricing</div>
         <div class="body">
           <div class="field"><span class="lbl">Reserve Price (GHS) <span class="req">*</span></span><div class="ctl">
-            <input id="edit-reserve" class="money" type="number" value="${a.reserve}" min="0">
+            <input id="edit-reserve" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.reserve)}" oninput="UI.onMoneyInput(this)">
             <span class="help">Must be greater than 0 to publish.</span>
           </div></div>
-          <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input id="edit-minOffer" class="money" type="number" value="${a.minOffer}" min="0"></div></div>
+          <div class="field"><span class="lbl">Minimum Offer (GHS)</span><div class="ctl"><input id="edit-minOffer" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.minOffer)}" oninput="UI.onMoneyInput(this)"></div></div>
           <div class="field"><span class="lbl">Show Reserve Publicly</span><div class="ctl">
             <select id="edit-showReserve">
               <option value="true" ${a.showReserve ? 'selected' : ''}>Yes - show reserve</option>
@@ -2945,8 +2972,8 @@ const BankPortal = {
     const district = document.getElementById('edit-district').value.trim();
     const publicLocation = document.getElementById('edit-publicLocation').value.trim();
     const exactAddress = document.getElementById('edit-exactAddress').value.trim();
-    const reserve = Number(document.getElementById('edit-reserve').value);
-    const minOffer = Number(document.getElementById('edit-minOffer').value);
+    const reserve = UI.parseMoney(document.getElementById('edit-reserve').value);
+    const minOffer = UI.parseMoney(document.getElementById('edit-minOffer').value);
     const showReserve = document.getElementById('edit-showReserve').value === 'true';
 
     // Validation
@@ -3599,8 +3626,8 @@ const BankPortal = {
       <div class="group">
         <div class="caption">Valuation Record</div>
         <div class="body">
-          <div class="field"><span class="lbl">Market Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="number" value="${a.valuationAmount || ''}" min="0.01" step="0.01" required></div></div>
-          <div class="field"><span class="lbl">Forced Sale Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-forced-sale" class="money" type="number" value="${a.forcedSaleValue || ''}" min="0.01" step="0.01" required></div></div>
+          <div class="field"><span class="lbl">Market Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-amount" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.valuationAmount || '')}" oninput="UI.onMoneyInput(this)" required></div></div>
+          <div class="field"><span class="lbl">Forced Sale Value (GHS) <span class="req">*</span></span><div class="ctl"><input id="val-forced-sale" class="money" type="text" inputmode="decimal" autocomplete="off" value="${UI.moneyInputValue(a.forcedSaleValue || '')}" oninput="UI.onMoneyInput(this)" required></div></div>
           <div class="field"><span class="lbl">Valuation Date <span class="req">*</span></span><div class="ctl"><input id="val-date" type="date" value="${a.valuationDate ? a.valuationDate.split('T')[0] : ''}" required></div></div>
           <div class="field"><span class="lbl">Validity (days) <span class="req">*</span></span><div class="ctl"><input id="val-validity" type="number" value="${a.valuationValidityDays || 180}" min="1" max="3650" required><span class="help">The valuation remains valid through its expiry date.</span></div></div>
           <div class="field"><span class="lbl">Valuer Name <span class="req">*</span></span><div class="ctl"><input id="val-valuer" maxlength="160" value="${UI.escapeHtml(a.valuerName || '')}" placeholder="Licensed valuer firm" required></div></div>
@@ -3638,8 +3665,8 @@ const BankPortal = {
   async saveValuation() {
     const a = Store.getAsset(this.selectedAssetId);
     if (!a) return;
-    const amount = Number(document.getElementById('val-amount').value);
-    const forcedSaleValue = Number(document.getElementById('val-forced-sale').value);
+    const amount = UI.parseMoney(document.getElementById('val-amount').value);
+    const forcedSaleValue = UI.parseMoney(document.getElementById('val-forced-sale').value);
     const dateStr = document.getElementById('val-date').value;
     const validityDays = Number(document.getElementById('val-validity').value);
     const valuerName = document.getElementById('val-valuer').value.trim();
@@ -4399,8 +4426,8 @@ const BankPortal = {
     const town = document.getElementById('edit-ov-town')?.value?.trim() || '';
     const publicLocation = document.getElementById('edit-ov-publicLocation')?.value?.trim() || '';
     const exactAddress = document.getElementById('edit-ov-exactAddress')?.value?.trim() || '';
-    const reserve = Number(document.getElementById('edit-ov-reserve')?.value) || 0;
-    const minOffer = Number(document.getElementById('edit-ov-minOffer')?.value) || 0;
+    const reserve = UI.parseMoney(document.getElementById('edit-ov-reserve')?.value);
+    const minOffer = UI.parseMoney(document.getElementById('edit-ov-minOffer')?.value);
     const showReserve = document.getElementById('edit-ov-showReserve')?.value === 'true';
     const description = document.getElementById('edit-ov-description')?.value?.trim() || '';
 
@@ -8048,7 +8075,6 @@ const PublicMarket = {
             <div class="card2">
               <h3>Why KYC is required</h3>
               <p>Repossessed assets are under court custody and bank administration. Verifying buyers prevents trespass, protects borrower privacy and blocks fraudulent bids.</p>
-              <div class="note"><b>Browsing is always free.</b> You only need KYC to book a viewing or make an offer.</div>
             </div>
             <div class="card2">
               <h3>What to have ready</h3>
