@@ -6860,6 +6860,7 @@ const PublicMarket = {
     this.syncSwitcherState();
     this.restoreStateFromUrl();
     this.render();
+    Store.startPeriodicSync();
 
     window.addEventListener('hashchange', () => {
       this.restoreStateFromUrl();
@@ -7664,6 +7665,7 @@ const PublicMarket = {
       });
       Store.persist();
       UI.closeModal();
+      Store.broadcastChange('offer_submitted');
       PublicMarket.toast(json.message || ('Formal offer submitted. Reference: ' + ref));
       Store.fetchRemote();
     } catch (err) {

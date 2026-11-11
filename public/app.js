@@ -352,17 +352,45 @@ const Store = {
   _snapshotAssets: new Map(),
   _snapshotOffers: new Map(),
   _snapshotLeadIds: new Set(),
+  _broadcastChan: null,
+  _syncListenersInitialized: false,
+
+  broadcastChange(reason = 'data_change') {
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        if (!this._broadcastChan) this._broadcastChan = new BroadcastChannel('surge_platform_sync');
+        this._broadcastChan.postMessage({ reason, timestamp: Date.now() });
+      }
+      localStorage.setItem('surge_last_sync_event', Date.now() + '_' + reason);
+    } catch(e) {}
+  },
 
   startPeriodicSync() {
+    if (!this._syncListenersInitialized) {
+      this._syncListenersInitialized = true;
+      const trigger = () => { void this.syncAndNotify(); };
+
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          if (!this._broadcastChan) this._broadcastChan = new BroadcastChannel('surge_platform_sync');
+          this._broadcastChan.onmessage = () => { trigger(); };
+        } catch(e) {}
+      }
+
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'surge_last_sync_event') trigger();
+      });
+
+      window.addEventListener('focus', () => { trigger(); });
+    }
+
     if (this._syncTimer) return;
     const poll = async () => {
       if (document.visibilityState !== 'visible') return;
-      const portal = document.body?.dataset.portal;
-      if (portal !== 'admin' && portal !== 'bank') return;
       await this.syncAndNotify();
     };
-    // Sync every 15 seconds
-    this._syncTimer = setInterval(poll, 15000);
+    // Sync every 4 seconds for fast live updates without page refresh
+    this._syncTimer = setInterval(poll, 4000);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void poll();
     });
@@ -372,9 +400,8 @@ const Store = {
     if (this._isSyncing) return;
     this._isSyncing = true;
     try {
-      const portal = document.body?.dataset.portal;
-      if (!portal || (portal !== 'admin' && portal !== 'bank')) return;
-      if (!Auth.getToken() && !Auth.isSessionPresent()) return;
+      const portal = document.body?.dataset.portal || 'public';
+      if (portal !== 'public' && !Auth.getToken() && !Auth.isSessionPresent()) return;
 
       const prevAssets = new Map(this._snapshotAssets);
       const prevOffers = new Map(this._snapshotOffers);
@@ -581,11 +608,14 @@ const Store = {
       // Automatically update the view if user is not actively editing a form input
       const activeEl = document.activeElement;
       const isUserEditing = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-      if (!isUserEditing) {
+      const modalOpen = document.getElementById('modal-backdrop')?.classList.contains('open');
+      if (!isUserEditing && !modalOpen) {
         if (portal === 'admin' && typeof AdminPortal !== 'undefined' && AdminPortal.render) {
           AdminPortal.render();
         } else if (portal === 'bank' && typeof BankPortal !== 'undefined' && BankPortal.render) {
           BankPortal.render();
+        } else if (portal === 'public' && typeof PublicMarket !== 'undefined' && PublicMarket.render) {
+          PublicMarket.render();
         }
       }
     } catch (e) {
@@ -750,6 +780,7 @@ const Store = {
           this.leads = json.data.map(l => ({
             id: l.id, ref: l.lead_ref, assetId: l.asset_id, assetRef: l.asset_ref || '',
             name: l.buyer_name, phone: l.phone || '', email: l.email || '',
+            notes: l.notes || l.message || '',
             status: l.stage || 'New', source: 'Public Enquiry',
             createdAt: l.created_at
           }));
@@ -6829,6 +6860,7 @@ const PublicMarket = {
     this.syncSwitcherState();
     this.restoreStateFromUrl();
     this.render();
+    Store.startPeriodicSync();
 
     window.addEventListener('hashchange', () => {
       this.restoreStateFromUrl();
@@ -7357,11 +7389,11 @@ const PublicMarket = {
       <div class="row2">
         <div class="field">
           <label class="lbl" for="enq-phone">Phone Number <span class="req">*</span></label>
-          <div class="ctl"><input id="enq-phone" placeholder="+233 24 000 0000"></div>
+          <div class="ctl"><input id="enq-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+233 24 000 0000" style="font-size:13px"></div>
         </div>
         <div class="field">
           <label class="lbl" for="enq-email">Email Address <span class="req">*</span></label>
-          <div class="ctl"><input id="enq-email" type="email" placeholder="you@domain.com"></div>
+          <div class="ctl"><input id="enq-email" type="email" autocomplete="email" placeholder="you@domain.com" style="font-size:13px"></div>
         </div>
       </div>
       <div class="field">
@@ -7410,6 +7442,7 @@ const PublicMarket = {
       });
       Store.persist();
       UI.closeModal();
+      Store.broadcastChange('enquiry_submitted');
       PublicMarket.toast(json.message || ('Enquiry sent. Reference: ' + ref));
       Store.fetchRemote();
     } catch (err) {
@@ -7431,7 +7464,7 @@ const PublicMarket = {
       <div class="row2">
         <div class="field">
           <label class="lbl" for="vw-phone">Phone Number <span class="req">*</span></label>
-          <div class="ctl"><input id="vw-phone" placeholder="+233 24 000 0000"></div>
+          <div class="ctl"><input id="vw-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+233 24 000 0000" style="font-size:13px"></div>
         </div>
         <div class="field">
           <label class="lbl" for="vw-email">Email Address</label>
@@ -7510,6 +7543,7 @@ const PublicMarket = {
       });
       Store.persist();
       UI.closeModal();
+      Store.broadcastChange('viewing_submitted');
       PublicMarket.toast(json.message || ('Viewing scheduled. Reference: ' + ref));
       Store.fetchRemote();
     } catch (err) {
@@ -7631,6 +7665,7 @@ const PublicMarket = {
       });
       Store.persist();
       UI.closeModal();
+      Store.broadcastChange('offer_submitted');
       PublicMarket.toast(json.message || ('Formal offer submitted. Reference: ' + ref));
       Store.fetchRemote();
     } catch (err) {
