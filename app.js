@@ -780,6 +780,7 @@ const Store = {
           this.leads = json.data.map(l => ({
             id: l.id, ref: l.lead_ref, assetId: l.asset_id, assetRef: l.asset_ref || '',
             name: l.buyer_name, phone: l.phone || '', email: l.email || '',
+            notes: l.notes || l.message || '',
             status: l.stage || 'New', source: 'Public Enquiry',
             createdAt: l.created_at
           }));
@@ -7387,11 +7388,11 @@ const PublicMarket = {
       <div class="row2">
         <div class="field">
           <label class="lbl" for="enq-phone">Phone Number <span class="req">*</span></label>
-          <div class="ctl"><input id="enq-phone" placeholder="+233 24 000 0000"></div>
+          <div class="ctl"><input id="enq-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+233 24 000 0000" style="font-size:13px"></div>
         </div>
         <div class="field">
           <label class="lbl" for="enq-email">Email Address <span class="req">*</span></label>
-          <div class="ctl"><input id="enq-email" type="email" placeholder="you@domain.com"></div>
+          <div class="ctl"><input id="enq-email" type="email" autocomplete="email" placeholder="you@domain.com" style="font-size:13px"></div>
         </div>
       </div>
       <div class="field">
@@ -7440,6 +7441,7 @@ const PublicMarket = {
       });
       Store.persist();
       UI.closeModal();
+      Store.broadcastChange('enquiry_submitted');
       PublicMarket.toast(json.message || ('Enquiry sent. Reference: ' + ref));
       Store.fetchRemote();
     } catch (err) {
@@ -7461,7 +7463,7 @@ const PublicMarket = {
       <div class="row2">
         <div class="field">
           <label class="lbl" for="vw-phone">Phone Number <span class="req">*</span></label>
-          <div class="ctl"><input id="vw-phone" placeholder="+233 24 000 0000"></div>
+          <div class="ctl"><input id="vw-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+233 24 000 0000" style="font-size:13px"></div>
         </div>
         <div class="field">
           <label class="lbl" for="vw-email">Email Address</label>
@@ -7540,6 +7542,7 @@ const PublicMarket = {
       });
       Store.persist();
       UI.closeModal();
+      Store.broadcastChange('viewing_submitted');
       PublicMarket.toast(json.message || ('Viewing scheduled. Reference: ' + ref));
       Store.fetchRemote();
     } catch (err) {
