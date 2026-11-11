@@ -834,12 +834,17 @@ const Store = {
       if (viewingsRes.status === 'fulfilled' && viewingsRes.value.ok) {
         const json = await viewingsRes.value.json();
         if (json.success && Array.isArray(json.data)) {
-          this.viewings = json.data.map(v => ({
-            id: v.id, ref: v.id, assetId: v.asset_id, assetRef: v.asset_ref || '',
-            buyer: v.buyer_name, phone: v.phone || '',
-            scheduledAt: v.viewing_date, status: v.status,
-            notes: v.notes || ''
-          }));
+          this.viewings = json.data.map(v => {
+            let phone = v.phone || '';
+            const phoneMatch = (v.notes || '').match(/Contact:\s*([^\s·]+)/i) || (v.notes || '').match(/Phone:\s*([^\s·]+)/i);
+            if (!phone && phoneMatch) phone = phoneMatch[1];
+            return {
+              id: v.id, ref: v.id, assetId: v.asset_id, assetRef: v.asset_ref || '',
+              buyer: v.buyer_name, phone: phone || '',
+              scheduledAt: v.viewing_date, status: v.status,
+              notes: v.notes || ''
+            };
+          });
         }
       }
 
@@ -3796,8 +3801,9 @@ const BankPortal = {
         <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
         <td>${UI.fmtDateShort(l.createdAt)}</td>
         <td>${UI.badge(l.status || 'New')}</td>
-        <td style="text-align:right">
-          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2)">Processed</span>'}
+        <td style="text-align:right;white-space:nowrap">
+          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Processed</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteLead('${l.id}')" title="Delete enquiry">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -3815,8 +3821,9 @@ const BankPortal = {
         <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
         <td style="max-width:280px">${UI.escapeHtml(v.notes || 'None')}</td>
         <td>${UI.badge(v.status || 'Requested')}</td>
-        <td style="text-align:right">
-          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2)">Scheduled</span>'}
+        <td style="text-align:right;white-space:nowrap">
+          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteViewing('${v.id}')" title="Delete viewing request">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -5377,8 +5384,9 @@ const AdminPortal = {
         <td style="max-width:320px">${UI.escapeHtml(l.notes || 'General enquiry')}</td>
         <td>${UI.fmtDateShort(l.createdAt)}</td>
         <td>${UI.badge(l.status || 'New')}</td>
-        <td style="text-align:right">
-          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2)">Processed</span>'}
+        <td style="text-align:right;white-space:nowrap">
+          ${l.status === 'New' ? `<button class="btn small primary" onclick="AdminPortal.markLeadContacted('${l.id}')">Mark Contacted</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Processed</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteLead('${l.id}')" title="Delete enquiry">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -5396,8 +5404,9 @@ const AdminPortal = {
         <td><b>${UI.escapeHtml(v.scheduledAt || 'TBD')}</b></td>
         <td style="max-width:280px">${UI.escapeHtml(v.notes || 'None')}</td>
         <td>${UI.badge(v.status || 'Requested')}</td>
-        <td style="text-align:right">
-          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2)">Scheduled</span>'}
+        <td style="text-align:right;white-space:nowrap">
+          ${v.status === 'Requested' ? `<button class="btn small primary" onclick="AdminPortal.confirmViewingScheduled('${v.id}')">Confirm Escort</button>` : '<span style="font-size:11px;color:var(--text-2);margin-right:6px">Scheduled</span>'}
+          <button class="btn small danger" style="margin-left:6px" onclick="AdminPortal.deleteViewing('${v.id}')" title="Delete viewing request">Delete</button>
         </td>
       </tr>`;
     }).join('');
@@ -7522,7 +7531,7 @@ const PublicMarket = {
           email,
           date,
           timeSlot: time,
-          notes: (idNumber ? `Ghana Card: ${idNumber} · ` : '') + notes
+          notes: `${phone ? 'Contact: ' + phone + ' · ' : ''}${idNumber ? 'Ghana Card: ' + idNumber + ' · ' : ''}${notes || ''}`
         })
       });
       const json = await resp.json();
@@ -7683,7 +7692,7 @@ const PublicMarket = {
     return `
       <section class="hero">
         <h1>Bank-repossessed property in Ghana, checked before it is listed</h1>
-        <p>Every asset here has passed Surge Solutions' legal, title and valuation review. Browse, request a viewing and make an offer through us.</p>
+        <p>Every property is verified, genuine, and ready for sale. Explore available listings, book a visit with our team, and make an offer directly.</p>
         <ul class="trust">
           <li>${this.icons.tick}Five-gate review before publishing</li>
           <li>${this.icons.tick}Buyers verified through KYC</li>
