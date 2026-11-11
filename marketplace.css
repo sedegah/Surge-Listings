@@ -39,6 +39,26 @@ svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke
 .fld input,.fld select{border:0;background:transparent;font:15px var(--font);color:var(--text);width:100%;height:26px;outline:0}
 .fld:focus-within{box-shadow:inset 0 -3px 0 var(--blue)}
 
+.fld-dd{position:relative}
+.fld-dd.dd-open .fld-lbl{color:var(--blue)}
+.dd-trigger{display:flex;align-items:center;gap:8px;width:100%;height:26px;padding:0;border:0;background:transparent;font:15px var(--font);color:var(--text);text-align:left;cursor:pointer;outline:0}
+.fld .dd-value{flex:1;min-width:0;font-size:15px;font-weight:400;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dd-caret{flex:0 0 16px;width:16px;height:16px;stroke:var(--text-2);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease,stroke .18s ease}
+.dd-open .dd-caret,.dd-trigger:focus-visible .dd-caret{stroke:var(--blue)}
+.dd-open .dd-caret{transform:rotate(180deg)}
+.dd-panel{position:absolute;top:calc(100% - 2px);left:8px;right:8px;z-index:30;max-height:284px;padding:6px;background:#fff;border:1px solid #DCE4ED;border-radius:8px;box-shadow:0 14px 32px rgba(11,60,117,.18);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#B9CBE0 #F1F5FA}
+.dd-panel[hidden]{display:none}
+.dd-panel::-webkit-scrollbar{width:8px}
+.dd-panel::-webkit-scrollbar-track{background:#F1F5FA;border-radius:8px}
+.dd-panel::-webkit-scrollbar-thumb{background:#B9CBE0;border:2px solid #F1F5FA;border-radius:8px}
+.dd-panel::-webkit-scrollbar-thumb:hover{background:var(--blue)}
+.dd-opt{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:0;border-radius:6px;background:transparent;font:14px var(--font);color:var(--text);text-align:left;cursor:pointer}
+.fld .dd-opt span{flex:1;min-width:0;font-size:14px;font-weight:inherit;color:inherit}
+.dd-opt:hover,.dd-opt:focus-visible{background:#EEF3F9;outline:0}
+.dd-opt.is-on{color:var(--blue);font-weight:600}
+.dd-tick{flex:0 0 16px;width:16px;height:16px;stroke:var(--blue);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.dd-opt.is-on .dd-tick{opacity:1}
+
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 8px}
 .chip{border:1px solid #C9D3DE;background:#fff;color:#33475B;border-radius:999px;padding:7px 14px;font-size:13.5px;cursor:pointer}
 .chip:hover{border-color:var(--blue);color:var(--blue)}
