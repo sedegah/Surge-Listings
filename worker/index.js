@@ -2977,14 +2977,34 @@ export default {
           if (!asset) return err('Asset not found', 404);
 
           const viewingId = 'vw-' + Date.now();
+          const combinedNotes = `${phone ? 'Contact: ' + phone + ' · ' : ''}${email ? '(' + email + ') · ' : ''}${notes || ''}`;
           await env.DB.prepare(`
             INSERT INTO viewings (id, asset_id, buyer_name, viewing_date, time_slot, status, notes, created_at)
             VALUES (?, ?, ?, ?, ?, 'Requested', ?, datetime('now'))
-          `).bind(viewingId, asset.id, name, date, timeSlot || 'Morning', notes || '').run();
+          `).bind(viewingId, asset.id, name, date, timeSlot || 'Morning', combinedNotes).run();
 
           await auditLog(name, 'Public Buyer', 'Public', 'VIEWING_REQUEST', 'Viewing', viewingId, `Viewing requested for ${asset.public_ref}`);
           return json({ success: true, id: viewingId, message: 'Viewing appointment requested.' }, 201);
         }
+      }
+
+      // DELETE /api/v1/viewings/:id
+      const deleteViewingMatch = pathname.match(/^\/api\/v1\/viewings\/([a-zA-Z0-9_-]+)$/);
+      if (deleteViewingMatch && method === 'DELETE') {
+        await requireBankAuth();
+        const viewingId = decodeURIComponent(deleteViewingMatch[1]);
+        await env.DB.prepare(`DELETE FROM viewings WHERE id = ? OR public_id = ?`).bind(viewingId, viewingId).run();
+        return json({ success: true, message: 'Viewing request deleted.' });
+      }
+
+      // DELETE /api/v1/leads/:id
+      const deleteLeadMatch = pathname.match(/^\/api\/v1\/leads\/([a-zA-Z0-9_-]+)$/);
+      if (deleteLeadMatch && method === 'DELETE') {
+        await requireBankAuth();
+        const leadId = decodeURIComponent(deleteLeadMatch[1]);
+        await env.DB.prepare(`DELETE FROM enquiries WHERE lead_id = ? OR id = ?`).bind(leadId, leadId).run();
+        await env.DB.prepare(`DELETE FROM leads WHERE id = ? OR lead_ref = ?`).bind(leadId, leadId).run();
+        return json({ success: true, message: 'Enquiry lead deleted.' });
       }
 
       // Offers
