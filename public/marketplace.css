@@ -22,20 +22,11 @@ nav a.on{color:var(--blue);font-weight:600;box-shadow:inset 0 -2px 0 var(--red)}
 .hero{background:var(--blue);color:#fff;padding:56px max(24px,calc((100% - 1200px)/2 + 24px)) 96px;border-bottom:4px solid var(--red)}
 .hero h1{font:700 40px/1.15 var(--serif);letter-spacing:-.01em;margin:0 0 14px;max-width:740px}
 .hero p{font-size:16px;line-height:1.55;color:#D6E2F1;margin:0 0 22px;max-width:620px}
-.trust{position:relative;display:grid;grid-template-columns:repeat(3,1fr);margin:6px 0 0;padding:0;overflow:hidden;border:1px solid rgba(255,255,255,.16);border-radius:4px;background:linear-gradient(104deg,#10498A 0%,#0B3C75 46%,#072A54 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 10px 26px rgba(4,22,45,.28)}
-.trust::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 140% at 12% -20%,rgba(143,187,234,.20),transparent 58%)}
-.trust-item{position:relative;display:flex;flex-direction:column;gap:6px;padding:17px 24px;transition:background .22s ease;animation:trustIn .5s cubic-bezier(.22,.61,.36,1) both}
+.trust{display:grid;grid-template-columns:repeat(3,1fr);margin:6px 0 0;padding:0;border:1px solid rgba(255,255,255,.16);border-radius:4px;background:var(--blue-hover)}
+.trust-item{display:flex;flex-direction:column;gap:6px;padding:17px 24px}
 .trust-item+.trust-item{border-left:1px solid rgba(255,255,255,.16)}
-.trust-item:nth-child(2){animation-delay:.09s}
-.trust-item:nth-child(3){animation-delay:.18s}
-.trust-item::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--red);transform:scaleY(0);transform-origin:top;transition:transform .26s ease}
-.trust-item:hover{background:rgba(255,255,255,.055)}
-.trust-item:hover::before{transform:scaleY(1)}
-.trust-k{font:700 11px/1 var(--font);letter-spacing:.16em;text-transform:uppercase;color:#8FBBEA;transition:color .22s ease}
-.trust-item:hover .trust-k{color:#B9D6F5}
+.trust-k{font:700 11px/1 var(--font);letter-spacing:.16em;text-transform:uppercase;color:#8FBBEA}
 .trust-v{font-size:15px;line-height:1.45;color:#fff}
-@keyframes trustIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.trust-item{animation:none}.trust-item::before,.trust-k{transition:none}}
 svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
 .main{max-width:1200px;margin:0 auto;padding:0 24px 24px}
