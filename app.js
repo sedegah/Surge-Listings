@@ -1438,6 +1438,99 @@ const UI = {
     if (asset.ownershipType === 'surge') return 'Surge Solutions';
     return asset.ownerBankName || asset.bankName || 'Partner bank';
   },
+  ddOpenWrap: null,
+  ddField(id, label, current, options) {
+    const cur = options.find(o => o[0] === current) || options[0];
+    const safeLabel = this.escapeHtml(label);
+    return `<div class="fld fld-dd" data-dd="${id}">
+            <span class="fld-lbl">${safeLabel}</span>
+            <button type="button" class="dd-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="dd-${id}-list" aria-label="${safeLabel}" onclick="UI.ddToggle('${id}')" onkeydown="UI.ddTriggerKey(event,'${id}')">
+              <span class="dd-value">${this.escapeHtml(cur[1])}</span>
+              <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="dd-panel" id="dd-${id}-list" role="listbox" aria-label="${safeLabel}" hidden>
+              ${options.map(([v, t]) => `<button type="button" class="dd-opt${v === cur[0] ? ' is-on' : ''}" role="option" aria-selected="${v === cur[0]}" data-value="${this.escapeHtml(v)}" data-label="${this.escapeHtml(t)}" onclick="UI.ddSelect('${id}', this.dataset.value, this.dataset.label)"><span>${this.escapeHtml(t)}</span><svg class="dd-tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></button>`).join('')}
+            </div>
+          </div>`;
+  },
+  ddWrap(id) { return document.querySelector('[data-dd="' + id + '"]'); },
+  ddToggle(id) {
+    const wrap = this.ddWrap(id);
+    if (!wrap) return;
+    const wasOpen = wrap.classList.contains('dd-open');
+    this.ddClose();
+    if (wasOpen) return;
+    wrap.classList.add('dd-open');
+    wrap.querySelector('.dd-trigger').setAttribute('aria-expanded', 'true');
+    const panel = wrap.querySelector('.dd-panel');
+    panel.hidden = false;
+    this.ddOpenWrap = wrap;
+    this.ddBind();
+    const target = panel.querySelector('.dd-opt.is-on') || panel.querySelector('.dd-opt');
+    if (target) target.focus();
+  },
+  ddClose() {
+    const wrap = this.ddOpenWrap;
+    if (!wrap) return;
+    wrap.classList.remove('dd-open');
+    const trigger = wrap.querySelector('.dd-trigger');
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    const panel = wrap.querySelector('.dd-panel');
+    if (panel) panel.hidden = true;
+    this.ddOpenWrap = null;
+  },
+  ddTriggerKey(e, id) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!this.ddOpenWrap) this.ddToggle(id);
+    }
+  },
+  ddSelect(id, value, label) {
+    const wrap = this.ddWrap(id);
+    if (wrap) {
+      wrap.querySelector('.dd-value').textContent = label;
+      wrap.querySelectorAll('.dd-opt').forEach(opt => {
+        const on = opt.dataset.value === value;
+        opt.classList.toggle('is-on', on);
+        opt.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      const trigger = wrap.querySelector('.dd-trigger');
+      this.ddClose();
+      if (trigger) trigger.focus();
+    }
+    if (id === 'region') PublicMarket.setRegion(value);
+    else if (id === 'price') PublicMarket.setPrice(value);
+  },
+  ddBind() {
+    if (this._ddBound) return;
+    this._ddBound = true;
+    document.addEventListener('click', e => {
+      if (this.ddOpenWrap && !this.ddOpenWrap.contains(e.target)) this.ddClose();
+    });
+    document.addEventListener('keydown', e => {
+      const wrap = this.ddOpenWrap;
+      if (!wrap) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        const trigger = wrap.querySelector('.dd-trigger');
+        this.ddClose();
+        if (trigger) trigger.focus();
+        return;
+      }
+      if (e.key === 'Tab') { this.ddClose(); return; }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+      const opts = [...wrap.querySelectorAll('.dd-opt')];
+      if (!opts.length) return;
+      e.preventDefault();
+      const i = opts.indexOf(document.activeElement);
+      let next;
+      if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = opts.length - 1;
+      else if (e.key === 'ArrowDown') next = i < 0 ? 0 : Math.min(i + 1, opts.length - 1);
+      else next = i < 0 ? opts.length - 1 : Math.max(i - 1, 0);
+      opts[next].focus();
+    });
+  },
   fmtMoney(n) { return 'GHS ' + Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
   parseMoney(value) {
     const n = Number(String(value ?? '').replace(/,/g, '').trim());
@@ -7914,19 +8007,8 @@ const PublicMarket = {
             <span>Search</span>
             <input type="search" value="${UI.escapeHtml(S.q)}" placeholder="Reference, town or property type" oninput="PublicMarket.setSearchQuery(this.value)">
           </label>
-          <label class="fld">
-            <span>Region</span>
-            <select onchange="PublicMarket.setRegion(this.value)">
-              <option value="all">All regions</option>
-              ${regions.map(r => `<option value="${UI.escapeHtml(r)}" ${S.region === r ? 'selected' : ''}>${UI.escapeHtml(r)}</option>`).join('')}
-            </select>
-          </label>
-          <label class="fld">
-            <span>Price (GH₵)</span>
-            <select onchange="PublicMarket.setPrice(this.value)">
-              ${Object.entries(this.BANDS).map(([k, v]) => `<option value="${k}" ${S.price === k ? 'selected' : ''}>${v[0]}</option>`).join('')}
-            </select>
-          </label>
+          ${UI.ddField('region', 'Region', S.region, [['all', 'All regions'], ...regions.map(r => [r, r])])}
+          ${UI.ddField('price', 'Price (GH₵)', S.price, Object.entries(this.BANDS).map(([k, v]) => [k, v[0]]))}
         </div>
 
         <div class="chips" id="chips">${this.renderChips()}</div>
