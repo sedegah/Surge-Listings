@@ -3931,6 +3931,52 @@ const BankPortal = {
     }
   },
 
+  async deleteViewing(viewingId) {
+    const confirmed = await UI.confirm({
+      title: 'Delete Viewing Request',
+      message: 'Are you sure you want to permanently delete this viewing request?',
+      confirmText: 'Delete Request',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    try {
+      await fetch(`${Store.API_BASE}/api/v1/viewings/${encodeURIComponent(viewingId)}`, {
+        method: 'DELETE',
+        headers: Store.getAuthHeaders()
+      });
+      Store.viewings = (Store.viewings || []).filter(v => v.id !== viewingId && v.ref !== viewingId);
+      Store.broadcastChange('viewing_deleted');
+      this.render();
+      UI.toast('Viewing request deleted.', 'success');
+    } catch(err) {
+      UI.toast(err.message || 'Could not delete viewing request', 'error');
+    }
+  },
+
+  async deleteLead(leadId) {
+    const confirmed = await UI.confirm({
+      title: 'Delete Enquiry Lead',
+      message: 'Are you sure you want to permanently delete this enquiry lead?',
+      confirmText: 'Delete Enquiry',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    try {
+      await fetch(`${Store.API_BASE}/api/v1/leads/${encodeURIComponent(leadId)}`, {
+        method: 'DELETE',
+        headers: Store.getAuthHeaders()
+      });
+      Store.leads = (Store.leads || []).filter(l => l.id !== leadId && l.ref !== leadId);
+      Store.broadcastChange('lead_deleted');
+      this.render();
+      UI.toast('Enquiry deleted.', 'success');
+    } catch(err) {
+      UI.toast(err.message || 'Could not delete enquiry', 'error');
+    }
+  },
+
   renderOfferWorkspace(o) {
     const asset = Store.getAsset(o.assetId) || Store.assets.find(a => a.ref === o.assetRef);
     const isUnderReview = ['Under Bank Review', 'Under Review'].includes(o.status);
@@ -5511,6 +5557,52 @@ const AdminPortal = {
       Store.persist();
       UI.toast('Viewing escort confirmed and scheduled.', 'success');
       this.render();
+    }
+  },
+
+  async deleteViewing(viewingId) {
+    const confirmed = await UI.confirm({
+      title: 'Delete Viewing Request',
+      message: 'Are you sure you want to permanently delete this viewing request?',
+      confirmText: 'Delete Request',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    try {
+      await fetch(`${Store.API_BASE}/api/v1/viewings/${encodeURIComponent(viewingId)}`, {
+        method: 'DELETE',
+        headers: Store.getAuthHeaders()
+      });
+      Store.viewings = (Store.viewings || []).filter(v => v.id !== viewingId && v.ref !== viewingId);
+      Store.broadcastChange('viewing_deleted');
+      this.render();
+      UI.toast('Viewing request deleted.', 'success');
+    } catch(err) {
+      UI.toast(err.message || 'Could not delete viewing request', 'error');
+    }
+  },
+
+  async deleteLead(leadId) {
+    const confirmed = await UI.confirm({
+      title: 'Delete Enquiry Lead',
+      message: 'Are you sure you want to permanently delete this enquiry lead?',
+      confirmText: 'Delete Enquiry',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    try {
+      await fetch(`${Store.API_BASE}/api/v1/leads/${encodeURIComponent(leadId)}`, {
+        method: 'DELETE',
+        headers: Store.getAuthHeaders()
+      });
+      Store.leads = (Store.leads || []).filter(l => l.id !== leadId && l.ref !== leadId);
+      Store.broadcastChange('lead_deleted');
+      this.render();
+      UI.toast('Enquiry deleted.', 'success');
+    } catch(err) {
+      UI.toast(err.message || 'Could not delete enquiry', 'error');
     }
   },
 
