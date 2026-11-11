@@ -352,17 +352,45 @@ const Store = {
   _snapshotAssets: new Map(),
   _snapshotOffers: new Map(),
   _snapshotLeadIds: new Set(),
+  _broadcastChan: null,
+  _syncListenersInitialized: false,
+
+  broadcastChange(reason = 'data_change') {
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        if (!this._broadcastChan) this._broadcastChan = new BroadcastChannel('surge_platform_sync');
+        this._broadcastChan.postMessage({ reason, timestamp: Date.now() });
+      }
+      localStorage.setItem('surge_last_sync_event', Date.now() + '_' + reason);
+    } catch(e) {}
+  },
 
   startPeriodicSync() {
+    if (!this._syncListenersInitialized) {
+      this._syncListenersInitialized = true;
+      const trigger = () => { void this.syncAndNotify(); };
+
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          if (!this._broadcastChan) this._broadcastChan = new BroadcastChannel('surge_platform_sync');
+          this._broadcastChan.onmessage = () => { trigger(); };
+        } catch(e) {}
+      }
+
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'surge_last_sync_event') trigger();
+      });
+
+      window.addEventListener('focus', () => { trigger(); });
+    }
+
     if (this._syncTimer) return;
     const poll = async () => {
       if (document.visibilityState !== 'visible') return;
-      const portal = document.body?.dataset.portal;
-      if (portal !== 'admin' && portal !== 'bank') return;
       await this.syncAndNotify();
     };
-    // Sync every 15 seconds
-    this._syncTimer = setInterval(poll, 15000);
+    // Sync every 4 seconds for fast live updates without page refresh
+    this._syncTimer = setInterval(poll, 4000);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void poll();
     });
@@ -372,9 +400,8 @@ const Store = {
     if (this._isSyncing) return;
     this._isSyncing = true;
     try {
-      const portal = document.body?.dataset.portal;
-      if (!portal || (portal !== 'admin' && portal !== 'bank')) return;
-      if (!Auth.getToken() && !Auth.isSessionPresent()) return;
+      const portal = document.body?.dataset.portal || 'public';
+      if (portal !== 'public' && !Auth.getToken() && !Auth.isSessionPresent()) return;
 
       const prevAssets = new Map(this._snapshotAssets);
       const prevOffers = new Map(this._snapshotOffers);
@@ -581,11 +608,14 @@ const Store = {
       // Automatically update the view if user is not actively editing a form input
       const activeEl = document.activeElement;
       const isUserEditing = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-      if (!isUserEditing) {
+      const modalOpen = document.getElementById('modal-backdrop')?.classList.contains('open');
+      if (!isUserEditing && !modalOpen) {
         if (portal === 'admin' && typeof AdminPortal !== 'undefined' && AdminPortal.render) {
           AdminPortal.render();
         } else if (portal === 'bank' && typeof BankPortal !== 'undefined' && BankPortal.render) {
           BankPortal.render();
+        } else if (portal === 'public' && typeof PublicMarket !== 'undefined' && PublicMarket.render) {
+          PublicMarket.render();
         }
       }
     } catch (e) {
@@ -4761,9 +4791,23 @@ const AdminPortal = {
     return this.submitVerificationDecision(kind, recordId, 'verify');
   },
 
+  scrollTabs(direction) {
+    const el = document.getElementById('admin-doctabs');
+    if (el) el.scrollBy({ left: direction * 180, behavior: 'smooth' });
+  },
+
   renderDoctabs() {
     const el = document.getElementById('admin-doctabs');
     if (!el) return;
+    if (!el._wheelWired) {
+      el._wheelWired = true;
+      el.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }, { passive: false });
+    }
     if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
       const current = this.currentView || 'assets';
       this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Assets', view: current, closable: false }];
@@ -4775,6 +4819,10 @@ const AdminPortal = {
         ${t.closable ? `<span class="x" title="Close tab" onclick="AdminPortal.closeTab('${UI.escapeHtml(t.id)}', event)">×</span>` : ''}
       </div>
     `).join('');
+    const activeTab = el.querySelector('.dtab.active');
+    if (activeTab) {
+      activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
   },
 
   renderDashboard() {

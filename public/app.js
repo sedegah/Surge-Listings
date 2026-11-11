@@ -2155,9 +2155,23 @@ const BankPortal = {
     }
   },
 
+  scrollTabs(direction) {
+    const el = document.getElementById('bank-doctabs');
+    if (el) el.scrollBy({ left: direction * 180, behavior: 'smooth' });
+  },
+
   renderDoctabs() {
     const el = document.getElementById('bank-doctabs');
     if (!el) return;
+    if (!el._wheelWired) {
+      el._wheelWired = true;
+      el.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }, { passive: false });
+    }
     if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
       const current = this.currentView || 'dashboard';
       this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Dashboard', view: current, closable: false }];
@@ -2184,6 +2198,10 @@ const BankPortal = {
         </div>
       `;
     }).join('');
+    const activeTab = el.querySelector('.dtab.active');
+    if (activeTab) {
+      activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
   },
 
   getSubPageTitle() {
@@ -4743,9 +4761,23 @@ const AdminPortal = {
     return this.submitVerificationDecision(kind, recordId, 'verify');
   },
 
+  scrollTabs(direction) {
+    const el = document.getElementById('admin-doctabs');
+    if (el) el.scrollBy({ left: direction * 180, behavior: 'smooth' });
+  },
+
   renderDoctabs() {
     const el = document.getElementById('admin-doctabs');
     if (!el) return;
+    if (!el._wheelWired) {
+      el._wheelWired = true;
+      el.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }, { passive: false });
+    }
     if (!Array.isArray(this.tabs) || this.tabs.length === 0) {
       const current = this.currentView || 'assets';
       this.tabs = [{ id: current, title: this.getViewTitle ? this.getViewTitle(current) : 'Assets', view: current, closable: false }];
@@ -4757,6 +4789,10 @@ const AdminPortal = {
         ${t.closable ? `<span class="x" title="Close tab" onclick="AdminPortal.closeTab('${UI.escapeHtml(t.id)}', event)">×</span>` : ''}
       </div>
     `).join('');
+    const activeTab = el.querySelector('.dtab.active');
+    if (activeTab) {
+      activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
   },
 
   renderDashboard() {
