@@ -114,7 +114,7 @@ tr+tr th,tr+tr td{border-top:1px solid #EEF1F5}
   .hero{padding:36px 16px 80px}.hero h1{font-size:28px}.hero p{font-size:15px}
   .main,.page{padding-left:16px;padding-right:16px}
   .search{grid-template-columns:1fr}.fld{border-right:0;border-bottom:1px solid #E3E8EE}.fld:last-child{border-bottom:0}
-  .trust{grid-template-columns:1fr}.trust-item{padding:14px 0}.trust-item:first-child{padding-top:0}.trust-item:last-child{padding-bottom:0}.trust-item+.trust-item{border-left:0;border-top:1px solid rgba(255,255,255,.18)}
+  .trust{display:none}
   .grid,.grid.list{grid-template-columns:1fr}.grid.list .card{flex-direction:column}.grid.list .img{width:auto;flex:none;aspect-ratio:4/3;min-height:0}
 }
 
