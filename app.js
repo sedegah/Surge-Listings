@@ -3921,7 +3921,6 @@ const BankPortal = {
       <div class="group" style="margin-bottom:18px">
         <div class="caption">
           Marketplace Buyer Enquiries
-          <span class="hint">Public buyer requests submitted from asset listings</span>
         </div>
         <div class="gridwrap">
           <table class="grid">
@@ -3947,7 +3946,6 @@ const BankPortal = {
       <div class="group">
         <div class="caption">
           Supervised Site Viewing Appointments
-          <span class="hint">Requests from verified buyers requiring recovery officer escort</span>
         </div>
         <div class="gridwrap">
           <table class="grid">
@@ -5584,7 +5582,6 @@ const AdminPortal = {
       <div class="group" style="margin-bottom:18px">
         <div class="caption">
           Marketplace Buyer Enquiries
-          <span class="hint">Public buyer requests submitted from asset listings</span>
         </div>
         <div class="gridwrap">
           <table class="grid">
@@ -5610,7 +5607,6 @@ const AdminPortal = {
       <div class="group">
         <div class="caption">
           Supervised Site Viewing Appointments
-          <span class="hint">Requests from verified buyers requiring recovery officer escort</span>
         </div>
         <div class="gridwrap">
           <table class="grid">
