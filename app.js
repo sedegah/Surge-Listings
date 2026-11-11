@@ -7853,11 +7853,20 @@ const PublicMarket = {
       <section class="hero">
         <h1>Bank-repossessed property in Ghana, checked before it is listed</h1>
         <p>Every property is verified, genuine, and ready for sale. Explore available listings, book a visit with our team, and make an offer directly.</p>
-        <ul class="trust">
-          <li>${this.icons.tick}Five-gate review before publishing</li>
-          <li>${this.icons.tick}Buyers verified through KYC</li>
-          <li>${this.icons.tick}Offers handled by Surge Solutions</li>
-        </ul>
+        <div class="trust" role="list" aria-label="How Surge Solutions protects every transaction">
+          <div class="trust-item" role="listitem">
+            <span class="trust-k">Reviewed</span>
+            <span class="trust-v">Every listing is checked before it goes live</span>
+          </div>
+          <div class="trust-item" role="listitem">
+            <span class="trust-k">Verified</span>
+            <span class="trust-v">Every buyer is identity-verified</span>
+          </div>
+          <div class="trust-item" role="listitem">
+            <span class="trust-k">Managed</span>
+            <span class="trust-v">Surge Solutions handles every offer for you</span>
+          </div>
+        </div>
       </section>
 
       <div class="main">
