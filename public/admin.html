@@ -1,143 +1,200 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surge Solutions - Administration Portal</title>
-<meta name="robots" content="noindex, nofollow">
-<meta name="description" content="Surge Solutions Super Administrator Portal · Platform oversight, 5-gate publish readiness verification, legal holds, bank partner management, and audit records.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.0.3">
-<link rel="stylesheet" href="notifications.css">
-<style>
-body[data-portal="admin"]:not(.auth-ready) > :not(#portal-auth-status) { visibility: hidden; }
-</style>
-<!-- Progressive Web App Metadata & Icons -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0B3C75">
-<meta name="application-name" content="Surge Listings">
-<meta name="apple-mobile-web-app-title" content="Surge Listings">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="msapplication-TileColor" content="#0B3C75">
-<meta name="msapplication-TileImage" content="icons/icon-192.png">
-<link rel="shortcut icon" href="favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Surge Solutions - Administration Portal</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description"
+    content="Surge Solutions Super Administrator Portal · Platform oversight, 5-gate publish readiness verification, legal holds, bank partner management, and audit records.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css?v=1.0.3">
+  <link rel="stylesheet" href="notifications.css">
+  <style>
+    body[data-portal="admin"]:not(.auth-ready)> :not(#portal-auth-status) {
+      visibility: hidden;
+    }
+  </style>
+  <!-- Progressive Web App Metadata & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0B3C75">
+  <meta name="application-name" content="Surge Listings">
+  <meta name="apple-mobile-web-app-title" content="Surge Listings">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="msapplication-TileColor" content="#0B3C75">
+  <meta name="msapplication-TileImage" content="icons/icon-192.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 </head>
+
 <body data-portal="admin">
-<div id="portal-auth-status" role="status" aria-live="polite" aria-label="Verifying session">
-  <div class="auth-dialog-card">
-    <div class="auth-dialog-header">
-      <span class="auth-dialog-brand"><span class="sq"></span>Surge Solutions</span>
-      <span class="auth-dialog-env">SURGE ADMIN</span>
-    </div>
-    <div class="auth-dialog-body">
-      <div class="auth-spinner"></div>
-      <div class="auth-title">Verifying session…</div>
-      <div class="auth-subtitle">Authenticating administrative console</div>
+  <div id="portal-auth-status" role="status" aria-live="polite" aria-label="Verifying session">
+    <div class="auth-dialog-card">
+      <div class="auth-dialog-header">
+        <span class="auth-dialog-brand"><span class="sq"></span>Surge Solutions</span>
+        <span class="auth-dialog-env">SURGE ADMIN</span>
+      </div>
+      <div class="auth-dialog-body">
+        <div class="auth-spinner"></div>
+        <div class="auth-title">Verifying session…</div>
+        <div class="auth-subtitle">Authenticating administrative console</div>
+      </div>
     </div>
   </div>
-</div>
-<nav class="switcher">
-  <span class="brandmark">SURGE <span>&#9632;</span></span>
-  <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>
-  <button data-app="admin" class="active">Surge Admin</button>
-  <a href="marketplace.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</a>
-  <button class="switcher-signout" type="button" onclick="Auth.logout()" aria-label="Sign out">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
-    <span>Sign out</span>
-  </button>
-</nav>
+  <nav class="switcher">
+    <span class="brandmark">SURGE <span>&#9632;</span></span>
+    <a href="bank.html" class="switcher-link" style="color:#C8C8C8;padding:5px 12px;font-size:12px">Bank Portal</a>
+    <button data-app="admin" class="active">Surge Admin</button>
+    <a href="marketplace.html" class="switcher-link"
+      style="color:#C8C8C8;padding:5px 12px;font-size:12px">Marketplace</a>
+    <button class="switcher-signout" type="button" onclick="Auth.logout()" aria-label="Sign out">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 17l5-5-5-5" />
+        <path d="M15 12H3" />
+        <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+      </svg>
+      <span>Sign out</span>
+    </button>
+  </nav>
 
-<div class="viewport">
-  <!-- SURGE ADMIN -->
-  <section class="app active" id="app-admin">
-    <div class="window">
-      <div class="menubar">
-        <span class="app-title"><span class="sq"></span>Surge Solutions · Administration</span>
-        <span class="menu-spacer"></span>
-        <span class="menu-env">ADMINISTRATION</span>
-      </div>
-      <div class="toolbar">
-        <button class="tbtn" onclick="AdminPortal.nav('review')"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Review Queue</button>
-        <button class="tbtn" onclick="AdminPortal.publishCurrent()"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Publish</button>
-        <button class="tbtn" onclick="AdminPortal.holdCurrent()"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>Legal Hold</button>
-        <span class="tsep"></span>
-        <button class="tbtn" onclick="AdminPortal.nav('banks')"><svg class="ico" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>Banks &amp; Staff</button>
-        <button class="tbtn" onclick="AdminPortal.nav('audit')"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Audit Log</button>
-        <span class="tsep"></span>
-      </div>
-      <div class="mainrow">
-        <nav class="navpane" id="admin-nav">
-          <div class="navitem" data-view="dashboard"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</div>
-          <div class="navitem" data-view="assets"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v10h14V10"/></svg>Assets</div>
-          <div class="navitem" data-view="review"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Review Queue</div>
-          <div class="navitem" data-view="legal"><svg class="ico" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>Legal Verification</div>
-          <div class="navitem" data-view="title"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l7-2 9-9-5-5-9 9z"/></svg>Title &amp; Valuation</div>
-          <div class="navitem" data-view="offers"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>Offers</div>
-          <div class="navitem" data-view="enquiries"><svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 8.5a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2.1-2.5 3.6"/><path d="M12 14.6h.01"/></svg>Enquiries &amp; Viewings</div>
-          <div class="navitem" data-view="banks"><svg class="ico" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>Banks &amp; Staff</div>
-          <div class="navitem" data-view="audit"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Audit Log</div>
-        </nav>
-        <div class="workspace">
-          <div class="doctabs-wrap">
-            <div class="doctabs" id="admin-doctabs"></div>
-            <div class="doctabs-nav">
-              <button class="doctabs-nav-btn" type="button" onclick="AdminPortal.scrollTabs(-1)" title="Previous tabs" aria-label="Previous tabs">
-                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              </button>
-              <button class="doctabs-nav-btn" type="button" onclick="AdminPortal.scrollTabs(1)" title="Next tabs" aria-label="Next tabs">
-                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </button>
+  <div class="viewport">
+    <!-- SURGE ADMIN -->
+    <section class="app active" id="app-admin">
+      <div class="window">
+        <div class="menubar">
+
+          <span class="menu-spacer"></span>
+          <span class="menu-env">ADMINISTRATION</span>
+        </div>
+        <div class="toolbar">
+          <button class="tbtn" onclick="AdminPortal.nav('review')"><svg class="ico" viewBox="0 0 24 24">
+              <path d="M5 12l4 4 10-10" />
+            </svg>Review Queue</button>
+          <button class="tbtn" onclick="AdminPortal.publishCurrent()"><svg class="ico" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="8" />
+              <path d="M12 8v4l3 2" />
+            </svg>Publish</button>
+          <button class="tbtn" onclick="AdminPortal.holdCurrent()"><svg class="ico" viewBox="0 0 24 24">
+              <rect x="5" y="10" width="14" height="10" rx="1" />
+              <path d="M8 10V7a4 4 0 018 0v3" />
+            </svg>Legal Hold</button>
+          <span class="tsep"></span>
+          <button class="tbtn" onclick="AdminPortal.nav('banks')"><svg class="ico" viewBox="0 0 24 24">
+              <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4" />
+            </svg>Banks &amp; Staff</button>
+          <button class="tbtn" onclick="AdminPortal.nav('audit')"><svg class="ico" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="8" />
+              <path d="M12 8v4l3 2" />
+            </svg>Audit Log</button>
+          <span class="tsep"></span>
+        </div>
+        <div class="mainrow">
+          <nav class="navpane" id="admin-nav">
+            <div class="navitem" data-view="dashboard"><svg class="ico" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+              </svg>Dashboard</div>
+            <div class="navitem" data-view="assets"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M3 10l9-6 9 6" />
+                <path d="M5 10v10h14V10" />
+              </svg>Assets</div>
+            <div class="navitem" data-view="review"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M5 12l4 4 10-10" />
+              </svg>Review Queue</div>
+            <div class="navitem" data-view="legal"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M6 3h9l4 4v14H6z" />
+                <path d="M9 12h7M9 16h5" />
+              </svg>Legal Verification</div>
+            <div class="navitem" data-view="title"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M4 20l7-2 9-9-5-5-9 9z" />
+              </svg>Title &amp; Valuation</div>
+            <div class="navitem" data-view="offers"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M4 5h16v14H4z" />
+                <path d="M8 9h8M8 13h5" />
+              </svg>Offers</div>
+            <div class="navitem" data-view="enquiries"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M9.5 8.5a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2.1-2.5 3.6" />
+                <path d="M12 14.6h.01" />
+              </svg>Enquiries &amp; Viewings</div>
+            <div class="navitem" data-view="banks"><svg class="ico" viewBox="0 0 24 24">
+                <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4" />
+              </svg>Banks &amp; Staff</div>
+            <div class="navitem" data-view="audit"><svg class="ico" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8" />
+                <path d="M12 8v4l3 2" />
+              </svg>Audit Log</div>
+          </nav>
+          <div class="workspace">
+            <div class="doctabs-wrap">
+              <div class="doctabs" id="admin-doctabs"></div>
+              <div class="doctabs-nav">
+                <button class="doctabs-nav-btn" type="button" onclick="AdminPortal.scrollTabs(-1)" title="Previous tabs"
+                  aria-label="Previous tabs">
+                  <svg viewBox="0 0 24 24">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
+                </button>
+                <button class="doctabs-nav-btn" type="button" onclick="AdminPortal.scrollTabs(1)" title="Next tabs"
+                  aria-label="Next tabs">
+                  <svg viewBox="0 0 24 24">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </button>
+              </div>
             </div>
+            <main class="work" id="admin-work"></main>
+            <footer class="statusbar">
+              <span class="cell">User: <b id="profile-user-admin">-</b></span>
+              <span class="cell">Role: <b id="profile-role-admin">-</b></span>
+              <span class="cell">Org: <b id="profile-org-admin">-</b></span>
+              <span class="cell grow" id="clock-admin"></span>
+            </footer>
           </div>
-          <main class="work" id="admin-work"></main>
-          <footer class="statusbar">
-            <span class="cell">User: <b id="profile-user-admin">-</b></span>
-            <span class="cell">Role: <b id="profile-role-admin">-</b></span>
-            <span class="cell">Org: <b id="profile-org-admin">-</b></span>
-            <span class="cell grow" id="clock-admin"></span>
-          </footer>
         </div>
       </div>
-    </div>
-  </section>
-</div>
-
-<div id="surge-notification-container" role="region" aria-label="Notifications" aria-live="polite"></div>
-<div class="surge-toast" id="toast" style="display:none"></div>
-<div class="surge-modal-backdrop" id="modal-backdrop" style="display:none">
-  <div class="surge-modal-window" id="modal-window">
-    <div class="surge-modal-header">
-      <h3 id="modal-title">Dialog</h3>
-      <button class="surge-modal-close" onclick="UI.closeModal()">&times;</button>
-    </div>
-    <div class="surge-modal-body" id="modal-body"></div>
-    <div class="surge-modal-footer" id="modal-footer"></div>
+    </section>
   </div>
-</div>
 
-<script src="notifications.js"></script>
-<script src="app.js"></script>
-<script src="pwa.js"></script>
-<script>
-/* Desktop app: open Marketplace in a separate window so the portal nav stays intact */
-document.addEventListener('DOMContentLoaded', function () {
-  if (window.surgeDesktop && window.surgeDesktop.isDesktop) {
-    document.querySelectorAll('a[href*="marketplace"]').forEach(function (link) {
-      link.addEventListener('click', function (e) {
-        e.preventDefault();
-        window.surgeDesktop.openMarketplace();
-      });
+  <div id="surge-notification-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+  <div class="surge-toast" id="toast" style="display:none"></div>
+  <div class="surge-modal-backdrop" id="modal-backdrop" style="display:none">
+    <div class="surge-modal-window" id="modal-window">
+      <div class="surge-modal-header">
+        <h3 id="modal-title">Dialog</h3>
+        <button class="surge-modal-close" onclick="UI.closeModal()">&times;</button>
+      </div>
+      <div class="surge-modal-body" id="modal-body"></div>
+      <div class="surge-modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <script src="notifications.js"></script>
+  <script src="app.js"></script>
+  <script src="pwa.js"></script>
+  <script>
+    /* Desktop app: open Marketplace in a separate window so the portal nav stays intact */
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.surgeDesktop && window.surgeDesktop.isDesktop) {
+        document.querySelectorAll('a[href*="marketplace"]').forEach(function (link) {
+          link.addEventListener('click', function (e) {
+            e.preventDefault();
+            window.surgeDesktop.openMarketplace();
+          });
+        });
+      }
     });
-  }
-});
-</script>
+  </script>
 </body>
+
 </html>
