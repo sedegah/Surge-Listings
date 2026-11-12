@@ -70,6 +70,10 @@ export default {
 
     const SESSION_COOKIE = '__Host-surge_session';
     const SESSION_TTL_HOURS = 8;
+    // Idle expiry slides on activity; the absolute cap does not, so a stolen
+    // cookie cannot be kept alive indefinitely by replaying it.
+    const SESSION_ABSOLUTE_HOURS = 24;
+    const REMEMBERED_ABSOLUTE_HOURS = 24 * 7;
     const encoder = new TextEncoder();
 
     function secureRandomHex(byteCount = 32) {
@@ -394,6 +398,7 @@ export default {
         LEFT JOIN organizations o ON o.id = s.organization_id
         WHERE s.secret_hash = ? AND s.revoked = 0
           AND datetime(s.expires_at) > datetime('now')
+          AND datetime(s.absolute_expires_at) > datetime('now')
         `).bind(secretHash).first();
       }
 
@@ -409,6 +414,7 @@ export default {
           LEFT JOIN organizations o ON o.id = s.organization_id
           WHERE s.id = ? AND s.revoked = 0
             AND datetime(s.expires_at) > datetime('now')
+            AND datetime(s.absolute_expires_at) > datetime('now')
         `).bind(legacyToken).first();
 
         if (session?.user_status === 'Active' && !session.secret_hash) {
@@ -419,15 +425,16 @@ export default {
           const userAgent = (request.headers.get('User-Agent') || '').slice(0, 250);
           const remembered = session.remembered === 1;
           const ttlDays = remembered ? 30 : SESSION_TTL_HOURS / 24;
+          const absoluteHours = remembered ? REMEMBERED_ABSOLUTE_HOURS : SESSION_ABSOLUTE_HOURS;
           const rotated = await env.DB.prepare(`
             UPDATE sessions
             SET id = ?, secret_hash = ?, last_active = datetime('now'),
-                expires_at = datetime('now', ?), device_name = ?, last_ip = ?,
-                user_agent = ?, remembered = ?
+                expires_at = datetime('now', ?), absolute_expires_at = datetime('now', ?),
+                device_name = ?, last_ip = ?, user_agent = ?, remembered = ?
             WHERE id = ? AND secret_hash IS NULL AND revoked = 0
           `).bind(
-            newSessionId, secretHash, `+${ttlDays} days`, parseDeviceName(userAgent),
-            ipAddress, userAgent, remembered ? 1 : 0, legacyToken
+            newSessionId, secretHash, `+${ttlDays} days`, `+${absoluteHours} hours`,
+            parseDeviceName(userAgent), ipAddress, userAgent, remembered ? 1 : 0, legacyToken
           ).run();
           if (!rotated.meta?.changes) return null;
           session.id = newSessionId;
@@ -654,25 +661,29 @@ export default {
             .bind(randomId(), lockoutUsername, ipAddress, reason).run();
         };
 
-        if (!user) { await recordFailure('USER_NOT_FOUND'); return err('The username or password is incorrect.', 401); }
+        // Unknown and unconfigured accounts must cost the same as a wrong
+        // password, otherwise response time and body text enumerate usernames.
+        const DECOY_HASH = 'pbkdf2-sha256$100000$Q/WVP0hAmZsTtDRiJHR5qQ==$KPAQjz3Y8r4JtLq3flNxQtlfIFiXgA905bhjhIELZ2w=';
         let validPassword = false;
-        if (user.password_hash) {
-          if (String(user.password_hash).startsWith('pbkdf2-sha256$')) {
-            validPassword = await verifyPassword(passwordValue, user.password_hash);
-          } else {
-            validPassword = equalSecret(String(user.password_hash), passwordValue);
-            if (validPassword) {
-              const upgradedHash = await hashPassword(passwordValue);
-              await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`)
-                .bind(upgradedHash, user.id, user.password_hash).run();
-            }
-          }
+        let failureReason = 'WRONG_PASSWORD';
+        if (!user) {
+          failureReason = 'USER_NOT_FOUND';
+          await verifyPassword(passwordValue, DECOY_HASH);
+        } else if (!user.password_hash) {
+          failureReason = 'PASSWORD_NOT_CONFIGURED';
+          await verifyPassword(passwordValue, DECOY_HASH);
+        } else if (String(user.password_hash).startsWith('pbkdf2-sha256$')) {
+          validPassword = await verifyPassword(passwordValue, user.password_hash);
         } else {
-          await recordFailure('PASSWORD_NOT_CONFIGURED');
-          return err('This account is not configured for sign-in yet. Contact the system owner to reset its password.', 403);
+          validPassword = equalSecret(String(user.password_hash), passwordValue);
+          if (validPassword) {
+            const upgradedHash = await hashPassword(passwordValue);
+            await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`)
+              .bind(upgradedHash, user.id, user.password_hash).run();
+          }
         }
         if (!validPassword) {
-          await recordFailure('WRONG_PASSWORD');
+          await recordFailure(failureReason);
           const updatedLimits = await checkLoginRateLimit(lockoutUsername, ipAddress);
           if (updatedLimits.attemptsRemaining <= 0) {
             await lockUserAccount(lockoutUsername);
@@ -695,15 +706,19 @@ export default {
         const secretHash = await sha256Hex(sessionSecret);
         const remembered = body.remember === true;
         const ttlDays = remembered ? 30 : SESSION_TTL_HOURS / 24;
-        const expiresAt = new Date(Date.now() + ttlDays * 24 * 3600 * 1000).toISOString();
+        const absoluteHours = remembered ? REMEMBERED_ABSOLUTE_HOURS : SESSION_ABSOLUTE_HOURS;
+        const idleExpiry = Date.now() + ttlDays * 24 * 3600 * 1000;
+        const absoluteExpiry = Date.now() + absoluteHours * 3600 * 1000;
+        const expiresAt = new Date(Math.min(idleExpiry, absoluteExpiry)).toISOString();
+        const absoluteExpiresAt = new Date(absoluteExpiry).toISOString();
         const userAgent = (request.headers.get('User-Agent') || '').slice(0, 250);
         await env.DB.prepare(`
           INSERT INTO sessions (id, secret_hash, user_id, organization_id, bank_id, branch_id, role_code, scope,
-            ip_address, last_ip, user_agent, device_name, remembered, created_at, expires_at, last_active)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
+            ip_address, last_ip, user_agent, device_name, remembered, created_at, expires_at, absolute_expires_at, last_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
         `).bind(sessionId, secretHash, user.id, user.organization_id, user.bank_id || null, user.branch_id || null,
           user.role_code, user.scope, ipAddress,
-          ipAddress, userAgent, parseDeviceName(userAgent), remembered ? 1 : 0, expiresAt).run();
+          ipAddress, userAgent, parseDeviceName(userAgent), remembered ? 1 : 0, expiresAt, absoluteExpiresAt).run();
         setSessionCookie(sessionSecret, remembered ? 30 * 24 * 3600 : SESSION_TTL_HOURS * 3600);
 
         // Record success, clear lockout & update last_login
@@ -712,6 +727,11 @@ export default {
         await clearUserLock(user.id);
         await env.DB.prepare(`UPDATE users SET last_login = datetime('now'), locked_until = NULL WHERE id = ?`).bind(user.id).run();
         await auditLog(user.full_name, user.role_code, user.org_name, 'LOGIN', 'User', user.public_id, `Signed in from ${ipAddress}`, null, null, user.id);
+
+        ctx.waitUntil(Promise.all([
+          env.DB.prepare(`DELETE FROM login_attempts WHERE datetime(attempted_at) < datetime('now', '-30 days')`).run(),
+          env.DB.prepare(`DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now') OR datetime(absolute_expires_at) <= datetime('now')`).run()
+        ]).catch(() => {}));
 
         const isSurge = user.scope === 'surge';
         return json({
@@ -758,7 +778,9 @@ export default {
           SELECT id, device_name, last_ip, created_at, last_active, expires_at,
                  CASE WHEN id = ? THEN 1 ELSE 0 END AS current
           FROM sessions
-          WHERE user_id = ? AND revoked = 0 AND datetime(expires_at) > datetime('now')
+          WHERE user_id = ? AND revoked = 0
+            AND datetime(expires_at) > datetime('now')
+            AND datetime(absolute_expires_at) > datetime('now')
           ORDER BY last_active DESC
         `).bind(session.id, session.user_id).all();
         return json({ success: true, sessions: result.results || [] });

@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS users (
   mfa_enabled INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'Active',
   last_login TEXT,
+  locked_until TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -546,6 +547,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_agent TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   expires_at TEXT NOT NULL,
+  absolute_expires_at TEXT,
   last_active TEXT NOT NULL DEFAULT (datetime('now')),
   revoked INTEGER NOT NULL DEFAULT 0,
   revoke_reason TEXT,

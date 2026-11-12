@@ -170,11 +170,10 @@ input[aria-invalid=true] { border-color: var(--danger) }
   var API_BASE = '';
   var LOGIN_URL = API_BASE + '/api/auth/login';   // app.js already uses /api/auth/me and /api/auth/logout
   var NEXT_PAGE = 'bank.html', ADMIN_PAGE = 'admin.html';
-  var MAX_TRIES = 5, LOCK_MS = 60000;
 
   var $ = function (id) { return document.getElementById(id); };
   var form = $('login-form'), user = $('username'), pass = $('password'), btn = $('submit');
-  var tries = 0, lockedUntil = 0, lockTimer;
+  var lockedUntil = 0, lockTimer;
 
   var qs = new URLSearchParams(location.search);
   var rawNext = qs.get('next') || '';
@@ -261,19 +260,26 @@ input[aria-invalid=true] { border-color: var(--danger) }
     }
   }
 
-  function startLock() {
-    lockedUntil = Date.now() + LOCK_MS; btn.disabled = true;
+  // The server owns lockout state; this only mirrors the duration it reports.
+  function startLock(minutes) {
+    var mins = Number(minutes) > 0 ? Number(minutes) : 15;
+    lockedUntil = Date.now() + mins * 60000;
+    btn.disabled = true;
     $('lock').classList.add('show');
-    if (window.NotificationSystem) {
-      NotificationSystem.warning('Too many failed attempts. Try again in 60 seconds.', 'Account Temporarily Locked');
+    function render() {
+      var s = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (s <= 0) { clearInterval(lockTimer); $('lock').classList.remove('show'); btn.disabled = false; return; }
+      var label = s > 60
+        ? Math.ceil(s / 60) + ' minute' + (Math.ceil(s / 60) === 1 ? '' : 's')
+        : s + ' second' + (s === 1 ? '' : 's');
+      $('lock-msg').textContent = 'Too many failed attempts. Try again in ' + label + '.';
     }
     clearInterval(lockTimer);
-    lockTimer = setInterval(function () {
-      var s = Math.ceil((lockedUntil - Date.now()) / 1000);
-      if (s <= 0) { clearInterval(lockTimer); $('lock').classList.remove('show'); btn.disabled = false; tries = 0; return; }
-      $('lock-msg').textContent = 'Too many failed attempts. Try again in ' + s + ' seconds.';
-    }, 250);
-    $('lock-msg').textContent = 'Too many failed attempts. Try again in 60 seconds.';
+    lockTimer = setInterval(render, 250);
+    render();
+    if (window.NotificationSystem) {
+      NotificationSystem.warning($('lock-msg').textContent, 'Account Temporarily Locked');
+    }
   }
 
   $('toggle').addEventListener('click', function () {
@@ -326,10 +332,10 @@ input[aria-invalid=true] { border-color: var(--danger) }
           return;
         }
         if (loginToast) loginToast.dismiss();
-        tries++; btn.textContent = 'Sign in'; btn.disabled = false; pass.value = '';
-        if (res.status === 423 || res.status === 429 || tries >= MAX_TRIES) { startLock(); return; }
+        btn.textContent = 'Sign in'; btn.disabled = false; pass.value = '';
+        if (res.status === 423 || res.status === 429) { startLock(res.json.lockMinutesLeft); return; }
         if (res.status === 403) return showError(res.json.error || 'Sign-in is not allowed for this account. Contact your Surge administrator.', ['u']);
-        showError('The username or password is incorrect. ' + (MAX_TRIES - tries) + ' attempt' + (MAX_TRIES - tries === 1 ? '' : 's') + ' left.', ['p']);
+        showError(res.json.error || 'The username or password is incorrect.', ['p']);
       })
       .catch(function () {
         if (loginToast) loginToast.dismiss();
