@@ -46,6 +46,36 @@ const Auth = {
   token: null,
   user: null,
   selectedBranchId: null,
+  state: 'unknown',
+  sessionVersion: 0,
+  _checkPromise: null,
+  _logoutPromise: null,
+  _requestController: null,
+  _redirecting: false,
+
+  isAuthenticated() {
+    return this.state === 'authenticated' && Boolean(this.user);
+  },
+
+  async request(url, options = {}) {
+    if (!this.isAuthenticated()) throw new Error('Sign in to continue.');
+    const sessionVersion = this.sessionVersion;
+    const headers = new Headers(options.headers);
+    const token = this.getToken();
+    if (token) headers.set('Authorization', 'Bearer ' + token);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, this._requestController.signal])
+      : this._requestController.signal;
+    const response = await fetch(url, { ...options, headers, credentials: 'same-origin', signal });
+    if (!this.isAuthenticated() || sessionVersion !== this.sessionVersion) {
+      throw new DOMException('The session changed.', 'AbortError');
+    }
+    if (response.status === 401) {
+      this.transitionToLogin('expired');
+      throw new Error('Your session expired. Sign in again to continue.');
+    }
+    return response;
+  },
 
   getToken() {
     if (this.token) return this.token;
@@ -56,11 +86,6 @@ const Auth = {
   },
 
   getUser() {
-    if (this.user) return this.user;
-    try {
-      const u = sessionStorage.getItem('surge_user') || localStorage.getItem('surge_user');
-      if (u) this.user = JSON.parse(u);
-    } catch(e) {}
     return this.user;
   },
 
@@ -83,29 +108,64 @@ const Auth = {
     } catch(e) {}
   },
 
-  logout() {
-    const token = this.getToken();
-    fetch(Store.API_BASE + '/api/auth/logout', {
-      method: 'POST',
-      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-      credentials: 'same-origin',
-      keepalive: true
-    }).catch(() => {});
+  clearSession() {
+    this.state = 'unauthenticated';
+    this.sessionVersion += 1;
+    this._requestController?.abort();
+    clearTimeout(this._expiryWarningTimer);
+    Store.stopPeriodicSync();
+    Store.resetData();
     this.token = null;
     this.user = null;
     this.selectedBranchId = null;
+    BankPortal.branches = [];
+    BankPortal.branchStats = null;
+    document.body.classList.remove('auth-ready');
     try {
-      sessionStorage.removeItem('surge_token');
-      sessionStorage.removeItem('surge_user');
-      localStorage.removeItem('surge_token');
-      localStorage.removeItem('surge_user');
-      sessionStorage.removeItem('surge_session_present');
-      localStorage.removeItem('surge_session_present');
+      for (const storage of [sessionStorage, localStorage]) {
+        for (const key of ['surge_token', 'surge_user', 'surge_session_present']) storage.removeItem(key);
+      }
     } catch(e) {}
-    window.location.href = 'login.html';
   },
 
-  showVerificationError(message, requiredScope) {
+  redirectToLogin(reason) {
+    if (this._redirecting) return;
+    this._redirecting = true;
+    const portal = document.body.dataset.portal;
+    const next = portal === 'admin' ? 'admin.html' : 'bank.html';
+    window.location.href = 'login.html?reason=' + reason + '&next=' + next;
+  },
+
+  transitionToLogin(reason) {
+    if (this._redirecting || this._logoutPromise) return;
+    this.clearSession();
+    this.redirectToLogin(reason);
+  },
+
+  logout() {
+    if (this._logoutPromise) return this._logoutPromise;
+    if (this._redirecting) return Promise.resolve();
+    const token = this.getToken();
+    this.clearSession();
+    this._logoutPromise = fetch(Store.API_BASE + '/api/auth/logout', {
+      method: 'POST',
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+      credentials: 'same-origin',
+      keepalive: true,
+      signal: AbortSignal.timeout(4000)
+    }).then(response => {
+      if (!response.ok) throw new Error('Sign-out was not confirmed.');
+      this.redirectToLogin('signedout');
+    }).catch(() => {
+      this.token = token;
+      this._logoutPromise = null;
+      const scope = document.body.dataset.portal === 'admin' ? 'surge' : 'bank';
+      this.showVerificationError('Could not sign out on the server. Retry to end your session.', scope, () => this.logout());
+    });
+    return this._logoutPromise;
+  },
+
+  showVerificationError(message, requiredScope, retryAction) {
     const status = document.getElementById('portal-auth-status');
     if (!status) return;
 
@@ -121,6 +181,10 @@ const Auth = {
     retry.addEventListener('click', async () => {
       retry.disabled = true;
       status.innerHTML = UI.renderSkeletonLoader(requiredScope);
+      if (retryAction) {
+        await retryAction();
+        return;
+      }
       if (await this.checkAuth(requiredScope)) {
         await (requiredScope === 'surge' ? AdminPortal : BankPortal).init(true);
       }
@@ -134,7 +198,15 @@ const Auth = {
     status.appendChild(signIn);
   },
 
-  async checkAuth(requiredScope = 'bank') {
+  checkAuth(requiredScope = 'bank') {
+    if (this._redirecting || this._logoutPromise) return Promise.resolve(false);
+    if (!this._checkPromise) {
+      this._checkPromise = this.verifySession(requiredScope).finally(() => { this._checkPromise = null; });
+    }
+    return this._checkPromise;
+  },
+
+  async verifySession(requiredScope) {
     const path = window.location.pathname.toLowerCase();
 
     // 1. NEVER redirect if on public marketplace or already on login page
@@ -145,6 +217,14 @@ const Auth = {
     }
 
     const token = this.getToken();
+    let hadSession = Boolean(token || this.user);
+    try {
+      hadSession ||= sessionStorage.getItem('surge_session_present') === 'true' || localStorage.getItem('surge_session_present') === 'true';
+    } catch (e) {}
+    this.state = 'checking';
+    this._requestController?.abort();
+    Store.stopPeriodicSync();
+    document.body.classList.remove('auth-ready');
 
     try {
       const controller = new AbortController();
@@ -162,19 +242,21 @@ const Auth = {
       } finally {
         clearTimeout(timeoutId);
       }
+      if (this._redirecting || this._logoutPromise) return false;
       if (!res.ok) {
         if (res.status === 401) {
-          console.warn('[Auth Guard] Session invalid or expired. Clearing session.', { status: res.status });
-          this.logout();
+          this.transitionToLogin(hadSession ? 'expired' : 'required');
           return false;
         }
-        console.error('[Auth Guard] Session could not be verified by the server.', { status: res.status });
-        this.showVerificationError('The session service is temporarily unavailable. Retry, or return to sign in.', requiredScope);
+        this.state = 'unavailable';
+        const message = res.status === 403
+          ? 'Access to this portal is denied. Contact your Surge administrator.'
+          : 'The session service is temporarily unavailable. Retry, or return to sign in.';
+        this.showVerificationError(message, requiredScope);
         return false;
       }
       if (!data.authenticated || !data.user) {
-        console.warn('[Auth Guard] Session not authenticated. Clearing session.');
-        this.logout();
+        this.transitionToLogin(hadSession ? 'expired' : 'required');
         return false;
       }
       this.user = data.user;
@@ -209,6 +291,12 @@ const Auth = {
           return false;
         }
       }
+      this.state = 'authenticated';
+      this.sessionVersion += 1;
+      this._requestController = new AbortController();
+      Store.resetData();
+      BankPortal.branches = [];
+      BankPortal.branchStats = null;
       this.updateUIProfile();
       this.scheduleSessionExpiryWarning();
       console.info('[Auth Guard] Access granted:', { user: data.user.username, scope: data.user.scope });
@@ -217,6 +305,8 @@ const Auth = {
       document.body.classList.add('auth-ready');
       return true;
     } catch(e) {
+      if (this._redirecting || this._logoutPromise) return false;
+      this.state = 'unavailable';
       console.error('[Auth Guard] Auth check failed before the server could verify the session:', e);
       const message = e.name === 'AbortError'
         ? 'Session verification timed out. Your saved sign-in was kept; retry in a moment.'
@@ -291,22 +381,22 @@ const Store = {
         localStorage.removeItem(this.STORAGE_KEY);
       }
     } catch (e) {}
-    this.assets = [];
-    this.documents = [];
-    this.titles = [];
-    this.valuations = [];
-    this.auditLog = [];
-    this.leads = [];
-    this.offers = [];
-    this.viewings = [];
-    this.invoices = [];
-    this.banks = [];
-    this.users = [];
-    this.branches = [];
+    this.resetData();
     this.startDeploymentVersionMonitor();
-    this.startPeriodicSync();
+  },
+
+  resetData() {
+    for (const key of ['assets', 'documents', 'titles', 'valuations', 'auditLog', 'leads', 'offers', 'viewings', 'invoices', 'banks', 'users', 'branches']) this[key] = [];
+    this._snapshotAssets.clear();
+    this._snapshotOffers.clear();
+    this._snapshotLeadIds.clear();
+    this._hasSyncedOnce = false;
+    this._forbiddenReads.clear();
+  },
+
+  canSync() {
     const portal = document.body?.dataset.portal;
-    if (!portal || portal === 'public') this.fetchRemote();
+    return portal === 'public' || (['bank', 'admin'].includes(portal) && Auth.isAuthenticated());
   },
 
   startDeploymentVersionMonitor() {
@@ -319,18 +409,29 @@ const Store = {
     });
   },
 
-  async checkDeploymentVersion() {
+  checkDeploymentVersion() {
+    if (this._versionCheckDisabled) return Promise.resolve();
+    if (!this._versionCheckPromise) {
+      this._versionCheckPromise = this.fetchDeploymentVersion().finally(() => { this._versionCheckPromise = null; });
+    }
+    return this._versionCheckPromise;
+  },
+
+  async fetchDeploymentVersion() {
     try {
-      const response = await fetch(this.API_BASE + '/api/version', { cache: 'no-store' });
+      const response = await fetch(this.API_BASE + '/api/version', { credentials: 'same-origin', cache: 'no-store' });
+      if (response.status === 401 || response.status === 403) {
+        this._versionCheckDisabled = true;
+        clearInterval(this.deploymentVersionTimer);
+        this.deploymentVersionTimer = null;
+        return;
+      }
       if (!response.ok) throw new Error(`Version check failed (${response.status}).`);
       const data = await response.json();
       const version = String(data.version || '');
       if (!version || version === 'unknown' || version === 'local') return;
-      if (!this.deploymentVersion) {
-        this.deploymentVersion = version;
-      } else if (version !== this.deploymentVersion) {
-        this.showDeploymentUpdateNotice();
-      }
+      if (this.deploymentVersion && version !== this.deploymentVersion) this.showDeploymentUpdateNotice();
+      this.deploymentVersion = version;
     } catch (error) {
       console.warn('[Deployment Version] Could not check for a newer deployment:', error);
     }
@@ -354,6 +455,10 @@ const Store = {
   _snapshotLeadIds: new Set(),
   _broadcastChan: null,
   _syncListenersInitialized: false,
+  _remotePromise: null,
+  _forbiddenReads: new Set(),
+  _versionCheckPromise: null,
+  _versionCheckDisabled: false,
 
   broadcastChange(reason = 'data_change') {
     try {
@@ -366,9 +471,13 @@ const Store = {
   },
 
   startPeriodicSync() {
+    if (!this.canSync()) return;
     if (!this._syncListenersInitialized) {
       this._syncListenersInitialized = true;
-      const trigger = () => { void this.syncAndNotify(); };
+      const trigger = () => {
+        if (document.visibilityState === 'visible') void this.syncAndNotify();
+      };
+      document.addEventListener('visibilitychange', trigger);
 
       if (typeof BroadcastChannel !== 'undefined') {
         try {
@@ -391,17 +500,18 @@ const Store = {
     };
     // Sync every 4 seconds for fast live updates without page refresh
     this._syncTimer = setInterval(poll, 4000);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') void poll();
-    });
+  },
+
+  stopPeriodicSync() {
+    clearInterval(this._syncTimer);
+    this._syncTimer = null;
   },
 
   async syncAndNotify() {
-    if (this._isSyncing) return;
+    if (this._isSyncing || !this.canSync()) return;
     this._isSyncing = true;
     try {
-      const portal = document.body?.dataset.portal || 'public';
-      if (portal !== 'public' && !Auth.getToken() && !Auth.isSessionPresent()) return;
+      const portal = document.body?.dataset.portal;
 
       const prevAssets = new Map(this._snapshotAssets);
       const prevOffers = new Map(this._snapshotOffers);
@@ -409,7 +519,7 @@ const Store = {
       const hadPreviousState = this._hasSyncedOnce;
 
       // Fetch fresh remote data
-      await this.fetchRemote();
+      if (!(await this.fetchRemote()) || !this.canSync()) return;
 
       // Build snapshots of new state
       const currentAssets = new Map();
@@ -633,31 +743,56 @@ const Store = {
     // No-op - data comes exclusively from fetchRemote()
   },
 
-  async fetchRemote() {
+  fetchRemote(afterMutation = false) {
+    if (!this.canSync()) return Promise.resolve(false);
+    if (afterMutation && this._remotePromise) {
+      return this._remotePromise.then(() => this.fetchRemote());
+    }
+    if (!this._remotePromise) {
+      this._remotePromise = this.loadRemote().finally(() => { this._remotePromise = null; });
+    }
+    return this._remotePromise;
+  },
+
+  async loadRemote() {
     try {
       const headers = this.getAuthHeaders();
-      const portal = document.body?.dataset.portal;
+      const portal = document.body.dataset.portal;
+      const sessionVersion = Auth.sessionVersion;
       const scopeParam = portal === 'admin' ? '?scope=all' : portal === 'bank' ? '?scope=bank' : '';
       const assetsEndpoint = portal === 'admin' ? '/api/admin/assets' : portal === 'public' ? '/api/marketplace/assets' : '/api/v1/assets' + scopeParam;
       const documentsEndpoint = portal === 'admin' ? '/api/admin/documents' : portal === 'bank' ? '/api/bank/documents' : null;
       const skipAdminData = portal !== 'admin';
+      const read = async endpoint => {
+        if (!endpoint || this._forbiddenReads.has(endpoint)) return null;
+        const options = { headers, credentials: 'same-origin', cache: 'no-store' };
+        const response = portal === 'public'
+          ? await fetch(this.API_BASE + endpoint, options)
+          : await Auth.request(this.API_BASE + endpoint, options);
+        if (portal !== 'public' && response.status === 403) {
+          if (!this._forbiddenReads.size) UI.notify.error('Some dashboard data is unavailable for your account. Contact your Surge administrator.', 'Access Denied');
+          this._forbiddenReads.add(endpoint);
+        }
+        return { ok: response.ok, data: response.ok ? await response.json() : null };
+      };
       const [assetsRes, leadsRes, offersRes, viewingsRes, invoicesRes, auditRes, banksRes, usersRes, documentsRes, titlesRes, valuationsRes] = await Promise.allSettled([
-        fetch(this.API_BASE + assetsEndpoint, { headers, cache: 'no-store' }),
-        fetch(this.API_BASE + '/api/v1/leads' + scopeParam, { headers, cache: 'no-store' }),
-        fetch(this.API_BASE + '/api/v1/offers' + scopeParam, { headers, cache: 'no-store' }),
-        fetch(this.API_BASE + '/api/v1/viewings' + scopeParam, { headers, cache: 'no-store' }),
-        fetch(this.API_BASE + '/api/v1/invoices' + scopeParam, { headers, cache: 'no-store' }),
-        portal === 'public' ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/audit-logs' + (portal === 'bank' ? '' : scopeParam), { headers, cache: 'no-store' }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/banks', { headers, cache: 'no-store' }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/v1/users', { headers, cache: 'no-store' }),
-        documentsEndpoint ? fetch(this.API_BASE + documentsEndpoint, { headers, cache: 'no-store' }) : Promise.resolve(null),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/admin/titles', { headers, cache: 'no-store' }),
-        skipAdminData ? Promise.resolve(null) : fetch(this.API_BASE + '/api/admin/valuations', { headers, cache: 'no-store' }),
+        read(assetsEndpoint),
+        read(portal === 'public' ? null : '/api/v1/leads' + scopeParam),
+        read(portal === 'public' ? null : '/api/v1/offers' + scopeParam),
+        read(portal === 'public' ? null : '/api/v1/viewings' + scopeParam),
+        read(portal === 'public' ? null : '/api/v1/invoices' + scopeParam),
+        read(portal === 'public' ? null : '/api/v1/audit-logs' + (portal === 'bank' ? '' : scopeParam)),
+        read(skipAdminData ? null : '/api/v1/banks'),
+        read(skipAdminData ? null : '/api/v1/users'),
+        read(documentsEndpoint),
+        read(skipAdminData ? null : '/api/admin/titles'),
+        read(skipAdminData ? null : '/api/admin/valuations'),
       ]);
+      if (!this.canSync() || (portal !== 'public' && sessionVersion !== Auth.sessionVersion)) return false;
 
       // Assets
-      if (assetsRes.status === 'fulfilled' && assetsRes.value.ok) {
-        const json = await assetsRes.value.json();
+      if (assetsRes.status === 'fulfilled' && assetsRes.value?.ok) {
+        const json = assetsRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           // Public marketplace API returns a simpler shape - map it into the same Store.assets format
           if (portal === 'public') {
@@ -774,8 +909,8 @@ const Store = {
       }
 
       // Leads
-      if (leadsRes.status === 'fulfilled' && leadsRes.value.ok) {
-        const json = await leadsRes.value.json();
+      if (leadsRes.status === 'fulfilled' && leadsRes.value?.ok) {
+        const json = leadsRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.leads = json.data.map(l => ({
             id: l.id, ref: l.lead_ref, assetId: l.asset_id, assetRef: l.asset_ref || '',
@@ -788,8 +923,8 @@ const Store = {
       }
 
       // Offers
-      if (offersRes.status === 'fulfilled' && offersRes.value.ok) {
-        const json = await offersRes.value.json();
+      if (offersRes.status === 'fulfilled' && offersRes.value?.ok) {
+        const json = offersRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.offers = json.data.map(o => {
             let ghanaCard = '';
@@ -831,8 +966,8 @@ const Store = {
       }
 
       // Viewings
-      if (viewingsRes.status === 'fulfilled' && viewingsRes.value.ok) {
-        const json = await viewingsRes.value.json();
+      if (viewingsRes.status === 'fulfilled' && viewingsRes.value?.ok) {
+        const json = viewingsRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.viewings = json.data.map(v => {
             let phone = v.phone || '';
@@ -849,8 +984,8 @@ const Store = {
       }
 
       // Invoices
-      if (invoicesRes.status === 'fulfilled' && invoicesRes.value.ok) {
-        const json = await invoicesRes.value.json();
+      if (invoicesRes.status === 'fulfilled' && invoicesRes.value?.ok) {
+        const json = invoicesRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.invoices = json.data.map(i => ({
             id: i.id, ref: i.invoice_number || i.invoice_ref || i.id, bankId: i.bank_id,
@@ -863,7 +998,7 @@ const Store = {
 
       // Audit Log - Track activity related to assets and documents (isolated per bank; no hash codes)
       if (auditRes.status === 'fulfilled' && auditRes.value?.ok) {
-        const json = await auditRes.value.json();
+        const json = auditRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.auditLog = json.data
             .filter(a => ['Asset', 'Document', 'TitleRecord', 'Valuation', 'LegalInstrument', 'AssetImage', 'Offer', 'Invoice', 'EnforcementCase'].includes(a.entity_type) && !a.action_type?.startsWith('SESSION_'))
@@ -883,7 +1018,7 @@ const Store = {
 
       // Banks
       if (banksRes.status === 'fulfilled' && banksRes.value?.ok) {
-        const json = await banksRes.value.json();
+        const json = banksRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.banks = json.data.map(b => ({
             id: b.id,
@@ -905,7 +1040,7 @@ const Store = {
 
       // Users & Staff
       if (usersRes.status === 'fulfilled' && usersRes.value?.ok) {
-        const json = await usersRes.value.json();
+        const json = usersRes.value.data;
         if (json.success && Array.isArray(json.data)) {
           this.users = json.data.map(u => ({
             id: u.id,
@@ -932,32 +1067,33 @@ const Store = {
 
       // Private asset documents
       if (documentsRes.status === 'fulfilled' && documentsRes.value?.ok) {
-        const json = await documentsRes.value.json();
+        const json = documentsRes.value.data;
         if (json.success && Array.isArray(json.data)) this.documents = json.data;
       }
 
       if (titlesRes.status === 'fulfilled' && titlesRes.value?.ok) {
-        const json = await titlesRes.value.json();
+        const json = titlesRes.value.data;
         if (json.success && Array.isArray(json.data)) this.titles = json.data;
       }
 
       if (valuationsRes.status === 'fulfilled' && valuationsRes.value?.ok) {
-        const json = await valuationsRes.value.json();
+        const json = valuationsRes.value.data;
         if (json.success && Array.isArray(json.data)) this.valuations = json.data;
       }
 
-      // Re-render all active portals
-      if (typeof BankPortal !== 'undefined' && BankPortal.render) BankPortal.render();
-      if (typeof AdminPortal !== 'undefined' && AdminPortal.render) AdminPortal.render();
-      if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
+      if (portal === 'bank') BankPortal.render();
+      else if (portal === 'admin') AdminPortal.render();
+      else if (portal === 'public') PublicMarket.render();
+      return true;
     } catch (e) {
-      console.warn('API fetch failed - UI will show empty state:', e);
+      if (this.canSync()) console.warn('API fetch failed - UI will show empty state:', e);
+      return false;
     }
   },
 
   async createBank(bankData) {
     try {
-      const res = await fetch(this.API_BASE + '/api/v1/banks', {
+      const res = await Auth.request(this.API_BASE + '/api/v1/banks', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -966,7 +1102,7 @@ const Store = {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to create bank');
       UI.toast(`Partner bank "${bankData.legal_name}" registered successfully.`, 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
       return true;
     } catch (err) {
       console.error('createBank error:', err);
@@ -977,7 +1113,7 @@ const Store = {
 
   async createUser(userData) {
     try {
-      const res = await fetch(this.API_BASE + '/api/v1/users', {
+      const res = await Auth.request(this.API_BASE + '/api/v1/users', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -986,7 +1122,7 @@ const Store = {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to create staff member');
       UI.toast(`Staff user @${userData.username} registered with credentials.`, 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
       return true;
     } catch (err) {
       console.error('createUser error:', err);
@@ -997,7 +1133,7 @@ const Store = {
 
   async resetUserPassword(userId, newPassword) {
     try {
-      const res = await fetch(this.API_BASE + `/api/v1/users/${userId}/reset-password`, {
+      const res = await Auth.request(this.API_BASE + `/api/v1/users/${userId}/reset-password`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -1006,7 +1142,7 @@ const Store = {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to reset password');
       UI.toast('Password updated successfully.', 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
       return true;
     } catch (err) {
       console.error('resetUserPassword error:', err);
@@ -1020,7 +1156,7 @@ const Store = {
     if (!user) return;
     const newStatus = user.status === 'Active' ? 'Suspended' : 'Active';
     try {
-      const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
+      const res = await Auth.request(this.API_BASE + `/api/v1/users/${userId}`, {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -1029,7 +1165,7 @@ const Store = {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to update status');
       UI.toast(`User status updated to ${newStatus}.`, 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
     } catch (err) {
       UI.toast(err.message, 'error');
     }
@@ -1037,7 +1173,7 @@ const Store = {
 
   async unlockUser(userId) {
     try {
-      const res = await fetch(this.API_BASE + `/api/admin/users/${encodeURIComponent(userId)}/unlock`, {
+      const res = await Auth.request(this.API_BASE + `/api/admin/users/${encodeURIComponent(userId)}/unlock`, {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         cache: 'no-store'
@@ -1045,7 +1181,7 @@ const Store = {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to unlock user.');
       UI.toast(data.message || 'Account unlocked.', 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
       AdminPortal.render();
       return true;
     } catch (err) {
@@ -1056,7 +1192,7 @@ const Store = {
 
   async unlockUser(userId) {
     try {
-      const res = await fetch(this.API_BASE + `/api/admin/users/${encodeURIComponent(userId)}/unlock`, {
+      const res = await Auth.request(this.API_BASE + `/api/admin/users/${encodeURIComponent(userId)}/unlock`, {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         cache: 'no-store'
@@ -1064,7 +1200,7 @@ const Store = {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to unlock user.');
       UI.toast(data.message || 'Account unlocked.', 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
       AdminPortal.render();
       return true;
     } catch (err) {
@@ -1084,14 +1220,14 @@ const Store = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(this.API_BASE + `/api/v1/users/${userId}`, {
+      const res = await Auth.request(this.API_BASE + `/api/v1/users/${userId}`, {
         method: 'DELETE',
         credentials: 'same-origin'
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to delete user');
       UI.toast(`User @${user.username} deleted.`, 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
     } catch (err) {
       UI.toast(err.message, 'error');
     }
@@ -1108,14 +1244,14 @@ const Store = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(this.API_BASE + `/api/v1/banks/${bankId}`, {
+      const res = await Auth.request(this.API_BASE + `/api/v1/banks/${bankId}`, {
         method: 'DELETE',
         credentials: 'same-origin'
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to delete bank');
       UI.toast(`Bank ${bank.name} removed.`, 'success');
-      await this.fetchRemote();
+      await this.fetchRemote(true);
     } catch (err) {
       UI.toast(err.message, 'error');
     }
@@ -2124,19 +2260,34 @@ const BankPortal = {
     }
   },
 
-  async init(alreadyAuthenticated = false) {
-    const authed = alreadyAuthenticated || await Auth.checkAuth('bank');
+  init(alreadyAuthenticated = false) {
+    if (this._initialized && Auth.isAuthenticated() && Store._syncTimer) return Promise.resolve(true);
+    if (!this._initPromise) {
+      this._initPromise = this.initialize(alreadyAuthenticated).finally(() => { this._initPromise = null; });
+    }
+    return this._initPromise;
+  },
+
+  async initialize(alreadyAuthenticated) {
+    const authed = (alreadyAuthenticated && Auth.isAuthenticated()) || await Auth.checkAuth('bank');
     if (!authed) return;
 
     this.restoreWorkspace();
-    window.addEventListener('hashchange', () => {
-      const hash = window.location.hash.replace(/^#/, '');
-      if (hash && hash !== this.activeTabId) {
-        const decoded = decodeURIComponent(hash);
-        const match = this.tabs.find(t => t.id === decoded);
-        if (match) this.switchTab(match.id);
-      }
-    });
+    if (!this._eventsBound) {
+      this._eventsBound = true;
+      window.addEventListener('hashchange', () => {
+        const hash = window.location.hash.replace(/^#/, '');
+        if (hash && hash !== this.activeTabId) {
+          const decoded = decodeURIComponent(hash);
+          const match = this.tabs.find(t => t.id === decoded);
+          if (match) this.switchTab(match.id);
+        }
+      });
+      const portal = document.body.dataset.portal;
+      document.querySelectorAll(`#${portal}-nav .navitem`).forEach(el => {
+        el.addEventListener('click', () => this.nav(el.dataset.view));
+      });
+    }
 
     const tabsEl = document.getElementById('bank-doctabs');
     if (tabsEl && !tabsEl._wheelBound) {
@@ -2149,26 +2300,27 @@ const BankPortal = {
       }, { passive: false });
     }
 
-    document.querySelectorAll('#bank-nav .navitem').forEach(el => {
-      el.addEventListener('click', () => this.nav(el.dataset.view));
-    });
     this.render();
-    Store.startPeriodicSync();
     try {
-      await Store.fetchRemote();
+      if (!(await Store.fetchRemote()) || !Auth.isAuthenticated()) return false;
       await this.loadBranches();
+      if (!Auth.isAuthenticated()) return false;
+      this._initialized = true;
+      Store.startPeriodicSync();
+      return true;
     } finally {
-      this.render();
+      if (Auth.isAuthenticated()) this.render();
     }
   },
 
   async loadBranches() {
+    const sessionVersion = Auth.sessionVersion;
     try {
       const headers = Store.getAuthHeaders();
-      const res = await fetch(Store.API_BASE + '/api/bank/branches', { headers });
+      const res = await Auth.request(Store.API_BASE + '/api/bank/branches', { headers });
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
+        if (Auth.isAuthenticated() && sessionVersion === Auth.sessionVersion && json.success && Array.isArray(json.data)) {
           this.branches = json.data;
           this.updateBranchSelect();
         }
@@ -2188,7 +2340,7 @@ const BankPortal = {
     Auth.selectedBranchId = branchId || null;
     if (branchId) {
       try {
-        const res = await fetch(Store.API_BASE + `/api/bank/branches/${branchId}/dashboard`, {
+        const res = await Auth.request(Store.API_BASE + `/api/bank/branches/${branchId}/dashboard`, {
           headers: Store.getAuthHeaders()
         });
         if (res.ok) {
@@ -2223,6 +2375,7 @@ const BankPortal = {
   },
 
   render() {
+    if (!Auth.isAuthenticated()) return;
     this.renderDoctabs();
     this.updateBranchSelect();
     document.querySelectorAll('#bank-nav .navitem').forEach(n => {
@@ -2255,7 +2408,7 @@ const BankPortal = {
       const headers = {};
       const token = Auth.getToken();
       if (token) headers.Authorization = 'Bearer ' + token;
-      const response = await fetch(
+      const response = await Auth.request(
         Store.API_BASE + `/api/bank/documents/${encodeURIComponent(documentId)}/download`,
         { headers, cache: 'no-store' }
       );
@@ -2309,7 +2462,7 @@ const BankPortal = {
     });
     if (!confirmed) return;
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         Store.API_BASE + `/api/bank/documents/${encodeURIComponent(documentId)}`,
         {
           method: 'DELETE',
@@ -2320,7 +2473,7 @@ const BankPortal = {
       );
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Document deletion failed (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast(result.message || 'Document deleted.', 'success');
     } catch (error) {
       UI.toast(error.message || 'Document could not be deleted.', 'error');
@@ -2548,7 +2701,7 @@ const BankPortal = {
   async loadPhotos(assetId) {
     if (!assetId) return;
     try {
-      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos`, {
         headers: Store.getAuthHeaders()
       });
       const json = await res.json();
@@ -2569,7 +2722,7 @@ const BankPortal = {
       return false;
     }
     try {
-      const response = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/${action}`, {
+      const response = await Auth.request(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/${action}`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin',
@@ -2588,7 +2741,7 @@ const BankPortal = {
           : '';
         throw new Error([result.error || `Action failed (${response.status}).`, failedGates].filter(Boolean).join(' Missing requirements: '));
       }
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.notify.success(successMessage || result.message || 'Asset updated.', 'Action Completed');
       this.render();
       PublicMarket.render();
@@ -3099,7 +3252,7 @@ const BankPortal = {
     }
 
     try {
-      const res = await fetch(`${Store.API_BASE}/api/v1/assets/${encodeURIComponent(a.id)}?scope=bank`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/v1/assets/${encodeURIComponent(a.id)}?scope=bank`, {
         method: 'PUT',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({
@@ -3118,7 +3271,7 @@ const BankPortal = {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save changes');
 
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast('Changes saved successfully.', 'success');
       this.closeSubPage();
       this.render();
@@ -3242,7 +3395,7 @@ const BankPortal = {
     const timeoutId = setTimeout(() => controller.abort(), 120000);
     let response;
     try {
-      response = await fetch(Store.API_BASE + endpoint, {
+      response = await Auth.request(Store.API_BASE + endpoint, {
         method: 'POST',
         headers,
         body: form,
@@ -3272,7 +3425,7 @@ const BankPortal = {
     }
 
     this._stagedFile = null;
-    await Store.fetchRemote();
+    await Store.fetchRemote(true);
     return result;
   },
 
@@ -3544,7 +3697,7 @@ const BankPortal = {
     if (token) headers.Authorization = 'Bearer ' + token;
 
     try {
-      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/upload`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/upload`, {
         method: 'POST',
         headers,
         body: form
@@ -3593,7 +3746,7 @@ const BankPortal = {
     if (token) headers.Authorization = 'Bearer ' + token;
 
     try {
-      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/${encodeURIComponent(photoId)}`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(assetId)}/photos/${encodeURIComponent(photoId)}`, {
         method: 'DELETE',
         headers
       });
@@ -3706,7 +3859,7 @@ const BankPortal = {
     }
     if (!documentId) return UI.toast('Upload a title deed before requesting verification.', 'error');
     try {
-      const response = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(a.id)}/title`, {
+      const response = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(a.id)}/title`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin',
@@ -3715,7 +3868,7 @@ const BankPortal = {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Title submission failed (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast(result.message || 'Title details submitted for verification.', 'success');
       this.closeSubPage();
     } catch (error) {
@@ -3811,7 +3964,7 @@ const BankPortal = {
     }
     if (!documentId) return UI.toast('Upload a valuation report before submitting.', 'error');
     try {
-      const response = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(a.id)}/valuations`, {
+      const response = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(a.id)}/valuations`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin',
@@ -3829,7 +3982,7 @@ const BankPortal = {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Valuation submission failed (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast(result.message || 'Valuation submitted for review.', 'success');
       this.closeSubPage();
     } catch (error) {
@@ -4109,7 +4262,7 @@ const BankPortal = {
     if (!confirmed) return;
 
     try {
-      await fetch(`${Store.API_BASE}/api/v1/viewings/${encodeURIComponent(viewingId)}`, {
+      await Auth.request(`${Store.API_BASE}/api/v1/viewings/${encodeURIComponent(viewingId)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
       });
@@ -4132,7 +4285,7 @@ const BankPortal = {
     if (!confirmed) return;
 
     try {
-      await fetch(`${Store.API_BASE}/api/v1/leads/${encodeURIComponent(leadId)}`, {
+      await Auth.request(`${Store.API_BASE}/api/v1/leads/${encodeURIComponent(leadId)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
       });
@@ -4362,7 +4515,7 @@ const BankPortal = {
       `, `<button class="btn" onclick="UI.closeModal()">Cancel</button><button class="btn primary" onclick="BankPortal.submitNewAsset()">Create Draft</button>`);
       this.updateOwnerFields();
 
-      const response = await fetch(Store.API_BASE + '/api/admin/banks', { headers: Store.getAuthHeaders() });
+      const response = await Auth.request(Store.API_BASE + '/api/admin/banks', { headers: Store.getAuthHeaders() });
       if (!response.ok) throw new Error(`Could not load partner banks (${response.status}).`);
       const result = await response.json();
       if (!result.success || !Array.isArray(result.data)) throw new Error(result.error || 'Could not load partner banks.');
@@ -4404,7 +4557,7 @@ const BankPortal = {
     try {
       const user = Auth.getUser();
       const branchId = Auth.selectedBranchId || user?.branchId || user?.branch_id || null;
-      const res = await fetch(Store.API_BASE + '/api/v1/assets', {
+      const res = await Auth.request(Store.API_BASE + '/api/v1/assets', {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({ branchId, ownershipType, ownerBankId, ownerName, categoryCode, assetType, reservePrice: 0 })
@@ -4460,7 +4613,7 @@ const BankPortal = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
       });
@@ -4468,7 +4621,7 @@ const BankPortal = {
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete asset');
       UI.toast(json.message || `Asset ${a.ref} deleted successfully.`, 'success');
       this.closeAsset();
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
     } catch (err) {
       UI.toast(err.message, 'error');
     }
@@ -4502,7 +4655,7 @@ const BankPortal = {
       return UI.toast('Please provide a reason for the deletion request.', 'error');
     }
     try {
-      const res = await fetch(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}/request-deletion`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/bank/assets/${encodeURIComponent(id)}/request-deletion`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({ reason })
@@ -4511,7 +4664,7 @@ const BankPortal = {
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to submit request');
       UI.closeModal();
       UI.toast(json.message || 'Deletion request submitted to Surge Admin.', 'success');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
     } catch (err) {
       UI.toast(err.message, 'error');
@@ -4557,7 +4710,7 @@ const BankPortal = {
     Store.persist();
 
     try {
-      const res = await fetch(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id) + '?scope=bank', {
+      const res = await Auth.request(Store.API_BASE + '/api/v1/assets/' + encodeURIComponent(a.id) + '?scope=bank', {
         method: 'PUT',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({
@@ -4577,7 +4730,7 @@ const BankPortal = {
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save changes');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast('Asset details saved successfully.', 'success');
       this.render();
     } catch (err) {
@@ -4603,7 +4756,7 @@ const BankPortal = {
     const criticalMissing = r.checks.filter(c => !c.pass && ['price','description'].includes(c.key));
     if (criticalMissing.length) return UI.toast('This action is unavailable because the following requirements are incomplete: ' + criticalMissing.map(c => c.label).join(', '), 'error');
     try {
-      const response = await fetch(`${Store.API_BASE}/api/v1/assets/${encodeURIComponent(a.id)}/submit`, {
+      const response = await Auth.request(`${Store.API_BASE}/api/v1/assets/${encodeURIComponent(a.id)}/submit`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin',
@@ -4613,7 +4766,7 @@ const BankPortal = {
       if (!response.ok || !result.success) {
         throw new Error(result.error || `Submission failed (${response.status}).`);
       }
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.notify.success(`Asset ${a.ref} successfully submitted for statutory 5-gate review. Surge disposition team notified.`, 'Submitted for Review');
       this.render();
     } catch (error) {
@@ -4637,7 +4790,7 @@ const BankPortal = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/decide`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/decide`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({ decision })
@@ -4645,7 +4798,7 @@ const BankPortal = {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to record decision');
       UI.toast(json.message || `Offer marked as ${decision.toLowerCase()}.`, 'success');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
     } catch (err) {
       UI.toast(err.message, 'error');
@@ -4663,7 +4816,7 @@ const BankPortal = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/rescind`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/v1/offers/${encodeURIComponent(offerId)}/rescind`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({ reason: 'Bank rescinded accepted offer' })
@@ -4671,7 +4824,7 @@ const BankPortal = {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to rescind offer');
       UI.toast(json.message || `Offer acceptance rescinded. Asset listing restored to Live.`, 'success');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
     } catch (err) {
       UI.toast(err.message, 'error');
@@ -4818,29 +4971,43 @@ const AdminPortal = {
     }
   },
 
-  async init(alreadyAuthenticated = false) {
-    const authed = alreadyAuthenticated || await Auth.checkAuth('surge');
+  init(alreadyAuthenticated = false) {
+    if (this._initialized && Auth.isAuthenticated() && Store._syncTimer) return Promise.resolve(true);
+    if (!this._initPromise) {
+      this._initPromise = this.initialize(alreadyAuthenticated).finally(() => { this._initPromise = null; });
+    }
+    return this._initPromise;
+  },
+
+  async initialize(alreadyAuthenticated) {
+    const authed = (alreadyAuthenticated && Auth.isAuthenticated()) || await Auth.checkAuth('surge');
     if (!authed) return;
 
     this.restoreWorkspace();
-    window.addEventListener('hashchange', () => {
-      const hash = window.location.hash.replace(/^#/, '');
-      if (hash && hash !== this.activeTabId) {
-        const decoded = decodeURIComponent(hash);
-        const match = this.tabs.find(t => t.id === decoded);
-        if (match) this.switchTab(match.id);
-      }
-    });
+    if (!this._eventsBound) {
+      this._eventsBound = true;
+      window.addEventListener('hashchange', () => {
+        const hash = window.location.hash.replace(/^#/, '');
+        if (hash && hash !== this.activeTabId) {
+          const decoded = decodeURIComponent(hash);
+          const match = this.tabs.find(t => t.id === decoded);
+          if (match) this.switchTab(match.id);
+        }
+      });
+      const portal = document.body.dataset.portal;
+      document.querySelectorAll(`#${portal}-nav .navitem`).forEach(el => {
+        el.addEventListener('click', () => this.nav(el.dataset.view));
+      });
+    }
 
-    document.querySelectorAll('#admin-nav .navitem').forEach(el => {
-      el.addEventListener('click', () => this.nav(el.dataset.view));
-    });
     this.render();
-    Store.startPeriodicSync();
     try {
-      await Store.fetchRemote();
+      if (!(await Store.fetchRemote()) || !Auth.isAuthenticated()) return false;
+      this._initialized = true;
+      Store.startPeriodicSync();
+      return true;
     } finally {
-      this.render();
+      if (Auth.isAuthenticated()) this.render();
     }
   },
 
@@ -4865,6 +5032,7 @@ const AdminPortal = {
   },
 
   render() {
+    if (!Auth.isAuthenticated()) return;
     this.renderDoctabs();
     document.querySelectorAll('#admin-nav .navitem').forEach(n => {
       n.classList.toggle('active', n.dataset.view === this.currentView && !this.selectedAssetId && !this.subPage);
@@ -4900,7 +5068,7 @@ const AdminPortal = {
 
   async downloadDocument(documentId) {
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/documents/${encodeURIComponent(documentId)}/download`,
         { headers: Store.getAuthHeaders(), cache: 'no-store' }
       );
@@ -4941,7 +5109,7 @@ const AdminPortal = {
 
   async openReviewDocument(documentId) {
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/documents/${encodeURIComponent(documentId)}/download?view=1`,
         { headers: Store.getAuthHeaders(), cache: 'no-store' }
       );
@@ -5150,7 +5318,7 @@ const AdminPortal = {
     this.gateReadinessError = '';
     this.render();
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/readiness`,
         { headers: Store.getAuthHeaders(), credentials: 'same-origin', cache: 'no-store' }
       );
@@ -5770,7 +5938,7 @@ const AdminPortal = {
     if (!confirmed) return;
 
     try {
-      await fetch(`${Store.API_BASE}/api/v1/viewings/${encodeURIComponent(viewingId)}`, {
+      await Auth.request(`${Store.API_BASE}/api/v1/viewings/${encodeURIComponent(viewingId)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
       });
@@ -5793,7 +5961,7 @@ const AdminPortal = {
     if (!confirmed) return;
 
     try {
-      await fetch(`${Store.API_BASE}/api/v1/leads/${encodeURIComponent(leadId)}`, {
+      await Auth.request(`${Store.API_BASE}/api/v1/leads/${encodeURIComponent(leadId)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders()
       });
@@ -6003,7 +6171,7 @@ const AdminPortal = {
       return;
     }
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/legal-instruments/${encodeURIComponent(instrumentId)}/${action}`,
         {
           method: 'POST',
@@ -6015,7 +6183,7 @@ const AdminPortal = {
       );
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Legal instrument ${action} failed (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
       UI.toast(result.message || 'Legal instrument decision saved.', 'success');
     } catch (error) {
@@ -6030,7 +6198,7 @@ const AdminPortal = {
     if (a.injunctionActive) return UI.toast('Cannot clear: active injunction', 'error');
     const notes = document.getElementById('legal-notes')?.value || '';
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/legal-clearance`,
         {
           method: 'POST',
@@ -6042,7 +6210,7 @@ const AdminPortal = {
       );
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Clearance failed (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
       UI.toast(result.message || 'Legal clearance saved.', 'success');
     } catch (error) {
@@ -6065,7 +6233,7 @@ const AdminPortal = {
     });
     if (!confirmed) return;
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/legal-clearance/revoke`,
         {
           method: 'POST',
@@ -6077,7 +6245,7 @@ const AdminPortal = {
       );
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Legal clearance could not be revoked (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast(result.message || 'Legal clearance revoked.', 'success');
       if (this.currentView === 'assets' && this.detailTab === 'review') {
         await this.loadGateReadiness(assetId);
@@ -6181,7 +6349,7 @@ const AdminPortal = {
       return;
     }
     try {
-      const response = await fetch(
+      const response = await Auth.request(
         `${Store.API_BASE}/api/admin/${kind}/${encodeURIComponent(recordId)}/${action}`,
         {
           method: 'POST',
@@ -6193,7 +6361,7 @@ const AdminPortal = {
       );
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || `Review action failed (${response.status}).`);
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast(result.message || 'Review decision saved.', 'success');
       if (action === 'verify') this.render();
       else this.closeSubPage();
@@ -6238,7 +6406,7 @@ const AdminPortal = {
       return false;
     }
     try {
-      const response = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/${action}`, {
+      const response = await Auth.request(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(assetId)}/${action}`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin',
@@ -6257,7 +6425,7 @@ const AdminPortal = {
           : '';
         throw new Error([result.error || `Action failed (${response.status}).`, failedGates].filter(Boolean).join(' Missing requirements: '));
       }
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       UI.toast(successMessage || result.message || 'Asset updated.', 'success');
       this.render();
       PublicMarket.render();
@@ -6899,7 +7067,7 @@ const AdminPortal = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/verify`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/verify`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin'
@@ -6907,7 +7075,7 @@ const AdminPortal = {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to verify offer');
       UI.toast(json.message || 'Offer verified and released to the bank.', 'success');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
     } catch (err) {
       UI.toast(err.message, 'error');
@@ -6942,7 +7110,7 @@ const AdminPortal = {
       return UI.toast('Please provide a reason for rejecting the offer.', 'error');
     }
     try {
-      const res = await fetch(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/reject`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/admin/offers/${encodeURIComponent(offerId)}/reject`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         body: JSON.stringify({ reason })
@@ -6951,7 +7119,7 @@ const AdminPortal = {
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to reject offer');
       UI.closeModal();
       UI.toast(json.message || 'Offer rejected.', 'success');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
     } catch (err) {
       UI.toast(err.message, 'error');
@@ -6973,7 +7141,7 @@ const AdminPortal = {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin'
@@ -6982,7 +7150,7 @@ const AdminPortal = {
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete listing');
       UI.toast(json.message || `Listing ${a.ref} deleted successfully.`, 'success');
       this.closeAsset();
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
       if (typeof PublicMarket !== 'undefined' && PublicMarket.render) PublicMarket.render();
     } catch (err) {
@@ -7002,7 +7170,7 @@ const AdminPortal = {
     });
     if (!confirmed) return;
     try {
-      const res = await fetch(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}/reject-deletion-request`, {
+      const res = await Auth.request(`${Store.API_BASE}/api/admin/assets/${encodeURIComponent(id)}/reject-deletion-request`, {
         method: 'POST',
         headers: Store.getAuthHeaders(),
         credentials: 'same-origin'
@@ -7010,7 +7178,7 @@ const AdminPortal = {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to dismiss request');
       UI.toast(json.message || 'Deletion request dismissed.', 'success');
-      await Store.fetchRemote();
+      await Store.fetchRemote(true);
       this.render();
     } catch (err) {
       UI.toast(err.message, 'error');
@@ -7157,15 +7325,17 @@ const PublicMarket = {
     ['Diaspora & foreign', 'How do I send funds from abroad?', 'Send settlement funds only by SWIFT or RTGS wire into the bank’s designated recovery escrow account in Ghana. Surge never accepts cash through informal transmitters or personal mobile money.']
   ],
 
-  init() {
+  async init() {
+    if (this._initialized) return;
+    this._initialized = true;
     this.syncSwitcherState();
     this.restoreStateFromUrl();
     this.render();
-    Store.startPeriodicSync();
-
     window.addEventListener('hashchange', () => {
       this.restoreStateFromUrl();
     });
+    await Store.fetchRemote();
+    Store.startPeriodicSync();
   },
 
   restoreStateFromUrl() {

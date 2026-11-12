@@ -7,7 +7,7 @@
  * - Microsoft Edge desktop installation prompt handling
  * - Desktop standalone window state detection
  * - Offline / Online connectivity notifications
- * - Background update checks & auto-refresh
+ * - Background update checks
  */
 
 (function () {
@@ -15,6 +15,27 @@
 
   let deferredInstallPrompt = null;
   let refreshing = false;
+  let hadController = Boolean(navigator.serviceWorker?.controller);
+  let updateNotified = false;
+
+  const showUpdateNotice = () => {
+    if (updateNotified) return;
+    updateNotified = true;
+    console.info('[Surge PWA] New version of Surge Listings is available.');
+    if (typeof window.NotificationSystem?.info === 'function') {
+      window.NotificationSystem.info('A newer version is ready. Refresh when you are ready to load it.', 'Update Available', {
+        persistent: true,
+        action: {
+          label: 'Refresh safely',
+          onClick: () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+          }
+        }
+      });
+    }
+  };
 
   // 1. Detect Standalone Desktop Mode (installed app window)
   const isStandalone = () => {
@@ -50,13 +71,7 @@
 
             installingWorker.addEventListener('statechange', () => {
               if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.info('[Surge PWA] New version of Surge Listings is available.');
-                if (typeof window.NotificationSystem?.info === 'function') {
-                  window.NotificationSystem.info(
-                    'Update available: Surge Listings has been updated in the background.',
-                    { duration: 6000 }
-                  );
-                }
+                showUpdateNotice();
               }
             });
           });
@@ -65,12 +80,9 @@
           console.warn('[Surge PWA] Service Worker registration failed:', err);
         });
 
-      // Reload smoothly when new controller takes over
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true;
-          window.location.reload();
-        }
+        if (hadController) showUpdateNotice();
+        hadController = Boolean(navigator.serviceWorker.controller);
       });
     });
   }

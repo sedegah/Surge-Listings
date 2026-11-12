@@ -192,20 +192,20 @@ input[aria-invalid=true] { border-color: var(--danger) }
     safeNext: safeNext
   });
 
-  // Check if user already has an active session
-  var hasSessionMarker = false;
-  try {
-    hasSessionMarker = sessionStorage.getItem('surge_session_present') === 'true' ||
-      localStorage.getItem('surge_session_present') === 'true';
-  } catch (e) {}
-  if (hasSessionMarker) {
-    var existingToken = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token');
+  // A rejected portal session must not immediately redirect back into that portal.
+  if (!['expired', 'signedout', 'required'].includes(qs.get('reason'))) {
+    var existingToken = null;
+    try { existingToken = sessionStorage.getItem('surge_token') || localStorage.getItem('surge_token'); } catch (e) {}
+    var restoreController = new AbortController();
+    var restoreTimeout = setTimeout(function() { restoreController.abort(); }, 4000);
+    btn.disabled = true;
     fetch(API_BASE + '/api/auth/me', {
       headers: existingToken ? { 'Authorization': 'Bearer ' + existingToken } : {},
       credentials: 'same-origin',
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: restoreController.signal
     })
-      .then(function(r) { return r.json(); })
+      .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) {
         if (d && d.authenticated && d.user) {
           var defaultPage = d.user.scope === 'surge' ? ADMIN_PAGE : NEXT_PAGE;
@@ -213,7 +213,7 @@ input[aria-invalid=true] { border-color: var(--danger) }
           if (dest === ADMIN_PAGE && d.user.scope !== 'surge') dest = NEXT_PAGE;
           console.info('[Login Page] Active session detected. Redirecting to:', dest);
           location.href = dest;
-        } else {
+        } else if (d && d.authenticated === false) {
           try {
             sessionStorage.removeItem('surge_token');
             sessionStorage.removeItem('surge_user');
@@ -224,7 +224,8 @@ input[aria-invalid=true] { border-color: var(--danger) }
           } catch (e) {}
         }
       })
-      .catch(function() {});
+      .catch(function() {})
+      .finally(function() { clearTimeout(restoreTimeout); btn.disabled = Date.now() < lockedUntil; });
   }
 
   var why = qs.get('reason') || (safeNext ? 'required' : null);
