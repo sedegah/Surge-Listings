@@ -1,18 +1,17 @@
 {
-  "name": "listings",
+  "name": "surge-listings",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Surge Solutions - Ghana bank-repossessed property marketplace",
+  "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute surge-solutions-db --remote --file"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1152.0",
-    "@aws-sdk/s3-request-presigner": "^3.1152.0",
-    "cors": "^2.8.6",
-    "express": "^5.3.0",
-    "multer": "^2.4.0"
+    "express": "^5.3.0"
   }
 }
