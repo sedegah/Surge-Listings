@@ -63,8 +63,6 @@ export function parseDeviceName(userAgent) {
   return `${browser} on ${platform}`;
 }
 
-// Invitation tokens. Was called by /api/auth/invite but never defined, which made
-// that route throw a ReferenceError and return 500.
 export function generateToken(byteCount = 32) {
   return secureRandomHex(byteCount);
 }

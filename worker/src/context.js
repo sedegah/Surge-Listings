@@ -7,7 +7,6 @@ import {
   SESSION_COOKIE, SESSION_TTL_HOURS, SESSION_ABSOLUTE_HOURS, REMEMBERED_ABSOLUTE_HOURS
 } from './config.js';
 
-// Builds the per-request scope that every route handler destructures from.
 export function createContext(request, env, ctx) {
   const url = new URL(request.url);
   const pathname = url.pathname.replace(/\/$/, '') || '/';

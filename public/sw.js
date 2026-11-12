@@ -10,7 +10,7 @@
  * - Seamless background version upgrades
  */
 
-const CACHE_VERSION = 'surge-pwa-v1.0.8';
+const CACHE_VERSION = 'surge-pwa-v1.0.9';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 // Core App Shell Resources
