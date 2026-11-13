@@ -57,6 +57,7 @@ exports/
 
 # 5. Local Databases, Snapshots & Backups
 data/
+db/
 *.sqlite
 *.sqlite3
 *.db
