@@ -1,3 +1,0 @@
--- Intentionally contains no partner-bank sample rows.
--- Add verified partner-bank data through the Surge Admin portal when available.
--- This file does not delete or update records in existing databases.

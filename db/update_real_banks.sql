@@ -1,3 +1,0 @@
--- Intentionally contains no fabricated partner-bank records or updates.
--- Enter verified bank information through the Surge Admin portal when available.
--- This file does not modify existing database records.

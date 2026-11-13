@@ -517,6 +517,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   new_values TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_user_id_created_at
+  ON audit_logs(actor_user_id, created_at);
 
 -- 35. System Settings
 CREATE TABLE IF NOT EXISTS system_settings (
@@ -553,6 +555,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   revoke_reason TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_user_active ON sessions(user_id, revoked, expires_at);
 
 -- 37. Invitations - Invitation-only bank employee registration
 CREATE TABLE IF NOT EXISTS invitations (
@@ -613,3 +616,39 @@ CREATE TABLE IF NOT EXISTS organization_members (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
+
+-- 41. Protected owner accounts - registry rows are inserted once per deployment and are immutable
+CREATE TABLE IF NOT EXISTS protected_user_accounts (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
+  protected_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS prevent_protected_user_deletion
+BEFORE DELETE ON users
+WHEN EXISTS (
+  SELECT 1 FROM protected_user_accounts WHERE user_id = OLD.id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'Protected owner accounts cannot be deleted.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_protected_user_id_change
+BEFORE UPDATE OF id ON users
+WHEN EXISTS (
+  SELECT 1 FROM protected_user_accounts WHERE user_id = OLD.id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'Protected owner account IDs cannot be changed.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_protected_account_registry_update
+BEFORE UPDATE ON protected_user_accounts
+BEGIN
+  SELECT RAISE(ABORT, 'Protected account registry cannot be changed.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_protected_account_registry_deletion
+BEFORE DELETE ON protected_user_accounts
+BEGIN
+  SELECT RAISE(ABORT, 'Protected account registry cannot be changed.');
+END;
