@@ -519,7 +519,7 @@ const Store = {
       const hadPreviousState = this._hasSyncedOnce;
 
       // Fetch fresh remote data
-      if (!(await this.fetchRemote()) || !this.canSync()) return;
+      if (!(await this.fetchRemote(false, true)) || !this.canSync()) return;
 
       // Build snapshots of new state
       const currentAssets = new Map();
@@ -714,20 +714,6 @@ const Store = {
           }
         });
       }
-
-      // Automatically update the view if user is not actively editing a form input
-      const activeEl = document.activeElement;
-      const isUserEditing = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
-      const modalOpen = document.getElementById('modal-backdrop')?.classList.contains('open');
-      if (!isUserEditing && !modalOpen) {
-        if (portal === 'admin' && typeof AdminPortal !== 'undefined' && AdminPortal.render) {
-          AdminPortal.render();
-        } else if (portal === 'bank' && typeof BankPortal !== 'undefined' && BankPortal.render) {
-          BankPortal.render();
-        } else if (portal === 'public' && typeof PublicMarket !== 'undefined' && PublicMarket.render) {
-          PublicMarket.render();
-        }
-      }
     } catch (e) {
       console.warn('[Periodic Sync] Background sync error:', e);
     } finally {
@@ -743,15 +729,22 @@ const Store = {
     // No-op - data comes exclusively from fetchRemote()
   },
 
-  fetchRemote(afterMutation = false) {
+  fetchRemote(afterMutation = false, background = false) {
     if (!this.canSync()) return Promise.resolve(false);
     if (afterMutation && this._remotePromise) {
       return this._remotePromise.then(() => this.fetchRemote());
     }
+    if (!background) this._forceRender = true;
     if (!this._remotePromise) {
       this._remotePromise = this.loadRemote().finally(() => { this._remotePromise = null; });
     }
     return this._remotePromise;
+  },
+
+  isUiBusy() {
+    const el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return true;
+    return !!document.querySelector('#modal-backdrop.open, .fld-dd.dd-open, details[open]');
   },
 
   async loadRemote() {
@@ -1081,6 +1074,11 @@ const Store = {
         if (json.success && Array.isArray(json.data)) this.valuations = json.data;
       }
 
+      // Background polls re-render only on real data changes, and never over an open dropdown, modal or form field.
+      const fingerprint = JSON.stringify([this.assets, this.leads, this.offers, this.viewings, this.invoices, this.auditLog, this.banks, this.users, this.documents, this.titles, this.valuations]);
+      if (!this._forceRender && (fingerprint === this._renderedFingerprint || this.isUiBusy())) return true;
+      this._forceRender = false;
+      this._renderedFingerprint = fingerprint;
       if (portal === 'bank') BankPortal.render();
       else if (portal === 'admin') AdminPortal.render();
       else if (portal === 'public') PublicMarket.render();
