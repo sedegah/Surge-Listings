@@ -3073,17 +3073,12 @@ const BankPortal = {
     const exterior = photos.find(p => p.caption === 'exterior' || p.is_exterior) || (a.exteriorImage ? { caption: 'exterior' } : null);
     const interior = photos.find(p => p.caption === 'interior');
     const street = photos.find(p => p.caption === 'street' || p.caption === 'surroundings');
-    const totalCount = photos.length || a.images || 0;
     const isComplete = Boolean(exterior && interior && street);
 
     return `
       <div class="group">
         <div class="caption">
           Listing Photographs &amp; Media Assets
-          <button class="btn small primary" style="margin-left:auto" onclick="BankPortal.openSubPage('edit-media')">
-            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            Manage Photos (${totalCount} Uploaded)
-          </button>
         </div>
         <div class="body">
           ${isComplete ? `
