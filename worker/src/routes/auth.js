@@ -1,9 +1,11 @@
-// Central login, logout, session management and invitations.
+// Central login, logout and session management.
 // Returns a Response when it handles the request, or undefined to fall through
 // to the next handler. Order is significant and fixed by worker/index.js.
+import { isSupportedRole } from '../rbac.js';
+
 export async function handleAuth(c) {
   const {
-    REMEMBERED_ABSOLUTE_HOURS, SESSION_ABSOLUTE_HOURS, SESSION_TTL_HOURS, auditLog, checkLoginRateLimit, clearSessionCookie, clearUserLock, corsHeaders, ctx, env, equalSecret, err, generateToken, getBody, hashPassword, json, lockUserAccount, method, parseDeviceName, pathname, randomId, request, requireAuth, requireBankAuth, resolveSession, secureRandomHex, setSessionCookie, sha256Hex, verifyPassword
+    REMEMBERED_ABSOLUTE_HOURS, SESSION_ABSOLUTE_HOURS, SESSION_TTL_HOURS, auditLog, checkLoginRateLimit, clearSessionCookie, clearUserLock, corsHeaders, ctx, env, err, getBody, json, lockUserAccount, method, parseDeviceName, pathname, randomId, request, requireAuth, resolveSession, secureRandomHex, setSessionCookie, sha256Hex, verifyPassword
   } = c;
 
   // ============================================================
@@ -11,7 +13,6 @@ export async function handleAuth(c) {
   // POST /api/auth/login   - Central login for all portals
   // POST /api/auth/logout  - Revoke current session
   // GET  /api/auth/me      - Validate session + get profile
-  // POST /api/auth/accept-invitation - Activate account from invite
   // ============================================================
 
   if (['/api/auth/login', '/api/v1/auth/login', '/api/bank/auth/login', '/api/admin/auth/login'].includes(pathname) && method === 'POST') {
@@ -68,12 +69,8 @@ export async function handleAuth(c) {
     } else if (String(user.password_hash).startsWith('pbkdf2-sha256$')) {
       validPassword = await verifyPassword(passwordValue, user.password_hash);
     } else {
-      validPassword = equalSecret(String(user.password_hash), passwordValue);
-      if (validPassword) {
-        const upgradedHash = await hashPassword(passwordValue);
-        await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`)
-          .bind(upgradedHash, user.id, user.password_hash).run();
-      }
+      failureReason = 'UNSUPPORTED_HASH';
+      await verifyPassword(passwordValue, DECOY_HASH);
     }
     if (!validPassword) {
       await recordFailure(failureReason);
@@ -91,6 +88,10 @@ export async function handleAuth(c) {
         error: 'The username or password is incorrect. ' + updatedLimits.attemptsRemaining + ' attempt' + (updatedLimits.attemptsRemaining === 1 ? '' : 's') + ' remaining.',
         attemptsRemaining: updatedLimits.attemptsRemaining
       }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (!isSupportedRole(user.role_code, user.scope)) {
+      return err('This account role is no longer supported. Ask a Surge administrator to update your account.', 403);
     }
 
     // Create session
@@ -214,70 +215,9 @@ export async function handleAuth(c) {
     });
   }
 
-  // POST /api/auth/accept-invitation - Activate account from invitation link
-  if (pathname === '/api/auth/accept-invitation' && method === 'POST') {
-    const body = await getBody();
-    const { token, password, full_name } = body;
-    if (!token || !password) return err('Invitation token and password are required.', 400);
-    if (password.length < 8) return err('Password must be at least 8 characters.', 400);
-
-    const invite = await env.DB.prepare(`
-      SELECT * FROM invitations WHERE token = ? AND status = 'Pending' AND datetime(expires_at) > datetime('now')
-    `).bind(token).first();
-    if (!invite) return err('This invitation link is invalid or has expired.', 404);
-
-    // Check if user already exists with this email
-    let userId;
-    const existing = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`).bind(invite.email).first();
-    if (existing) {
-      userId = existing.id;
-      await env.DB.prepare(`UPDATE users SET password_hash = ?, full_name = COALESCE(?, full_name), status = 'Active' WHERE id = ?`)
-        .bind(await hashPassword(password.trim()), full_name || null, userId).run();
-      await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'PASSWORD_RESET' WHERE user_id = ? AND revoked = 0`).bind(userId).run();
-    } else {
-      userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-      const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(invite.bank_id).first();
-      const username = invite.email.split('@')[0].replace(/[^a-z0-9.]/gi, '').toLowerCase();
-      await env.DB.prepare(`
-        INSERT INTO users (id, public_id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Active', datetime('now'))
-      `).bind(userId, randomId(), bank?.organization_id || 'org-surge', invite.bank_id, invite.branch_id || null,
-        username, full_name || invite.full_name || invite.email.split('@')[0],
-        invite.email, invite.role_code, await hashPassword(password.trim())).run();
-    }
-
-    // Add organization membership
-    const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(invite.bank_id).first();
-    if (bank) {
-      await env.DB.prepare(`INSERT OR IGNORE INTO organization_members (id, user_id, organization_id, bank_id, branch_id, role_code, status, joined_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 'Active', datetime('now'), datetime('now'))`)
-        .bind('om-' + Date.now(), userId, bank.organization_id, invite.bank_id, invite.branch_id || null, invite.role_code).run();
-    }
-
-    await env.DB.prepare(`UPDATE invitations SET status = 'Accepted', accepted_at = datetime('now') WHERE id = ?`).bind(invite.id).run();
-    await auditLog(invite.email, invite.role_code, invite.bank_id, 'INVITATION_ACCEPTED', 'User', userId, `Account activated via invitation`, null, null, userId);
-    return json({ success: true, message: 'Account activated. You can now sign in.' });
-  }
-
-  // POST /api/auth/invite - Send bank employee invitation (Bank Admin or Surge Admin)
-  if (pathname === '/api/auth/invite' && method === 'POST') {
-    const session = await requireBankAuth();
-    const body = await getBody();
-    const { email, full_name, role_code, branch_id } = body;
-    if (!email) return err('Email address is required.', 400);
-
-    const inviteToken = await generateToken(24);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 days
-    const inviteId = 'inv-' + Date.now().toString(36);
-
-    await env.DB.prepare(`
-      INSERT INTO invitations (id, token, email, full_name, bank_id, branch_id, role_code, invited_by, status, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, datetime('now'))
-    `).bind(inviteId, inviteToken, email.trim().toLowerCase(), full_name || null,
-      session.bank_id, branch_id || session.branch_id || null,
-      role_code || 'bank-recovery', session.user_id, expiresAt).run();
-
-    await auditLog(session.full_name, session.role_code, session.bank_id, 'INVITATION_SENT', 'Invitation', inviteId, `Invitation sent to ${email}`);
-    const acceptUrl = `https://surge-listings.vercel.app/accept-invitation?token=${inviteToken}`;
-    return json({ success: true, inviteId, token: inviteToken, acceptUrl, expiresAt, message: `Invitation created for ${email}. Share the accept URL with them.` }, 201);
+  // Accounts are provisioned only by Surge administrators; invitation links were a
+  // self-service path around that, so both endpoints are permanently retired.
+  if ((pathname === '/api/auth/accept-invitation' || pathname === '/api/auth/invite') && method === 'POST') {
+    return err('Invitations are no longer supported. Accounts are created by a Surge administrator.', 410);
   }
 }

@@ -2,6 +2,7 @@ import {
   SESSION_COOKIE, SESSION_TTL_HOURS, SESSION_ABSOLUTE_HOURS, REMEMBERED_ABSOLUTE_HOURS
 } from './config.js';
 import { secureRandomHex, randomId, sha256Hex, parseDeviceName } from './crypto.js';
+import { isSurgeAdmin, isBankOfficer, isSupportedRole } from './rbac.js';
 
 // Session resolution and the auth guards. Guards throw Response objects, which the
 // dispatcher passes through unchanged.
@@ -20,9 +21,10 @@ export function createSessions({ request, env, ctx, http, state, auditLog }) {
       SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
              b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status,
              b.public_id as bank_public_id, o.public_id as organization_public_id, o.name as organization_name,
-             u.public_id as user_public_id
+             u.public_id as user_public_id, u.role_code AS user_role_code, u.bank_id AS user_bank_id, r.scope AS user_scope
       FROM sessions s
       JOIN users u ON s.user_id = u.id
+      LEFT JOIN roles r ON r.code = u.role_code
       LEFT JOIN banks b ON s.bank_id = b.id
       LEFT JOIN organizations o ON o.id = s.organization_id
       WHERE s.secret_hash = ? AND s.revoked = 0
@@ -36,12 +38,13 @@ export function createSessions({ request, env, ctx, http, state, auditLog }) {
         SELECT s.*, u.username, u.full_name, u.email, u.status as user_status,
                b.legal_name as bank_name, b.short_code as bank_code, b.status as bank_status,
                b.public_id as bank_public_id, o.public_id as organization_public_id, o.name as organization_name,
-               u.public_id as user_public_id
+               u.public_id as user_public_id, u.role_code AS user_role_code, u.bank_id AS user_bank_id, r.scope AS user_scope
         FROM sessions s
         JOIN users u ON s.user_id = u.id
+        LEFT JOIN roles r ON r.code = u.role_code
         LEFT JOIN banks b ON s.bank_id = b.id
         LEFT JOIN organizations o ON o.id = s.organization_id
-        WHERE s.id = ? AND s.revoked = 0
+        WHERE s.id = ? AND s.secret_hash IS NULL AND s.revoked = 0
           AND datetime(s.expires_at) > datetime('now')
           AND datetime(s.absolute_expires_at) > datetime('now')
       `).bind(legacyToken).first();
@@ -77,6 +80,15 @@ export function createSessions({ request, env, ctx, http, state, auditLog }) {
 
     if (!session) return null;
     if (session.user_status !== 'Active') return null;
+    // A session carries the role and bank captured at sign-in; an administrator
+    // changing either must take effect immediately, not when the session expires.
+    if (session.role_code !== session.user_role_code ||
+      session.scope !== session.user_scope ||
+      (session.bank_id ?? null) !== (session.user_bank_id ?? null) ||
+      !isSupportedRole(session.role_code, session.scope)) {
+      ctx.waitUntil(env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'ROLE_CHANGED' WHERE id = ? AND revoked = 0`).bind(session.id).run());
+      return null;
+    }
     if (session.scope === 'surge') {
       session.bank_id = 'bank-surge';
       session.bank_name = 'Surge Partner Bank';
@@ -107,17 +119,15 @@ export function createSessions({ request, env, ctx, http, state, auditLog }) {
     return session;
   }
 
+  function forbidden(message) {
+    return new Response(JSON.stringify({ success: false, error: message, code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
+  }
+
   async function requireBankAuth() {
     const session = await requireAuth();
-    if (session.scope === 'surge') {
-      session.bank_id = 'bank-surge';
-      session.bank_name = 'Surge Partner Bank';
-      session.bank_code = 'SURGE';
-      session.bank_public_id = 'bank-surge';
-      return session;
-    }
-    if (session.scope !== 'bank' && session.scope !== 'surge') {
-      throw new Response(JSON.stringify({ success: false, error: 'Bank Portal access denied. This account does not have bank portal permissions.', code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
+    if (isSurgeAdmin(session)) return session;
+    if (!isBankOfficer(session)) {
+      throw forbidden('Bank Portal access denied. This account does not have bank portal permissions.');
     }
     if (!session.bank_id) {
       throw new Response(JSON.stringify({ success: false, error: 'No bank organisation is associated with this account.', code: 'NO_BANK' }), { status: 403, headers: corsHeaders });
@@ -130,9 +140,7 @@ export function createSessions({ request, env, ctx, http, state, auditLog }) {
 
   async function requireAdminAuth() {
     const session = await requireAuth();
-    if (session.scope !== 'surge') {
-      throw new Response(JSON.stringify({ success: false, error: 'Surge Admin access denied.', code: 'FORBIDDEN' }), { status: 403, headers: corsHeaders });
-    }
+    if (!isSurgeAdmin(session)) throw forbidden('Surge Admin access denied.');
     return session;
   }
 

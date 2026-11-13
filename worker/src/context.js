@@ -3,6 +3,7 @@ import * as documents from './documents.js';
 import { createHttp } from './http.js';
 import { createAudit, getAssetReadiness } from './audit.js';
 import { createSessions } from './sessions.js';
+import { isSurgeAdmin } from './rbac.js';
 import {
   SESSION_COOKIE, SESSION_TTL_HOURS, SESSION_ABSOLUTE_HOURS, REMEMBERED_ABSOLUTE_HOURS
 } from './config.js';
@@ -29,8 +30,8 @@ export function createContext(request, env, ctx) {
     extensionForMime: documents.extensionForMime,
     isValidFile: documents.isValidFile,
     SESSION_COOKIE, SESSION_TTL_HOURS, SESSION_ABSOLUTE_HOURS, REMEMBERED_ABSOLUTE_HOURS,
-    // Legacy context (used by non-auth-gated routes only)
-    actorName: null,
-    actorRole: null
+    isSurgeAdmin,
+    get actorName() { return state.activeSession?.full_name || null; },
+    get actorRole() { return state.activeSession?.role_code || null; }
   };
 }

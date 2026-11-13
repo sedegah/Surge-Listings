@@ -1,6 +1,8 @@
 // Admin portal: oversight, onboarding, 5-gate review, legal and title.
 // Returns a Response when it handles the request, or undefined to fall through
 // to the next handler. Order is significant and fixed by worker/index.js.
+import { BANK_ROLE, PROVISIONABLE_ROLES } from '../rbac.js';
+
 export async function handleAdmin(c) {
   const {
     actorName, actorRole, auditLog, env, err, getActiveSession, getAssetReadiness, getBody, hashPassword, json, method, pathname, randomId, requireAdminAuth, requireBankAuth, url
@@ -52,11 +54,20 @@ export async function handleAdmin(c) {
   if ((pathname === '/api/admin/banks' || pathname === '/api/v1/banks') && method === 'POST') {
     const body = await getBody();
     const { legal_name, short_code, contact_email, contact_phone, default_commission_rate, initial_branch } = body;
-    if (!legal_name || !short_code || !contact_email) {
+    if (typeof legal_name !== 'string' || typeof short_code !== 'string' || typeof contact_email !== 'string' ||
+      !legal_name.trim() || !short_code.trim() || !contact_email.trim()) {
       return err('Legal name, short code, and contact email are required.', 400);
+    }
+    if (legal_name.length > 200 || contact_email.length > 254 || String(contact_phone || '').length > 40 || String(initial_branch || '').length > 200) {
+      return err('One or more bank details are too long.', 400);
+    }
+    const commissionRate = default_commission_rate ? Number(default_commission_rate) : 4.0;
+    if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 100) {
+      return err('Commission rate must be between 0 and 100.', 400);
     }
 
     const cleanCode = short_code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (cleanCode.length < 2 || cleanCode.length > 12) return err('Short code must be 2 to 12 letters or digits.', 400);
     const orgId = 'org-' + cleanCode.toLowerCase();
     const bId = 'bank-' + cleanCode.toLowerCase();
 
@@ -74,12 +85,12 @@ export async function handleAdmin(c) {
     `).bind(
       bId, orgId, legal_name.trim(), cleanCode,
       contact_email.trim().toLowerCase(),
-      contact_phone ? contact_phone.trim() : '+233 30 000 0000',
-      default_commission_rate ? Number(default_commission_rate) : 4.0
+      contact_phone ? String(contact_phone).trim() : '+233 30 000 0000',
+      commissionRate
     ).run();
 
     const branchId = 'br-' + cleanCode.toLowerCase() + '-hq';
-    const branchName = initial_branch ? initial_branch.trim() : (cleanCode + ' Head Office - Accra');
+    const branchName = initial_branch ? String(initial_branch).trim() : (cleanCode + ' Head Office - Accra');
     await env.DB.prepare(`
       INSERT INTO bank_branches (id, bank_id, name, branch_code, region, district, town, status, created_at)
       VALUES (?, ?, ?, 'HQ', 'Greater Accra', 'Accra Metropolitan', 'Accra', 'Active', datetime('now'))
@@ -92,12 +103,23 @@ export async function handleAdmin(c) {
 
   if ((pathname.match(/^\/api\/admin\/banks\/[a-zA-Z0-9_-]+$/) || pathname.match(/^\/api\/v1\/banks\/[a-zA-Z0-9_-]+$/)) && method === 'DELETE') {
     const id = pathname.split('/').pop();
+    if (id === 'bank-surge') return err('Surge Partner Bank is the platform bank and cannot be removed.', 409);
     const bank = await env.DB.prepare(`SELECT legal_name FROM banks WHERE id = ?`).bind(id).first();
     if (!bank) return err('Bank not found', 404);
+    const dependents = await env.DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM assets WHERE bank_id = ? OR owner_bank_id = ?) AS assets,
+        (SELECT COUNT(*) FROM users u JOIN protected_user_accounts p ON p.user_id = u.id WHERE u.bank_id = ?) AS protected_users
+    `).bind(id, id, id).first();
+    if (dependents.assets > 0) return err('This bank still has assets on the platform. Remove or reassign them before removing the bank.', 409);
+    if (dependents.protected_users > 0) return err('This bank has a protected owner account and cannot be removed.', 409);
 
-    await env.DB.prepare(`DELETE FROM users WHERE bank_id = ?`).bind(id).run();
-    await env.DB.prepare(`DELETE FROM bank_branches WHERE bank_id = ?`).bind(id).run();
-    await env.DB.prepare(`DELETE FROM banks WHERE id = ?`).bind(id).run();
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'BANK_REMOVED' WHERE revoked = 0 AND user_id IN (SELECT id FROM users WHERE bank_id = ?)`).bind(id),
+      env.DB.prepare(`DELETE FROM users WHERE bank_id = ?`).bind(id),
+      env.DB.prepare(`DELETE FROM bank_branches WHERE bank_id = ?`).bind(id),
+      env.DB.prepare(`DELETE FROM banks WHERE id = ?`).bind(id)
+    ]);
 
     await auditLog(actorName, actorRole, 'Surge Solutions', 'DELETE_BANK', 'Bank', id, `Removed bank partner: ${bank.legal_name}`);
     return json({ success: true, message: `Bank ${bank.legal_name} removed.` });
@@ -141,16 +163,28 @@ export async function handleAdmin(c) {
   if ((pathname === '/api/admin/users' || pathname === '/api/v1/users') && method === 'POST') {
     const body = await getBody();
     const { bank_id, branch_id, username, full_name, email, role_code, password, mfa_enabled } = body;
-    if (!username || !full_name || !email || !role_code) {
+    if (typeof username !== 'string' || typeof full_name !== 'string' || typeof email !== 'string' || typeof role_code !== 'string' ||
+      !username.trim() || !full_name.trim() || !email.trim() || !role_code.trim()) {
       return err('Username, full name, email, and role are required.', 400);
     }
-    if (!password || password.trim().length < 8) {
-      return err('An initial password of at least 8 characters is required.', 400);
+    if (!/^[a-z0-9._-]{3,64}$/i.test(username.trim())) {
+      return err('Username must be 3 to 64 letters, digits, dots, hyphens or underscores.', 400);
+    }
+    if (full_name.trim().length > 160) return err('Full name must be 160 characters or fewer.', 400);
+    if (email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return err('Enter a valid email address.', 400);
+    }
+    if (typeof password !== 'string' || password.trim().length < 8 || password.length > 256) {
+      return err('An initial password of 8 to 256 characters is required.', 400);
     }
 
-    const role = await env.DB.prepare(`SELECT scope FROM roles WHERE code = ?`).bind(role_code).first();
-    if (!role) return err('The selected role does not exist.', 400);
-    if (role.scope === 'surge') {
+    // Surge staff are provisioned as administrators; every bank account is a
+    // Correspondence Officer. Legacy role codes from older clients map onto these.
+    const requestedRole = await env.DB.prepare(`SELECT scope FROM roles WHERE code = ?`).bind(role_code.trim()).first();
+    if (!requestedRole) return err('The selected role does not exist.', 400);
+    const assignedRole = requestedRole.scope === 'surge' ? 'SA' : BANK_ROLE;
+    if (!PROVISIONABLE_ROLES.has(assignedRole)) return err('The selected role cannot be provisioned.', 400);
+    if (assignedRole === 'SA') {
       const surgeBank = await env.DB.prepare(`SELECT id FROM banks WHERE id = 'bank-surge'`).first();
       if (!surgeBank) return err('Surge Partner Bank is not configured. Apply the bank setup migration first.', 503);
     }
@@ -158,24 +192,30 @@ export async function handleAdmin(c) {
     const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ? OR email = ?`).bind(username.trim().toLowerCase(), email.trim().toLowerCase()).first();
     if (existing) return err('A user with this username or email already exists.', 400);
 
-    let orgId = 'org-surge';
-    const assignedBankId = role.scope === 'surge' ? 'bank-surge' : bank_id || null;
-    const assignedBranchId = role.scope === 'surge' ? null : branch_id || null;
-    if (assignedBankId) {
-      const bank = await env.DB.prepare(`SELECT organization_id FROM banks WHERE id = ?`).bind(assignedBankId).first();
-      if (bank) orgId = bank.organization_id;
+    const assignedBankId = assignedRole === 'SA' ? 'bank-surge' : String(bank_id || '').trim();
+    const assignedBranchId = assignedRole === 'SA' ? null : String(branch_id || '').trim() || null;
+    const bank = await env.DB.prepare(`SELECT organization_id, status FROM banks WHERE id = ?`).bind(assignedBankId).first();
+    if (!bank) return err('Select the bank this Correspondence Officer belongs to.', 400);
+    if (assignedBranchId) {
+      const branch = await env.DB.prepare(`SELECT id FROM bank_branches WHERE id = ? AND bank_id = ?`).bind(assignedBranchId, assignedBankId).first();
+      if (!branch) return err('The selected branch does not belong to the selected bank.', 400);
     }
+    const orgId = bank.organization_id || 'org-surge';
 
-    const userId = 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-    const assignedPassword = password ? await hashPassword(password.trim()) : null;
+    const userId = 'u-' + randomId();
+    const assignedPassword = await hashPassword(password.trim());
 
     await env.DB.prepare(`
       INSERT INTO users (id, public_id, organization_id, bank_id, branch_id, username, full_name, email, role_code, password_hash, mfa_enabled, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
-    `).bind(userId, randomId(), orgId, assignedBankId, assignedBranchId, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), role_code, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1).run();
+    `).bind(userId, randomId(), orgId, assignedBankId, assignedBranchId, username.trim().toLowerCase(), full_name.trim(), email.trim().toLowerCase(), assignedRole, assignedPassword, mfa_enabled !== undefined ? (mfa_enabled ? 1 : 0) : 1).run();
 
-    await auditLog(actorName, actorRole, 'Surge Solutions', 'CREATE_USER', 'User', userId, `Created staff member ${full_name} (@${username})`);
-    const createdUser = await env.DB.prepare(`SELECT u.*, b.legal_name as bank_name FROM users u LEFT JOIN banks b ON u.bank_id = b.id WHERE u.id = ?`).bind(userId).first();
+    await auditLog(actorName, actorRole, 'Surge Solutions', 'CREATE_USER', 'User', userId, `Created ${assignedRole} account ${full_name.trim()} (@${username.trim().toLowerCase()})`);
+    const createdUser = await env.DB.prepare(`
+      SELECT u.id, u.public_id, u.organization_id, u.bank_id, u.branch_id, u.username, u.full_name, u.email,
+             u.role_code, u.status, u.mfa_enabled, u.created_at, b.legal_name as bank_name
+      FROM users u LEFT JOIN banks b ON u.bank_id = b.id WHERE u.id = ?
+    `).bind(userId).first();
     return json({ success: true, message: 'Staff user created successfully.', data: createdUser }, 201);
   }
 
@@ -198,6 +238,15 @@ export async function handleAdmin(c) {
         return err('User status must be Active or Suspended.', 400);
       }
       if (target.status === status) return json({ success: true, message: 'User status is unchanged.' });
+      if (status === 'Suspended') {
+        if (target.id === session.user_id) return err('You cannot suspend your own account.', 409);
+        const protectedTarget = await env.DB.prepare(`SELECT 1 FROM protected_user_accounts WHERE user_id = ?`).bind(userId).first();
+        if (protectedTarget) return err('This owner account is protected and cannot be suspended.', 409);
+        if (target.role_code === 'SA') {
+          const adminCount = await env.DB.prepare(`SELECT COUNT(*) AS count FROM users WHERE role_code = 'SA' AND status = 'Active'`).first();
+          if ((adminCount?.count || 0) <= 1) return err('The last active Surge Administrator cannot be suspended.', 409);
+        }
+      }
 
       const auditId = randomId();
       const auditSummary = `Changed staff account @${target.username} status from ${target.status} to ${status}.`;
@@ -302,14 +351,19 @@ export async function handleAdmin(c) {
 
   // Password Reset
   if ((pathname.match(/^\/api\/admin\/users\/[a-zA-Z0-9_-]+\/reset-password$/) || pathname.match(/^\/api\/v1\/users\/[a-zA-Z0-9_-]+\/reset-password$/)) && method === 'POST') {
+    const session = await requireAdminAuth();
     const parts = pathname.split('/');
     const id = parts[parts.length - 2];
     const body = await getBody();
     const { password } = body;
-    if (!password || password.trim().length < 8) return err('Password must be at least 8 characters.', 400);
+    if (typeof password !== 'string' || password.trim().length < 8 || password.length > 256) return err('Password must be 8 to 256 characters.', 400);
 
-    const user = await env.DB.prepare(`SELECT username, full_name, public_id FROM users WHERE id = ?`).bind(id).first();
+    const user = await env.DB.prepare(`SELECT id, username, full_name, public_id FROM users WHERE id = ?`).bind(id).first();
     if (!user) return err('User not found', 404);
+    const protectedTarget = await env.DB.prepare(`SELECT 1 FROM protected_user_accounts WHERE user_id = ?`).bind(id).first();
+    if (protectedTarget && user.id !== session.user_id) {
+      return err('This owner account is protected. Only its owner can change its password.', 409);
+    }
 
     await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(await hashPassword(password.trim()), id).run();
     await env.DB.prepare(`UPDATE sessions SET revoked = 1, revoke_reason = 'PASSWORD_RESET' WHERE user_id = ? AND revoked = 0`).bind(id).run();
@@ -318,8 +372,10 @@ export async function handleAdmin(c) {
   }
 
   // 5 Statutory Gates Readiness Assessment (/api/admin/assets/:id/readiness)
-  if (pathname.includes('/readiness') && (method === 'GET' || method === 'POST')) {
-    const id = pathname.replace('/api/admin/assets/', '').replace('/api/v1/assets/', '').replace('/readiness', '');
+  const readinessMatch = pathname.match(/^\/api\/(admin|v1)\/assets\/([a-zA-Z0-9_-]+)\/readiness$/);
+  if (readinessMatch && (method === 'GET' || method === 'POST')) {
+    await requireAdminAuth();
+    const id = readinessMatch[2];
     const asset = await env.DB.prepare(`SELECT * FROM assets WHERE id = ? OR public_ref = ?`).bind(id, id).first();
     if (!asset) return err('Asset not found', 404);
     const readiness = await getAssetReadiness(asset);
@@ -777,12 +833,15 @@ export async function handleAdmin(c) {
     }
     if (method === 'PUT') {
       const body = await getBody();
-      if (Array.isArray(body.settings)) {
-        for (const s of body.settings) {
-          await env.DB.prepare(`INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)`).bind(s.key, String(s.value)).run();
-        }
+      if (!Array.isArray(body.settings) || body.settings.length > 50) return err('Provide a list of settings to update.', 400);
+      const known = new Set(((await env.DB.prepare(`SELECT key FROM system_settings`).all()).results || []).map(row => row.key));
+      for (const s of body.settings) {
+        if (!s || typeof s.key !== 'string' || !known.has(s.key)) return err('Only existing settings can be updated.', 400);
+        if (s.value === undefined || s.value === null || String(s.value).length > 500) return err(`The value for ${s.key} must be 500 characters or fewer.`, 400);
       }
-      await auditLog(actorName, actorRole, 'Surge Solutions', 'UPDATE_SETTINGS', 'SystemSettings', 'global', 'Settings updated');
+      await env.DB.batch(body.settings.map(s =>
+        env.DB.prepare(`UPDATE system_settings SET value = ? WHERE key = ?`).bind(String(s.value), s.key)));
+      await auditLog(actorName, actorRole, 'Surge Solutions', 'UPDATE_SETTINGS', 'SystemSettings', 'global', `Settings updated: ${body.settings.map(s => s.key).join(', ')}`);
       return json({ success: true, message: 'Settings updated successfully.' });
     }
   }
