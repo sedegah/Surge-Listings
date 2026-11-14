@@ -1,59 +1,52 @@
 # SURGE LISTINGS
-### Institutional Asset Marketplace | Surge Solutions
 
-**Discover. Explore. Acquire.**
+### Institutional Asset Marketplace
+**A Surge Solutions Initiative**
 
-Surge Listings is an institutional asset marketplace developed by **Surge Solutions** to make the discovery and acquisition of institutionally disposed assets more accessible, organised and transparent.
-
-The platform provides a central destination where interested buyers can explore available assets, review listing information and engage with the relevant institutions regarding acquisition opportunities.
-
-By bringing institutional asset listings into one accessible marketplace, Surge Solutions aims to simplify the asset-disposal experience and connect genuine buyers with participating institutions.
+*Discover. Explore. Acquire.*
 
 ---
 
-## About the Platform
+## Overview
 
-Surge Listings is designed to bridge the gap between institutions disposing of assets and individuals or organisations interested in acquiring them.
+**Surge Listings** is an institutional asset marketplace developed by **Surge Solutions** to make the discovery and acquisition of institutionally disposed assets more accessible, organised and transparent.
 
-Rather than relying entirely on fragmented advertising channels and informal enquiries, the platform provides a dedicated marketplace for discovering institutional disposal opportunities.
+The platform brings institutional asset disposal opportunities together in one central marketplace, connecting participating institutions with individuals and organisations interested in acquiring available assets.
 
-Its focus is on creating a more organised, accessible and professional experience for both institutions and prospective buyers.
-
-## What You Can Do
-
-### Explore Available Assets
-Browse institutional asset listings in one central marketplace. Discover available opportunities and review the information provided for each asset.
-
-### Discover Opportunities
-Explore different asset categories and identify opportunities that match your interests and acquisition requirements.
-
-### Review Asset Information
-Access listing details, descriptions, available photographs and other relevant information to make more informed decisions.
-
-### Engage With Institutions
-Find opportunities and follow the appropriate enquiry process to express interest in listed assets.
-
-### Institutional Participation
-Participating institutions can use the platform to present their disposal opportunities to a wider audience.
-
-### Centralised Administration
-The platform provides an administrative environment for overseeing marketplace activities and maintaining organised institutional participation.
+Through a streamlined and professional marketplace experience, Surge Listings simplifies how buyers discover opportunities, review asset information and engage with participating institutions.
 
 ---
 
-## Who Is It For?
+## Platform Features
 
-**Financial Institutions**
+### 01. Asset Marketplace
+A central destination for discovering institutionally disposed assets across different categories. Buyers can browse available listings and explore acquisition opportunities.
 
-Banks and other participating institutions seeking an organised platform to present assets available for disposal.
+### 02. Detailed Asset Listings
+Access relevant information about listed assets, including descriptions, photographs and other available details to support informed decisions.
 
-**Prospective Buyers**
+### 03. Asset Discovery
+Explore available opportunities and identify assets that align with individual or organisational interests.
 
-Individuals and organisations interested in discovering and acquiring institutionally disposed assets.
+### 04. Buyer Engagement
+A structured approach to expressing interest in available assets and engaging with the relevant institutions.
 
-**Institutional Representatives**
+### 05. Institutional Participation
+A dedicated marketplace environment for participating institutions to showcase assets available for disposal and reach prospective buyers.
 
-Authorised personnel involved in asset management, disposal activities and the coordination of acquisition enquiries.
+### 06. Marketplace Administration
+An organised administrative environment for overseeing listings, institutional participation and marketplace activities.
+
+---
+
+## Who We Serve
+
+| Audience | Purpose |
+|---|---|
+| **Financial Institutions** | Present assets available for institutional disposal. |
+| **Prospective Buyers** | Discover and explore available acquisition opportunities. |
+| **Institutional Representatives** | Coordinate and oversee asset disposal activities. |
+| **Organisations** | Identify assets that may support their operational or investment objectives. |
 
 ---
 
@@ -67,26 +60,44 @@ To become a trusted destination for institutional asset discovery and acquisitio
 
 ---
 
-## The Surge Solutions Difference
+## Our Core Principles
 
-Surge Listings is built around three fundamental principles:
+**Accessibility**
 
-- **Accessibility:** Making institutional disposal opportunities easier to discover.
-- **Transparency:** Encouraging clear presentation of available asset information.
-- **Professionalism:** Providing a structured environment for institutional asset marketing and buyer engagement.
+Making institutional disposal opportunities easier to discover and explore.
 
----
+**Transparency**
 
-## Explore Surge Listings
+Encouraging clear and informative presentation of available asset listings.
 
-Visit the live marketplace:
+**Professionalism**
 
-**[https://surge-listings.vercel.app/marketplace](https://surge-listings.vercel.app/marketplace)**
+Providing a structured and professional environment for institutional asset marketing and buyer engagement.
 
-**Surge Solutions**
+**Connectivity**
 
-*Connecting institutions, opportunities and buyers.*
+Bringing institutions and prospective buyers together through a shared marketplace.
 
 ---
 
-© 2026 Surge Solutions. All rights reserved.
+## Explore the Marketplace
+
+Discover available institutional asset opportunities through the official Surge Listings marketplace.
+
+**[Visit Surge Listings](https://surge-listings.vercel.app/marketplace)**
+
+---
+
+## About Surge Solutions
+
+Surge Listings is an initiative of **Surge Solutions**, focused on improving the accessibility and organisation of institutional asset disposal opportunities.
+
+By connecting institutions and prospective buyers, Surge Solutions seeks to create a more efficient and transparent asset discovery experience.
+
+---
+
+**SURGE SOLUTIONS**
+
+*Connecting Institutions. Creating Opportunities.*
+
+© 2026 Surge Solutions. All Rights Reserved.
